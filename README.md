@@ -11,7 +11,7 @@ Instance knows WHAT.
 
 The Kernel (`@monolith/core`) contains generic enforcement mechanics, integrity validators, protocol routing, and drift detection. It has zero knowledge of any specific project.
 
-An Instance (e.g. `.devin/`) provides a `project.definition.js` file that tells the Kernel what protocols exist, where files are, what artifacts are required, and which validators are active.
+An Instance (e.g. `.devin/`) provides a `project.definition.mjs` file that tells the Kernel what protocols exist, where files are, what artifacts are required, and which validators are active.
 
 ## Components
 
@@ -25,7 +25,7 @@ An Instance (e.g. `.devin/`) provides a `project.definition.js` file that tells 
 
 **Instance (per-project, not in this package)**
 
-- `project.definition.js` — single source of truth for project-specific knowledge
+- `project.definition.mjs` — single source of truth for project-specific knowledge
 - `integrity/validators.config.js` — declares which validators are active
 - Protocol files, governance rules, memory structure
 
@@ -44,7 +44,7 @@ Checks that the current directory contains a valid MONOLITH instance. Three chec
 
 | Check | What it verifies |
 |---|---|
-| Configuration | `monolith.config.json` present and valid, `project.definition.js` present and loadable |
+| Configuration | `monolith.config.json` present and valid, `project.definition.mjs` present and loadable |
 | Instance | All required directories exist under `monolithRoot` |
 | Templates | No unreplaced init-time placeholders (`{{VAR}}`) left in generated files |
 

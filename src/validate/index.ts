@@ -44,9 +44,9 @@ async function checkConfiguration(targetDir: string): Promise<CheckResult> {
     return { label: 'Configuration', passed: false, error: 'missing monolith.config.json' };
   }
 
-  const defPath = join(targetDir, 'project.definition.js');
+  const defPath = join(targetDir, 'project.definition.mjs');
   if (!existsSync(defPath)) {
-    return { label: 'Configuration', passed: false, error: 'missing project.definition.js' };
+    return { label: 'Configuration', passed: false, error: 'missing project.definition.mjs' };
   }
 
   try {
@@ -63,11 +63,11 @@ async function checkConfiguration(targetDir: string): Promise<CheckResult> {
     const fileUrl = pathToFileURL(resolve(defPath)).href;
     const mod = await import(fileUrl) as Record<string, unknown>;
     if (!mod.PROJECT_DEFINITION) {
-      return { label: 'Configuration', passed: false, error: 'project.definition.js missing PROJECT_DEFINITION export' };
+      return { label: 'Configuration', passed: false, error: 'project.definition.mjs missing PROJECT_DEFINITION export' };
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { label: 'Configuration', passed: false, error: `project.definition.js failed to load: ${msg}` };
+    return { label: 'Configuration', passed: false, error: `project.definition.mjs failed to load: ${msg}` };
   }
 
   return { label: 'Configuration', passed: true };
@@ -128,7 +128,7 @@ function checkTemplates(targetDir: string, monolithRoot: string): CheckResult {
     }
   }
 
-  for (const rootFile of ['project.definition.js', 'monolith.config.json', 'AGENTS.md']) {
+  for (const rootFile of ['project.definition.mjs', 'monolith.config.json', 'AGENTS.md']) {
     const filePath = join(targetDir, rootFile);
     if (!existsSync(filePath)) continue;
     try {

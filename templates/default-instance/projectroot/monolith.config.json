@@ -1,0 +1,29 @@
+{
+  "project": {
+    "name": "{{PROJECT_NAME}}",
+    "language": "{{LANGUAGE}}",
+    "packageManager": "{{PACKAGE_MANAGER}}",
+    "aiTool": "{{AI_TOOL}}"
+  },
+  "monolithRoot": "{{MONOLITH_ROOT}}",
+  "finalizationProtocol": "{{FINALIZATION_PROTOCOL}}",
+  "gates": {
+    "enabled": [
+      "emission",
+      "memory-update",
+      "mistake-injection",
+      "governance-boundary",
+      "protocol-drift"
+    ]
+  },
+  "models": {
+    "default": "claude-opus",
+    "local": null,
+    "tiers": {
+      "implementation": "default",
+      "review": "default",
+      "planning": "default",
+      "sensitive": "local"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+/**
+ * MONOLITH Project Definition — Instance Configuration
+ *
+ * This file is the single source of truth for all project-specific knowledge.
+ * The Kernel reads this file instead of hardcoding project facts.
+ *
+ * Kernel knows HOW. Instance knows WHAT.
+ */
+
+export const PROJECT_DEFINITION = {
+  monolithRoot: '{{MONOLITH_ROOT}}',
+
+  finalizationProtocolId: '{{FINALIZATION_PROTOCOL}}',
+
+  protocols: {{PROTOCOLS_JSON}},
+
+  mistakeRoots: {{MISTAKE_ROOTS_JSON}},
+
+  driftLogPath: '{{DRIFT_LOG_PATH}}',
+
+  forcedInjectionTerms: {
+    '{{FINALIZATION_PROTOCOL}}': ['protocol_drift', 'workflow', '{{FINALIZATION_PROTOCOL}}'],
+  },
+
+  requiredRootArtifacts: [
+    'agents-root',
+    'project-map',
+    'semantic-map',
+    'dependency-map',
+    'roadmap-index',
+    'memory-working-active',
+    'memory-working-story-index',
+  ],
+
+  projectRootFiles: ['AGENTS.md'],
+
+  requiredFinalizationDocs: [
+    { path: 'ROADMAP.md', label: 'Project roadmap' },
+    { path: 'docs/current-state.md', label: 'Current state document' },
+  ],
+};

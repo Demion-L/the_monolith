@@ -1,0 +1,38 @@
+{
+  "name": "@monolith/core",
+  "version": "0.1.0-alpha.0",
+  "description": "MONOLITH — Cognitive Operating System kernel for AI assistants",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "monolith": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "monolith",
+    "cognitive-os",
+    "ai-assistant",
+    "enforcement",
+    "protocol"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

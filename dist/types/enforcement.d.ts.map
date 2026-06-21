@@ -1,0 +1,1 @@
+{"version":3,"file":"enforcement.d.ts","sourceRoot":"","sources":["../../src/types/enforcement.ts"],"names":[],"mappings":"AAAA;;GAEG;AACH,MAAM,WAAW,eAAe;IAC9B,MAAM,EAAE,OAAO,CAAC;IAChB,MAAM,EAAE,MAAM,CAAC;IACf,cAAc,EAAE,MAAM,EAAE,CAAC;IACzB,aAAa,EAAE,MAAM,EAAE,CAAC;CACzB;AAED,MAAM,MAAM,UAAU,GAAG,MAAM,GAAG,OAAO,GAAG,MAAM,CAAC"}

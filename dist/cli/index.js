@@ -46,10 +46,12 @@ async function main() {
             await runInit({ targetDir: process.cwd(), yes });
             break;
         }
-        case 'validate':
-            console.error('monolith validate — not yet implemented (Phase 6)');
-            process.exit(1);
+        case 'validate': {
+            const { runValidate } = await import('../validate/index.js');
+            const quiet = args.includes('--quiet') || args.includes('-q');
+            await runValidate({ targetDir: process.cwd(), quiet });
             break;
+        }
         case 'status':
             console.error('monolith status — not yet implemented (Phase 6)');
             process.exit(1);

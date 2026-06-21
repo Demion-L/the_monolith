@@ -29,22 +29,44 @@ An Instance (e.g. `.devin/`) provides a `project.definition.js` file that tells 
 - `integrity/validators.config.js` — declares which validators are active
 - Protocol files, governance rules, memory structure
 
-## CLI (future)
+## CLI
 
 ```bash
 npx monolith init       # scaffold new instance from templates
-npx monolith validate   # run all enforcement + integrity checks
-npx monolith status     # show active protocol, phase, story, drift summary
-npx monolith dry-run    # simulate finalization gate without writes
+npx monolith validate   # check instance integrity (Phase 6 — implemented)
+npx monolith status     # show active protocol, phase, story, drift summary (planned)
+npx monolith dry-run    # simulate finalization gate without writes (planned)
+```
+
+### `monolith validate`
+
+Checks that the current directory contains a valid MONOLITH instance. Three checks run in sequence:
+
+| Check | What it verifies |
+|---|---|
+| Configuration | `monolith.config.json` present and valid, `project.definition.js` present and loadable |
+| Instance | All required directories exist under `monolithRoot` |
+| Templates | No unreplaced init-time placeholders (`{{VAR}}`) left in generated files |
+
+Exit codes: `0` = PASS, `1` = FAIL. Use `--quiet` for CI (prints nothing on PASS, errors only on FAIL).
+
+```
+MONOLITH validate
+
+Configuration   PASS
+Instance        PASS
+Templates       PASS
+
+Result: PASS
 ```
 
 ## Status
 
-**Phase 4 — Productization Foundation (current)**
+**Phase 6 — Validate Prototype (current)**
 
-Package skeleton established. Type contracts defined. CLI entrypoints stubbed. No runtime code transferred from instance yet.
+`npx monolith init` and `npx monolith validate` are both functional. Validate checks configuration, instance structure, and template placeholder substitution.
 
-**Phase 5+ — Kernel Extraction (planned)**
+**Phase 7+ — Kernel Extraction (planned)**
 
 Enforcement engine, integrity validators, drift detection, and CLI implementation will move from `.devin/` into this package. Instance files will import from `@monolith/core` instead of containing Kernel logic directly.
 

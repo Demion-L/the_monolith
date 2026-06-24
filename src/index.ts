@@ -15,3 +15,15 @@ export type { ProjectConfig, InitOptions } from './init/types.js';
 
 export { MONOLITH_VERSION } from './version.js';
 export { runInit } from './init/index.js';
+
+// Webway — semantic connection layer
+export type {
+  Artifact,
+  Concept,
+  SemanticLink,
+  SemanticRelationshipType,
+  KnowledgeRegion,
+  MentalModel,
+  WebwayAnalysisResult,
+} from './webway/index.js';
+export { analyzeArtifact } from './webway/index.js';

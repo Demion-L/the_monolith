@@ -18,6 +18,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsc -p tsconfig.json --watch",
+    "test": "vitest run",
     "prepare": "npm run build"
   },
   "keywords": [
@@ -30,7 +31,8 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.0.0"
   },
   "engines": {
     "node": ">=20.0.0"

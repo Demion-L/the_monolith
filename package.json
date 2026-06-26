@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsc -p tsconfig.json --watch",
     "test": "vitest run",
+    "dogfood": "node dist/scripts/dogfood.js",
     "prepare": "npm run build"
   },
   "keywords": [

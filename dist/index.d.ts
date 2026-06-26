@@ -13,4 +13,6 @@ export type { VerificationContext, VerificationReport } from './types/integrity.
 export type { ProjectConfig, InitOptions } from './init/types.js';
 export { MONOLITH_VERSION } from './version.js';
 export { runInit } from './init/index.js';
+export type { Artifact, Concept, SemanticLink, SemanticRelationshipType, KnowledgeRegion, MentalModel, WebwayAnalysisResult, } from './webway/index.js';
+export { analyzeArtifact } from './webway/index.js';
 //# sourceMappingURL=index.d.ts.map

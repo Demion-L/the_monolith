@@ -1,0 +1,5803 @@
+{
+  "experiment": "webway-dogfood-v0",
+  "generatedAt": "2026-06-26T17:04:24.867Z",
+  "summary": {
+    "filesDiscovered": 74,
+    "filesAnalyzed": 72,
+    "filesSkipped": 2,
+    "filesErrored": 0,
+    "distinctConceptLabels": 176,
+    "totalSemanticLinks": 288,
+    "repeatedConceptCount": 30,
+    "signalFiles": 69,
+    "noisyFiles": 3
+  },
+  "regionDistribution": [
+    {
+      "id": "kr-cognitive-architecture",
+      "name": "Cognitive Architecture",
+      "count": 31
+    },
+    {
+      "id": "kr-general",
+      "name": "General",
+      "count": 28
+    },
+    {
+      "id": "kr-data-systems",
+      "name": "Data Systems",
+      "count": 7
+    },
+    {
+      "id": "kr-software-engineering",
+      "name": "Software Engineering",
+      "count": 6
+    }
+  ],
+  "topConcepts": [
+    {
+      "label": "story",
+      "count": 16,
+      "files": [
+        ".monolith/context/boot/HANDOFF.md",
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/maps/dependency-map.md",
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/context/templates/plan-template.md",
+        ".monolith/memory/errors/SCHEMA.md",
+        ".monolith/memory/long-term/execution-history.md",
+        ".monolith/memory/working/story-index.md",
+        ".monolith/protocols/governance/core-invariants.md",
+        ".monolith/protocols/governance/memory-governance.md",
+        ".monolith/protocols/governance/work-session.md",
+        ".monolith/skills/INDEX.md",
+        ".monolith/skills/current-status/SKILL.md",
+        ".monolith/skills/finalize-story/SKILL.md",
+        ".monolith/tests/scenarios/finalize-story.md"
+      ]
+    },
+    {
+      "label": "memory",
+      "count": 16,
+      "files": [
+        ".monolith/context/maps/dependency-map.md",
+        ".monolith/context/maps/project-map.md",
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/context/maps/semantic-map.md",
+        ".monolith/memory/errors/README.md",
+        ".monolith/memory/long-term/architecture-principles.md",
+        ".monolith/memory/long-term/hypotheses.md",
+        ".monolith/memory/long-term/knowledge-regions.md",
+        ".monolith/memory/long-term/tech-debt.md",
+        ".monolith/memory/working/active.md",
+        ".monolith/memory/working/story-index.md",
+        ".monolith/protocols/governance/memory-governance.md",
+        ".monolith/protocols/governance/skills.md",
+        ".monolith/skills/finalize-story/SKILL.md",
+        ".monolith/skills/self-improvement/SKILL.md",
+        ".monolith/tests/validation/expected-behavior.md"
+      ]
+    },
+    {
+      "label": "governance",
+      "count": 8,
+      "files": [
+        ".monolith/context/maps/dependency-map.md",
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/governance/README.md",
+        ".monolith/governance/RULE_SCHEMA.md",
+        ".monolith/protocols/boot/boot-sequence.md",
+        ".monolith/protocols/governance/memory-governance.md",
+        ".monolith/protocols/governance/skills.md",
+        ".monolith/tests/validators/protocol-references.md"
+      ]
+    },
+    {
+      "label": "task",
+      "count": 8,
+      "files": [
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/learning/injection-map.md",
+        ".monolith/memory/long-term/engineering-gate.md",
+        ".monolith/protocols/cognition/dry-run.md",
+        ".monolith/tests/scenarios/implement-feature.md",
+        ".monolith/tests/scenarios/sensitive-context-task.md",
+        ".monolith/tests/validation/expected-behavior.md",
+        ".monolith/tests/validators/routing-integrity.md"
+      ]
+    },
+    {
+      "label": "knowledge",
+      "count": 7,
+      "files": [
+        ".monolith/adr/ADR-001-cognitive-loop-architecture.md",
+        ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+        ".monolith/memory/long-term/cognitive-core.md",
+        ".monolith/memory/long-term/hypotheses.md",
+        ".monolith/memory/long-term/knowledge-lifecycle.md",
+        ".monolith/memory/long-term/knowledge-regions.md",
+        "docs/webway-v0.md"
+      ]
+    },
+    {
+      "label": "context",
+      "count": 7,
+      "files": [
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/models/model-registry.md",
+        ".monolith/learning/injection-map.md",
+        ".monolith/protocols/boot/boot-sequence.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/tests/scenarios/sensitive-context-task.md"
+      ]
+    },
+    {
+      "label": "phase",
+      "count": 7,
+      "files": [
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/maps/roadmap-index.md",
+        ".monolith/memory/working/active.md",
+        ".monolith/memory/working/story-index.md",
+        ".monolith/skills/current-status/SKILL.md",
+        ".monolith/skills/global-status/SKILL.md"
+      ]
+    },
+    {
+      "label": "architecture",
+      "count": 7,
+      "files": [
+        ".monolith/learning/injection-map.md",
+        ".monolith/memory/long-term/architecture-principles.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/skills/global-status/SKILL.md",
+        ".monolith/tests/scenarios/architecture-review.md",
+        ".monolith/tests/scenarios/debug-failure.md",
+        ".monolith/tests/scenarios/implement-feature.md"
+      ]
+    },
+    {
+      "label": "cognitive",
+      "count": 6,
+      "files": [
+        ".monolith/adr/ADR-001-cognitive-loop-architecture.md",
+        ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+        ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+        ".monolith/memory/long-term/cognitive-core.md",
+        ".monolith/memory/long-term/decisions.md",
+        ".monolith/tests/validators/INDEX.md"
+      ]
+    },
+    {
+      "label": "active",
+      "count": 6,
+      "files": [
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/maps/roadmap-index.md",
+        ".monolith/memory/working/active.md",
+        ".monolith/protocols/governance/work-session.md",
+        ".monolith/skills/current-status/SKILL.md",
+        ".monolith/tests/scenarios/implement-feature.md"
+      ]
+    },
+    {
+      "label": "execution",
+      "count": 6,
+      "files": [
+        ".monolith/memory/long-term/execution-history.md",
+        ".monolith/protocols/cognition/execution-trace-format.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/protocols/execution/local-llm-governance.md",
+        ".monolith/tests/scenarios/execution-trace-verification.md",
+        ".monolith/tests/validators/privacy-routing.md"
+      ]
+    },
+    {
+      "label": "protocol",
+      "count": 6,
+      "files": [
+        ".monolith/protocols/cognition/dry-run.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/protocols/governance/metadata-schema.md",
+        ".monolith/tests/scenarios/execution-trace-verification.md",
+        ".monolith/tests/validation/expected-behavior.md",
+        ".monolith/tests/validators/protocol-references.md"
+      ]
+    },
+    {
+      "label": "model",
+      "count": 5,
+      "files": [
+        ".monolith/context/models/model-registry.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/protocols/execution/local-llm-governance.md",
+        ".monolith/tests/scenarios/local-llm-delegation.md",
+        ".monolith/tests/validators/delegation-semantics.md"
+      ]
+    },
+    {
+      "label": "data",
+      "count": 5,
+      "files": [
+        ".monolith/context/models/model-registry.md",
+        ".monolith/context/models/privacy-classification.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/tests/scenarios/local-llm-delegation.md",
+        ".monolith/tests/scenarios/sensitive-context-task.md"
+      ]
+    },
+    {
+      "label": "local",
+      "count": 5,
+      "files": [
+        ".monolith/context/models/model-registry.md",
+        ".monolith/context/models/privacy-classification.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/protocols/execution/local-llm-governance.md",
+        ".monolith/tests/scenarios/local-llm-delegation.md"
+      ]
+    },
+    {
+      "label": "core",
+      "count": 4,
+      "files": [
+        ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+        ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+        ".monolith/memory/long-term/cognitive-core.md",
+        ".monolith/memory/long-term/decisions.md"
+      ]
+    },
+    {
+      "label": "monolith",
+      "count": 4,
+      "files": [
+        ".monolith/context/maps/project-map.md",
+        ".monolith/protocols/boot/boot-sequence.md",
+        ".monolith/skills/INDEX.md",
+        "README.md"
+      ]
+    },
+    {
+      "label": "error",
+      "count": 4,
+      "files": [
+        ".monolith/memory/errors/README.md",
+        ".monolith/memory/errors/SCHEMA.md",
+        ".monolith/memory/errors/TAXONOMY.md",
+        ".monolith/skills/self-improvement/SKILL.md"
+      ]
+    },
+    {
+      "label": "region",
+      "count": 4,
+      "files": [
+        ".monolith/memory/long-term/hypotheses.md",
+        ".monolith/memory/long-term/knowledge-lifecycle.md",
+        ".monolith/memory/long-term/knowledge-regions.md",
+        ".monolith/memory/long-term/webway-v1-research-plan.md"
+      ]
+    },
+    {
+      "label": "implementation",
+      "count": 3,
+      "files": [
+        ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+        ".monolith/memory/long-term/engineering-gate.md",
+        ".monolith/tests/scenarios/implement-feature.md"
+      ]
+    },
+    {
+      "label": "session",
+      "count": 3,
+      "files": [
+        ".monolith/context/boot/HANDOFF.md",
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/protocols/governance/work-session.md"
+      ]
+    },
+    {
+      "label": "status",
+      "count": 3,
+      "files": [
+        ".monolith/context/maps/roadmap-index.md",
+        ".monolith/skills/INDEX.md",
+        ".monolith/skills/current-status/SKILL.md"
+      ]
+    },
+    {
+      "label": "long",
+      "count": 3,
+      "files": [
+        ".monolith/context/maps/semantic-map.md",
+        ".monolith/memory/long-term/architecture-principles.md",
+        ".monolith/memory/long-term/tech-debt.md"
+      ]
+    },
+    {
+      "label": "plan",
+      "count": 3,
+      "files": [
+        ".monolith/context/templates/plan-template.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/tests/scenarios/planning-request.md"
+      ]
+    },
+    {
+      "label": "step",
+      "count": 3,
+      "files": [
+        ".monolith/context/templates/plan-template.md",
+        ".monolith/skills/finalize-story/SKILL.md",
+        ".monolith/skills/self-improvement/SKILL.md"
+      ]
+    },
+    {
+      "label": "project",
+      "count": 3,
+      "files": [
+        ".monolith/governance/README.md",
+        ".monolith/skills/global-status/SKILL.md",
+        "README.md"
+      ]
+    },
+    {
+      "label": "current",
+      "count": 3,
+      "files": [
+        ".monolith/memory/working/active.md",
+        ".monolith/protocols/governance/core-invariants.md",
+        ".monolith/skills/current-status/SKILL.md"
+      ]
+    },
+    {
+      "label": "skill",
+      "count": 3,
+      "files": [
+        ".monolith/memory/working/active.md",
+        ".monolith/protocols/governance/skills.md",
+        ".monolith/skills/INDEX.md"
+      ]
+    },
+    {
+      "label": "files",
+      "count": 3,
+      "files": [
+        ".monolith/protocols/cognition/cognitive-modes.md",
+        ".monolith/tests/scenarios/validator-verification.md",
+        ".monolith/tests/validators/protocol-references.md"
+      ]
+    },
+    {
+      "label": "routing",
+      "count": 3,
+      "files": [
+        ".monolith/tests/validators/INDEX.md",
+        ".monolith/tests/validators/privacy-routing.md",
+        ".monolith/tests/validators/routing-integrity.md"
+      ]
+    }
+  ],
+  "repeatedConcepts": [
+    {
+      "label": "story",
+      "count": 16,
+      "files": [
+        ".monolith/context/boot/HANDOFF.md",
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/maps/dependency-map.md",
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/context/templates/plan-template.md",
+        ".monolith/memory/errors/SCHEMA.md",
+        ".monolith/memory/long-term/execution-history.md",
+        ".monolith/memory/working/story-index.md",
+        ".monolith/protocols/governance/core-invariants.md",
+        ".monolith/protocols/governance/memory-governance.md",
+        ".monolith/protocols/governance/work-session.md",
+        ".monolith/skills/INDEX.md",
+        ".monolith/skills/current-status/SKILL.md",
+        ".monolith/skills/finalize-story/SKILL.md",
+        ".monolith/tests/scenarios/finalize-story.md"
+      ]
+    },
+    {
+      "label": "memory",
+      "count": 16,
+      "files": [
+        ".monolith/context/maps/dependency-map.md",
+        ".monolith/context/maps/project-map.md",
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/context/maps/semantic-map.md",
+        ".monolith/memory/errors/README.md",
+        ".monolith/memory/long-term/architecture-principles.md",
+        ".monolith/memory/long-term/hypotheses.md",
+        ".monolith/memory/long-term/knowledge-regions.md",
+        ".monolith/memory/long-term/tech-debt.md",
+        ".monolith/memory/working/active.md",
+        ".monolith/memory/working/story-index.md",
+        ".monolith/protocols/governance/memory-governance.md",
+        ".monolith/protocols/governance/skills.md",
+        ".monolith/skills/finalize-story/SKILL.md",
+        ".monolith/skills/self-improvement/SKILL.md",
+        ".monolith/tests/validation/expected-behavior.md"
+      ]
+    },
+    {
+      "label": "governance",
+      "count": 8,
+      "files": [
+        ".monolith/context/maps/dependency-map.md",
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/governance/README.md",
+        ".monolith/governance/RULE_SCHEMA.md",
+        ".monolith/protocols/boot/boot-sequence.md",
+        ".monolith/protocols/governance/memory-governance.md",
+        ".monolith/protocols/governance/skills.md",
+        ".monolith/tests/validators/protocol-references.md"
+      ]
+    },
+    {
+      "label": "task",
+      "count": 8,
+      "files": [
+        ".monolith/context/maps/routing-map.md",
+        ".monolith/learning/injection-map.md",
+        ".monolith/memory/long-term/engineering-gate.md",
+        ".monolith/protocols/cognition/dry-run.md",
+        ".monolith/tests/scenarios/implement-feature.md",
+        ".monolith/tests/scenarios/sensitive-context-task.md",
+        ".monolith/tests/validation/expected-behavior.md",
+        ".monolith/tests/validators/routing-integrity.md"
+      ]
+    },
+    {
+      "label": "knowledge",
+      "count": 7,
+      "files": [
+        ".monolith/adr/ADR-001-cognitive-loop-architecture.md",
+        ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+        ".monolith/memory/long-term/cognitive-core.md",
+        ".monolith/memory/long-term/hypotheses.md",
+        ".monolith/memory/long-term/knowledge-lifecycle.md",
+        ".monolith/memory/long-term/knowledge-regions.md",
+        "docs/webway-v0.md"
+      ]
+    },
+    {
+      "label": "context",
+      "count": 7,
+      "files": [
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/models/model-registry.md",
+        ".monolith/learning/injection-map.md",
+        ".monolith/protocols/boot/boot-sequence.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/tests/scenarios/sensitive-context-task.md"
+      ]
+    },
+    {
+      "label": "phase",
+      "count": 7,
+      "files": [
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/maps/roadmap-index.md",
+        ".monolith/memory/working/active.md",
+        ".monolith/memory/working/story-index.md",
+        ".monolith/skills/current-status/SKILL.md",
+        ".monolith/skills/global-status/SKILL.md"
+      ]
+    },
+    {
+      "label": "architecture",
+      "count": 7,
+      "files": [
+        ".monolith/learning/injection-map.md",
+        ".monolith/memory/long-term/architecture-principles.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/skills/global-status/SKILL.md",
+        ".monolith/tests/scenarios/architecture-review.md",
+        ".monolith/tests/scenarios/debug-failure.md",
+        ".monolith/tests/scenarios/implement-feature.md"
+      ]
+    },
+    {
+      "label": "cognitive",
+      "count": 6,
+      "files": [
+        ".monolith/adr/ADR-001-cognitive-loop-architecture.md",
+        ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+        ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+        ".monolith/memory/long-term/cognitive-core.md",
+        ".monolith/memory/long-term/decisions.md",
+        ".monolith/tests/validators/INDEX.md"
+      ]
+    },
+    {
+      "label": "active",
+      "count": 6,
+      "files": [
+        ".monolith/context/execution/current-state.md",
+        ".monolith/context/maps/roadmap-index.md",
+        ".monolith/memory/working/active.md",
+        ".monolith/protocols/governance/work-session.md",
+        ".monolith/skills/current-status/SKILL.md",
+        ".monolith/tests/scenarios/implement-feature.md"
+      ]
+    },
+    {
+      "label": "execution",
+      "count": 6,
+      "files": [
+        ".monolith/memory/long-term/execution-history.md",
+        ".monolith/protocols/cognition/execution-trace-format.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/protocols/execution/local-llm-governance.md",
+        ".monolith/tests/scenarios/execution-trace-verification.md",
+        ".monolith/tests/validators/privacy-routing.md"
+      ]
+    },
+    {
+      "label": "protocol",
+      "count": 6,
+      "files": [
+        ".monolith/protocols/cognition/dry-run.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/protocols/governance/metadata-schema.md",
+        ".monolith/tests/scenarios/execution-trace-verification.md",
+        ".monolith/tests/validation/expected-behavior.md",
+        ".monolith/tests/validators/protocol-references.md"
+      ]
+    },
+    {
+      "label": "model",
+      "count": 5,
+      "files": [
+        ".monolith/context/models/model-registry.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/protocols/execution/local-llm-governance.md",
+        ".monolith/tests/scenarios/local-llm-delegation.md",
+        ".monolith/tests/validators/delegation-semantics.md"
+      ]
+    },
+    {
+      "label": "data",
+      "count": 5,
+      "files": [
+        ".monolith/context/models/model-registry.md",
+        ".monolith/context/models/privacy-classification.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/tests/scenarios/local-llm-delegation.md",
+        ".monolith/tests/scenarios/sensitive-context-task.md"
+      ]
+    },
+    {
+      "label": "local",
+      "count": 5,
+      "files": [
+        ".monolith/context/models/model-registry.md",
+        ".monolith/context/models/privacy-classification.md",
+        ".monolith/protocols/execution/hybrid-execution.md",
+        ".monolith/protocols/execution/local-llm-governance.md",
+        ".monolith/tests/scenarios/local-llm-delegation.md"
+      ]
+    },
+    {
+      "label": "core",
+      "count": 4,
+      "files": [
+        ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+        ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+        ".monolith/memory/long-term/cognitive-core.md",
+        ".monolith/memory/long-term/decisions.md"
+      ]
+    },
+    {
+      "label": "monolith",
+      "count": 4,
+      "files": [
+        ".monolith/context/maps/project-map.md",
+        ".monolith/protocols/boot/boot-sequence.md",
+        ".monolith/skills/INDEX.md",
+        "README.md"
+      ]
+    },
+    {
+      "label": "error",
+      "count": 4,
+      "files": [
+        ".monolith/memory/errors/README.md",
+        ".monolith/memory/errors/SCHEMA.md",
+        ".monolith/memory/errors/TAXONOMY.md",
+        ".monolith/skills/self-improvement/SKILL.md"
+      ]
+    },
+    {
+      "label": "region",
+      "count": 4,
+      "files": [
+        ".monolith/memory/long-term/hypotheses.md",
+        ".monolith/memory/long-term/knowledge-lifecycle.md",
+        ".monolith/memory/long-term/knowledge-regions.md",
+        ".monolith/memory/long-term/webway-v1-research-plan.md"
+      ]
+    },
+    {
+      "label": "implementation",
+      "count": 3,
+      "files": [
+        ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+        ".monolith/memory/long-term/engineering-gate.md",
+        ".monolith/tests/scenarios/implement-feature.md"
+      ]
+    },
+    {
+      "label": "session",
+      "count": 3,
+      "files": [
+        ".monolith/context/boot/HANDOFF.md",
+        ".monolith/context/boot/WORK_SESSION.md",
+        ".monolith/protocols/governance/work-session.md"
+      ]
+    },
+    {
+      "label": "status",
+      "count": 3,
+      "files": [
+        ".monolith/context/maps/roadmap-index.md",
+        ".monolith/skills/INDEX.md",
+        ".monolith/skills/current-status/SKILL.md"
+      ]
+    },
+    {
+      "label": "long",
+      "count": 3,
+      "files": [
+        ".monolith/context/maps/semantic-map.md",
+        ".monolith/memory/long-term/architecture-principles.md",
+        ".monolith/memory/long-term/tech-debt.md"
+      ]
+    },
+    {
+      "label": "plan",
+      "count": 3,
+      "files": [
+        ".monolith/context/templates/plan-template.md",
+        ".monolith/protocols/cognition/semantic-planning.md",
+        ".monolith/tests/scenarios/planning-request.md"
+      ]
+    },
+    {
+      "label": "step",
+      "count": 3,
+      "files": [
+        ".monolith/context/templates/plan-template.md",
+        ".monolith/skills/finalize-story/SKILL.md",
+        ".monolith/skills/self-improvement/SKILL.md"
+      ]
+    },
+    {
+      "label": "project",
+      "count": 3,
+      "files": [
+        ".monolith/governance/README.md",
+        ".monolith/skills/global-status/SKILL.md",
+        "README.md"
+      ]
+    },
+    {
+      "label": "current",
+      "count": 3,
+      "files": [
+        ".monolith/memory/working/active.md",
+        ".monolith/protocols/governance/core-invariants.md",
+        ".monolith/skills/current-status/SKILL.md"
+      ]
+    },
+    {
+      "label": "skill",
+      "count": 3,
+      "files": [
+        ".monolith/memory/working/active.md",
+        ".monolith/protocols/governance/skills.md",
+        ".monolith/skills/INDEX.md"
+      ]
+    },
+    {
+      "label": "files",
+      "count": 3,
+      "files": [
+        ".monolith/protocols/cognition/cognitive-modes.md",
+        ".monolith/tests/scenarios/validator-verification.md",
+        ".monolith/tests/validators/protocol-references.md"
+      ]
+    },
+    {
+      "label": "routing",
+      "count": 3,
+      "files": [
+        ".monolith/tests/validators/INDEX.md",
+        ".monolith/tests/validators/privacy-routing.md",
+        ".monolith/tests/validators/routing-integrity.md"
+      ]
+    }
+  ],
+  "strongestLinks": [
+    {
+      "from": "session",
+      "relationship": "relates-to",
+      "to": "story",
+      "strength": 1
+    },
+    {
+      "from": "phase",
+      "relationship": "relates-to",
+      "to": "status",
+      "strength": 1
+    },
+    {
+      "from": "create",
+      "relationship": "relates-to",
+      "to": "err",
+      "strength": 1
+    },
+    {
+      "from": "err",
+      "relationship": "extends",
+      "to": "error",
+      "strength": 1
+    },
+    {
+      "from": "error",
+      "relationship": "relates-to",
+      "to": "schema",
+      "strength": 1
+    },
+    {
+      "from": "schema",
+      "relationship": "extends",
+      "to": "yyyy",
+      "strength": 1
+    },
+    {
+      "from": "cognitive",
+      "relationship": "relates-to",
+      "to": "core",
+      "strength": 1
+    },
+    {
+      "from": "dry",
+      "relationship": "relates-to",
+      "to": "run",
+      "strength": 1
+    },
+    {
+      "from": "protocol",
+      "relationship": "relates-to",
+      "to": "schema",
+      "strength": 1
+    },
+    {
+      "from": "schema",
+      "relationship": "extends",
+      "to": "topology",
+      "strength": 1
+    },
+    {
+      "from": "topology",
+      "relationship": "depends-on",
+      "to": "type",
+      "strength": 1
+    },
+    {
+      "from": "skill",
+      "relationship": "relates-to",
+      "to": "skills",
+      "strength": 1
+    },
+    {
+      "from": "architecture",
+      "relationship": "relates-to",
+      "to": "review",
+      "strength": 1
+    },
+    {
+      "from": "dry",
+      "relationship": "relates-to",
+      "to": "run",
+      "strength": 1
+    },
+    {
+      "from": "every",
+      "relationship": "relates-to",
+      "to": "memory",
+      "strength": 1
+    }
+  ],
+  "signalFiles": [
+    {
+      "file": ".monolith/adr/ADR-001-cognitive-loop-architecture.md",
+      "concepts": [
+        "loop",
+        "knowledge",
+        "cognitive",
+        "gap",
+        "pipeline"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+      "concepts": [
+        "cognitive",
+        "core",
+        "loop",
+        "gap",
+        "knowledge"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+      "concepts": [
+        "gate",
+        "engineering",
+        "cognitive",
+        "core",
+        "implementation"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/boot/HANDOFF.md",
+      "concepts": [
+        "session",
+        "next",
+        "story",
+        "boot",
+        "constraints"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/boot/WORK_SESSION.md",
+      "concepts": [
+        "session",
+        "story",
+        "context",
+        "phase",
+        "work"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/execution/current-state.md",
+      "concepts": [
+        "active",
+        "context",
+        "phase",
+        "state",
+        "story"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/dependency-map.md",
+      "concepts": [
+        "memory",
+        "story",
+        "dependencies",
+        "governance",
+        "depends"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/project-map.md",
+      "concepts": [
+        "monolith",
+        "webway",
+        "memory",
+        "src",
+        "term"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/roadmap-index.md",
+      "concepts": [
+        "phase",
+        "status",
+        "active",
+        "add",
+        "index"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/routing-map.md",
+      "concepts": [
+        "task",
+        "memory",
+        "type",
+        "governance",
+        "story"
+      ],
+      "region": "Software Engineering",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/semantic-map.md",
+      "concepts": [
+        "memory",
+        "authoritative",
+        "long",
+        "term",
+        "domain"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/models/model-registry.md",
+      "concepts": [
+        "model",
+        "context",
+        "data",
+        "default",
+        "local"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/models/privacy-classification.md",
+      "concepts": [
+        "data",
+        "classification",
+        "local",
+        "tier",
+        "api"
+      ],
+      "region": "Software Engineering",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/templates/plan-template.md",
+      "concepts": [
+        "plan",
+        "story",
+        "approach",
+        "change",
+        "step"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/governance/README.md",
+      "concepts": [
+        "governance",
+        "rules",
+        "gov",
+        "project",
+        "rule"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/governance/RULE_SCHEMA.md",
+      "concepts": [
+        "rule",
+        "governance",
+        "gov",
+        "pattern",
+        "yyyy"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/learning/INDEX.md",
+      "concepts": [
+        "learning",
+        "lesson",
+        "lessons",
+        "mistakes",
+        "categories"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/learning/injection-map.md",
+      "concepts": [
+        "architecture",
+        "context",
+        "injection",
+        "sync",
+        "task"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/learning/taxonomy.md",
+      "concepts": [
+        "wrong",
+        "category",
+        "lessons",
+        "mistakes",
+        "sync"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/errors/README.md",
+      "concepts": [
+        "create",
+        "err",
+        "error",
+        "errors",
+        "memory"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/errors/SCHEMA.md",
+      "concepts": [
+        "error",
+        "schema",
+        "yyyy",
+        "story",
+        "xxxx"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/errors/TAXONOMY.md",
+      "concepts": [
+        "errors",
+        "categories",
+        "category",
+        "error",
+        "documentation"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/architecture-principles.md",
+      "concepts": [
+        "principles",
+        "memory",
+        "architectural",
+        "architecture",
+        "long"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/cognitive-core.md",
+      "concepts": [
+        "cognitive",
+        "core",
+        "knowledge",
+        "question",
+        "gaps"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/decisions.md",
+      "concepts": [
+        "cognitive",
+        "adr",
+        "decision",
+        "core",
+        "introduce"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/engineering-gate.md",
+      "concepts": [
+        "gate",
+        "engineering",
+        "implementation",
+        "layer",
+        "task"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/execution-history.md",
+      "concepts": [
+        "story",
+        "history",
+        "append",
+        "entries",
+        "execution"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/hypotheses.md",
+      "concepts": [
+        "knowledge",
+        "region",
+        "regions",
+        "memory",
+        "concepts"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/knowledge-lifecycle.md",
+      "concepts": [
+        "concept",
+        "knowledge",
+        "region",
+        "artifact",
+        "criteria"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/knowledge-regions.md",
+      "concepts": [
+        "knowledge",
+        "webway",
+        "region",
+        "agent",
+        "memory"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/tech-debt.md",
+      "concepts": [
+        "debt",
+        "accepted",
+        "long",
+        "memory",
+        "technical"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/webway-v1-research-plan.md",
+      "concepts": [
+        "concept",
+        "semantic",
+        "region",
+        "high",
+        "cap"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/working/story-index.md",
+      "concepts": [
+        "story",
+        "index",
+        "memory",
+        "name",
+        "phase"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/boot/boot-sequence.md",
+      "concepts": [
+        "monolith",
+        "context",
+        "read",
+        "map",
+        "governance"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/cognitive-modes.md",
+      "concepts": [
+        "files",
+        "allowed",
+        "forbidden",
+        "mutations",
+        "activation"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/dry-run.md",
+      "concepts": [
+        "dry",
+        "run",
+        "file",
+        "protocol",
+        "task"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/execution-trace-format.md",
+      "concepts": [
+        "execution",
+        "trace",
+        "traces",
+        "format",
+        "output"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/semantic-planning.md",
+      "concepts": [
+        "planning",
+        "context",
+        "plan",
+        "protocol",
+        "architecture"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/execution/hybrid-execution.md",
+      "concepts": [
+        "data",
+        "local",
+        "model",
+        "cloud",
+        "execution"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/execution/local-llm-governance.md",
+      "concepts": [
+        "local",
+        "model",
+        "execution",
+        "llm",
+        "models"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/command-policy.md",
+      "concepts": [
+        "git",
+        "confirmation",
+        "execute",
+        "npm",
+        "without"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/core-invariants.md",
+      "concepts": [
+        "invariants",
+        "current",
+        "never",
+        "story",
+        "add"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/memory-governance.md",
+      "concepts": [
+        "memory",
+        "story",
+        "per",
+        "governance",
+        "working"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/metadata-schema.md",
+      "concepts": [
+        "protocol",
+        "schema",
+        "topology",
+        "type",
+        "referenced"
+      ],
+      "region": "Software Engineering",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/skills.md",
+      "concepts": [
+        "skill",
+        "skills",
+        "memory",
+        "governance",
+        "read"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/work-session.md",
+      "concepts": [
+        "story",
+        "session",
+        "work",
+        "active",
+        "boot"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/INDEX.md",
+      "concepts": [
+        "skills",
+        "skill",
+        "status",
+        "monolith",
+        "story"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/finalize-story/SKILL.md",
+      "concepts": [
+        "story",
+        "memory",
+        "step",
+        "working",
+        "update"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/global-status/SKILL.md",
+      "concepts": [
+        "project",
+        "global",
+        "phase",
+        "architecture",
+        "decisions"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/self-improvement/SKILL.md",
+      "concepts": [
+        "lesson",
+        "error",
+        "learning",
+        "memory",
+        "step"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/INDEX.md",
+      "concepts": [
+        "tests",
+        "scenarios",
+        "validators",
+        "validator",
+        "verification"
+      ],
+      "region": "Software Engineering",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/architecture-review.md",
+      "concepts": [
+        "architecture",
+        "review",
+        "principles",
+        "changes",
+        "code"
+      ],
+      "region": "Software Engineering",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/debug-failure.md",
+      "concepts": [
+        "fix",
+        "debugging",
+        "architecture",
+        "debug",
+        "failure"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/dry-run-activation.md",
+      "concepts": [
+        "dry",
+        "run",
+        "effects",
+        "severity",
+        "side"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/execution-trace-verification.md",
+      "concepts": [
+        "trace",
+        "execution",
+        "protocol",
+        "traces",
+        "creation"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/finalize-story.md",
+      "concepts": [
+        "story",
+        "pass",
+        "finalize",
+        "integrity",
+        "result"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/implement-feature.md",
+      "concepts": [
+        "implementation",
+        "task",
+        "active",
+        "architecture",
+        "feature"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/local-llm-delegation.md",
+      "concepts": [
+        "local",
+        "model",
+        "data",
+        "sensitive",
+        "cloud"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/planning-request.md",
+      "concepts": [
+        "plan",
+        "planning",
+        "mode",
+        "request",
+        "user"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/sensitive-context-task.md",
+      "concepts": [
+        "sensitive",
+        "data",
+        "task",
+        "api",
+        "context"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/validator-verification.md",
+      "concepts": [
+        "validator",
+        "checks",
+        "pass",
+        "files",
+        "modes"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validation/expected-behavior.md",
+      "concepts": [
+        "every",
+        "memory",
+        "behavior",
+        "protocol",
+        "task"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/INDEX.md",
+      "concepts": [
+        "routing",
+        "complete",
+        "cognitive",
+        "consistency",
+        "delegation"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/delegation-semantics.md",
+      "concepts": [
+        "model",
+        "tier",
+        "defines",
+        "delegation",
+        "semantics"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/mode-consistency.md",
+      "concepts": [
+        "mode",
+        "defined",
+        "activation",
+        "allowed",
+        "forbidden"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/privacy-routing.md",
+      "concepts": [
+        "privacy",
+        "routing",
+        "checks",
+        "classification",
+        "execution"
+      ],
+      "region": "Software Engineering",
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/routing-integrity.md",
+      "concepts": [
+        "exists",
+        "table",
+        "task",
+        "maps",
+        "routing"
+      ],
+      "region": "Data Systems",
+      "confidence": 0.8
+    },
+    {
+      "file": "docs/webway-v0.md",
+      "concepts": [
+        "concepts",
+        "artifact",
+        "graph",
+        "semantic",
+        "knowledge"
+      ],
+      "region": "Cognitive Architecture",
+      "confidence": 0.8
+    },
+    {
+      "file": "README.md",
+      "concepts": [
+        "monolith",
+        "instance",
+        "kernel",
+        "project",
+        "validate"
+      ],
+      "region": "General",
+      "confidence": 0.8
+    }
+  ],
+  "noisyFiles": [
+    {
+      "file": ".monolith/memory/working/active.md",
+      "concepts": [
+        "active",
+        "memory",
+        "current",
+        "phase",
+        "skill"
+      ],
+      "noiseCount": 3
+    },
+    {
+      "file": ".monolith/skills/current-status/SKILL.md",
+      "concepts": [
+        "story",
+        "current",
+        "phase",
+        "status",
+        "active"
+      ],
+      "noiseCount": 3
+    },
+    {
+      "file": ".monolith/tests/validators/protocol-references.md",
+      "concepts": [
+        "protocols",
+        "exists",
+        "governance",
+        "files",
+        "protocol"
+      ],
+      "noiseCount": 3
+    }
+  ],
+  "skipped": [
+    {
+      "file": ".monolith/memory/working/governance-result.md",
+      "reason": "too short (0 chars)"
+    },
+    {
+      "file": ".monolith/memory/working/integrity-result.md",
+      "reason": "too short (0 chars)"
+    }
+  ],
+  "errors": [],
+  "perFile": [
+    {
+      "file": ".monolith/adr/ADR-001-cognitive-loop-architecture.md",
+      "contentLength": 5720,
+      "concepts": [
+        {
+          "label": "loop",
+          "weight": 1
+        },
+        {
+          "label": "knowledge",
+          "weight": 0.5416666666666666
+        },
+        {
+          "label": "cognitive",
+          "weight": 0.5
+        },
+        {
+          "label": "gap",
+          "weight": 0.4583333333333333
+        },
+        {
+          "label": "pipeline",
+          "weight": 0.4166666666666667
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "loop",
+          "rel": "relates-to",
+          "to": "knowledge",
+          "strength": 0.5416666666666666
+        },
+        {
+          "from": "knowledge",
+          "rel": "extends",
+          "to": "cognitive",
+          "strength": 0.5
+        },
+        {
+          "from": "cognitive",
+          "rel": "depends-on",
+          "to": "gap",
+          "strength": 0.4583333333333333
+        },
+        {
+          "from": "gap",
+          "rel": "relates-to",
+          "to": "pipeline",
+          "strength": 0.4166666666666667
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/adr/ADR-002-cognitive-core-foundation.md",
+      "contentLength": 5372,
+      "concepts": [
+        {
+          "label": "cognitive",
+          "weight": 1
+        },
+        {
+          "label": "core",
+          "weight": 0.7083333333333334
+        },
+        {
+          "label": "loop",
+          "weight": 0.625
+        },
+        {
+          "label": "gap",
+          "weight": 0.5416666666666666
+        },
+        {
+          "label": "knowledge",
+          "weight": 0.4583333333333333
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "cognitive",
+          "rel": "relates-to",
+          "to": "core",
+          "strength": 0.7083333333333334
+        },
+        {
+          "from": "core",
+          "rel": "extends",
+          "to": "loop",
+          "strength": 0.625
+        },
+        {
+          "from": "loop",
+          "rel": "depends-on",
+          "to": "gap",
+          "strength": 0.5416666666666666
+        },
+        {
+          "from": "gap",
+          "rel": "relates-to",
+          "to": "knowledge",
+          "strength": 0.4583333333333333
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/adr/ADR-003-engineering-gate-foundation.md",
+      "contentLength": 5861,
+      "concepts": [
+        {
+          "label": "gate",
+          "weight": 1
+        },
+        {
+          "label": "engineering",
+          "weight": 0.8695652173913043
+        },
+        {
+          "label": "cognitive",
+          "weight": 0.782608695652174
+        },
+        {
+          "label": "core",
+          "weight": 0.6521739130434783
+        },
+        {
+          "label": "implementation",
+          "weight": 0.6086956521739131
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "gate",
+          "rel": "relates-to",
+          "to": "engineering",
+          "strength": 0.8695652173913043
+        },
+        {
+          "from": "engineering",
+          "rel": "extends",
+          "to": "cognitive",
+          "strength": 0.782608695652174
+        },
+        {
+          "from": "cognitive",
+          "rel": "depends-on",
+          "to": "core",
+          "strength": 0.6521739130434783
+        },
+        {
+          "from": "core",
+          "rel": "relates-to",
+          "to": "implementation",
+          "strength": 0.6086956521739131
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/boot/HANDOFF.md",
+      "contentLength": 727,
+      "concepts": [
+        {
+          "label": "session",
+          "weight": 1
+        },
+        {
+          "label": "next",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "story",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "boot",
+          "weight": 0.3333333333333333
+        },
+        {
+          "label": "constraints",
+          "weight": 0.3333333333333333
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "session",
+          "rel": "relates-to",
+          "to": "next",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "next",
+          "rel": "extends",
+          "to": "story",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "story",
+          "rel": "depends-on",
+          "to": "boot",
+          "strength": 0.3333333333333333
+        },
+        {
+          "from": "boot",
+          "rel": "relates-to",
+          "to": "constraints",
+          "strength": 0.3333333333333333
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/boot/WORK_SESSION.md",
+      "contentLength": 391,
+      "concepts": [
+        {
+          "label": "session",
+          "weight": 1
+        },
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "context",
+          "weight": 0.6
+        },
+        {
+          "label": "phase",
+          "weight": 0.6
+        },
+        {
+          "label": "work",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "session",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 1
+        },
+        {
+          "from": "story",
+          "rel": "extends",
+          "to": "context",
+          "strength": 0.6
+        },
+        {
+          "from": "context",
+          "rel": "depends-on",
+          "to": "phase",
+          "strength": 0.6
+        },
+        {
+          "from": "phase",
+          "rel": "relates-to",
+          "to": "work",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/execution/current-state.md",
+      "contentLength": 453,
+      "concepts": [
+        {
+          "label": "active",
+          "weight": 1
+        },
+        {
+          "label": "context",
+          "weight": 0.75
+        },
+        {
+          "label": "phase",
+          "weight": 0.75
+        },
+        {
+          "label": "state",
+          "weight": 0.75
+        },
+        {
+          "label": "story",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "active",
+          "rel": "relates-to",
+          "to": "context",
+          "strength": 0.75
+        },
+        {
+          "from": "context",
+          "rel": "extends",
+          "to": "phase",
+          "strength": 0.75
+        },
+        {
+          "from": "phase",
+          "rel": "depends-on",
+          "to": "state",
+          "strength": 0.75
+        },
+        {
+          "from": "state",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/dependency-map.md",
+      "contentLength": 1178,
+      "concepts": [
+        {
+          "label": "memory",
+          "weight": 1
+        },
+        {
+          "label": "story",
+          "weight": 0.5555555555555556
+        },
+        {
+          "label": "dependencies",
+          "weight": 0.4444444444444444
+        },
+        {
+          "label": "governance",
+          "weight": 0.4444444444444444
+        },
+        {
+          "label": "depends",
+          "weight": 0.3333333333333333
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "memory",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 0.5555555555555556
+        },
+        {
+          "from": "story",
+          "rel": "extends",
+          "to": "dependencies",
+          "strength": 0.4444444444444444
+        },
+        {
+          "from": "dependencies",
+          "rel": "depends-on",
+          "to": "governance",
+          "strength": 0.4444444444444444
+        },
+        {
+          "from": "governance",
+          "rel": "relates-to",
+          "to": "depends",
+          "strength": 0.3333333333333333
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/project-map.md",
+      "contentLength": 7249,
+      "concepts": [
+        {
+          "label": "monolith",
+          "weight": 1
+        },
+        {
+          "label": "webway",
+          "weight": 0.3902439024390244
+        },
+        {
+          "label": "memory",
+          "weight": 0.36585365853658536
+        },
+        {
+          "label": "src",
+          "weight": 0.34146341463414637
+        },
+        {
+          "label": "term",
+          "weight": 0.2682926829268293
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "monolith",
+          "rel": "relates-to",
+          "to": "webway",
+          "strength": 0.3902439024390244
+        },
+        {
+          "from": "webway",
+          "rel": "extends",
+          "to": "memory",
+          "strength": 0.36585365853658536
+        },
+        {
+          "from": "memory",
+          "rel": "depends-on",
+          "to": "src",
+          "strength": 0.34146341463414637
+        },
+        {
+          "from": "src",
+          "rel": "relates-to",
+          "to": "term",
+          "strength": 0.2682926829268293
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/roadmap-index.md",
+      "contentLength": 574,
+      "concepts": [
+        {
+          "label": "phase",
+          "weight": 1
+        },
+        {
+          "label": "status",
+          "weight": 1
+        },
+        {
+          "label": "active",
+          "weight": 0.75
+        },
+        {
+          "label": "add",
+          "weight": 0.75
+        },
+        {
+          "label": "index",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "phase",
+          "rel": "relates-to",
+          "to": "status",
+          "strength": 1
+        },
+        {
+          "from": "status",
+          "rel": "extends",
+          "to": "active",
+          "strength": 0.75
+        },
+        {
+          "from": "active",
+          "rel": "depends-on",
+          "to": "add",
+          "strength": 0.75
+        },
+        {
+          "from": "add",
+          "rel": "relates-to",
+          "to": "index",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/routing-map.md",
+      "contentLength": 6317,
+      "concepts": [
+        {
+          "label": "task",
+          "weight": 1
+        },
+        {
+          "label": "memory",
+          "weight": 0.9090909090909091
+        },
+        {
+          "label": "type",
+          "weight": 0.6818181818181818
+        },
+        {
+          "label": "governance",
+          "weight": 0.6363636363636364
+        },
+        {
+          "label": "story",
+          "weight": 0.6363636363636364
+        }
+      ],
+      "region": {
+        "id": "kr-software-engineering",
+        "name": "Software Engineering"
+      },
+      "links": [
+        {
+          "from": "task",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 0.9090909090909091
+        },
+        {
+          "from": "memory",
+          "rel": "extends",
+          "to": "type",
+          "strength": 0.6818181818181818
+        },
+        {
+          "from": "type",
+          "rel": "depends-on",
+          "to": "governance",
+          "strength": 0.6363636363636364
+        },
+        {
+          "from": "governance",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 0.6363636363636364
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/maps/semantic-map.md",
+      "contentLength": 2969,
+      "concepts": [
+        {
+          "label": "memory",
+          "weight": 1
+        },
+        {
+          "label": "authoritative",
+          "weight": 0.6
+        },
+        {
+          "label": "long",
+          "weight": 0.6
+        },
+        {
+          "label": "term",
+          "weight": 0.6
+        },
+        {
+          "label": "domain",
+          "weight": 0.5333333333333333
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "memory",
+          "rel": "relates-to",
+          "to": "authoritative",
+          "strength": 0.6
+        },
+        {
+          "from": "authoritative",
+          "rel": "extends",
+          "to": "long",
+          "strength": 0.6
+        },
+        {
+          "from": "long",
+          "rel": "depends-on",
+          "to": "term",
+          "strength": 0.6
+        },
+        {
+          "from": "term",
+          "rel": "relates-to",
+          "to": "domain",
+          "strength": 0.5333333333333333
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/models/model-registry.md",
+      "contentLength": 848,
+      "concepts": [
+        {
+          "label": "model",
+          "weight": 1
+        },
+        {
+          "label": "context",
+          "weight": 0.75
+        },
+        {
+          "label": "data",
+          "weight": 0.75
+        },
+        {
+          "label": "default",
+          "weight": 0.75
+        },
+        {
+          "label": "local",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "model",
+          "rel": "relates-to",
+          "to": "context",
+          "strength": 0.75
+        },
+        {
+          "from": "context",
+          "rel": "extends",
+          "to": "data",
+          "strength": 0.75
+        },
+        {
+          "from": "data",
+          "rel": "depends-on",
+          "to": "default",
+          "strength": 0.75
+        },
+        {
+          "from": "default",
+          "rel": "relates-to",
+          "to": "local",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/models/privacy-classification.md",
+      "contentLength": 891,
+      "concepts": [
+        {
+          "label": "data",
+          "weight": 1
+        },
+        {
+          "label": "classification",
+          "weight": 0.75
+        },
+        {
+          "label": "local",
+          "weight": 0.75
+        },
+        {
+          "label": "tier",
+          "weight": 0.75
+        },
+        {
+          "label": "api",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-software-engineering",
+        "name": "Software Engineering"
+      },
+      "links": [
+        {
+          "from": "data",
+          "rel": "relates-to",
+          "to": "classification",
+          "strength": 0.75
+        },
+        {
+          "from": "classification",
+          "rel": "extends",
+          "to": "local",
+          "strength": 0.75
+        },
+        {
+          "from": "local",
+          "rel": "depends-on",
+          "to": "tier",
+          "strength": 0.75
+        },
+        {
+          "from": "tier",
+          "rel": "relates-to",
+          "to": "api",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/context/templates/plan-template.md",
+      "contentLength": 602,
+      "concepts": [
+        {
+          "label": "plan",
+          "weight": 1
+        },
+        {
+          "label": "story",
+          "weight": 0.75
+        },
+        {
+          "label": "approach",
+          "weight": 0.5
+        },
+        {
+          "label": "change",
+          "weight": 0.5
+        },
+        {
+          "label": "step",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "plan",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 0.75
+        },
+        {
+          "from": "story",
+          "rel": "extends",
+          "to": "approach",
+          "strength": 0.5
+        },
+        {
+          "from": "approach",
+          "rel": "depends-on",
+          "to": "change",
+          "strength": 0.5
+        },
+        {
+          "from": "change",
+          "rel": "relates-to",
+          "to": "step",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/governance/README.md",
+      "contentLength": 952,
+      "concepts": [
+        {
+          "label": "governance",
+          "weight": 1
+        },
+        {
+          "label": "rules",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "gov",
+          "weight": 0.4444444444444444
+        },
+        {
+          "label": "project",
+          "weight": 0.4444444444444444
+        },
+        {
+          "label": "rule",
+          "weight": 0.4444444444444444
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "governance",
+          "rel": "relates-to",
+          "to": "rules",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "rules",
+          "rel": "extends",
+          "to": "gov",
+          "strength": 0.4444444444444444
+        },
+        {
+          "from": "gov",
+          "rel": "depends-on",
+          "to": "project",
+          "strength": 0.4444444444444444
+        },
+        {
+          "from": "project",
+          "rel": "relates-to",
+          "to": "rule",
+          "strength": 0.4444444444444444
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/governance/RULE_SCHEMA.md",
+      "contentLength": 1079,
+      "concepts": [
+        {
+          "label": "rule",
+          "weight": 1
+        },
+        {
+          "label": "governance",
+          "weight": 0.5
+        },
+        {
+          "label": "gov",
+          "weight": 0.4
+        },
+        {
+          "label": "pattern",
+          "weight": 0.4
+        },
+        {
+          "label": "yyyy",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "rule",
+          "rel": "relates-to",
+          "to": "governance",
+          "strength": 0.5
+        },
+        {
+          "from": "governance",
+          "rel": "extends",
+          "to": "gov",
+          "strength": 0.4
+        },
+        {
+          "from": "gov",
+          "rel": "depends-on",
+          "to": "pattern",
+          "strength": 0.4
+        },
+        {
+          "from": "pattern",
+          "rel": "relates-to",
+          "to": "yyyy",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/learning/INDEX.md",
+      "contentLength": 1302,
+      "concepts": [
+        {
+          "label": "learning",
+          "weight": 1
+        },
+        {
+          "label": "lesson",
+          "weight": 0.8
+        },
+        {
+          "label": "lessons",
+          "weight": 0.8
+        },
+        {
+          "label": "mistakes",
+          "weight": 0.8
+        },
+        {
+          "label": "categories",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "learning",
+          "rel": "relates-to",
+          "to": "lesson",
+          "strength": 0.8
+        },
+        {
+          "from": "lesson",
+          "rel": "extends",
+          "to": "lessons",
+          "strength": 0.8
+        },
+        {
+          "from": "lessons",
+          "rel": "depends-on",
+          "to": "mistakes",
+          "strength": 0.8
+        },
+        {
+          "from": "mistakes",
+          "rel": "relates-to",
+          "to": "categories",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/learning/injection-map.md",
+      "contentLength": 2017,
+      "concepts": [
+        {
+          "label": "architecture",
+          "weight": 1
+        },
+        {
+          "label": "context",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "injection",
+          "weight": 0.5555555555555556
+        },
+        {
+          "label": "sync",
+          "weight": 0.5555555555555556
+        },
+        {
+          "label": "task",
+          "weight": 0.5555555555555556
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "architecture",
+          "rel": "relates-to",
+          "to": "context",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "context",
+          "rel": "extends",
+          "to": "injection",
+          "strength": 0.5555555555555556
+        },
+        {
+          "from": "injection",
+          "rel": "depends-on",
+          "to": "sync",
+          "strength": 0.5555555555555556
+        },
+        {
+          "from": "sync",
+          "rel": "relates-to",
+          "to": "task",
+          "strength": 0.5555555555555556
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/learning/taxonomy.md",
+      "contentLength": 1453,
+      "concepts": [
+        {
+          "label": "wrong",
+          "weight": 1
+        },
+        {
+          "label": "category",
+          "weight": 0.75
+        },
+        {
+          "label": "lessons",
+          "weight": 0.75
+        },
+        {
+          "label": "mistakes",
+          "weight": 0.75
+        },
+        {
+          "label": "sync",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "wrong",
+          "rel": "relates-to",
+          "to": "category",
+          "strength": 0.75
+        },
+        {
+          "from": "category",
+          "rel": "extends",
+          "to": "lessons",
+          "strength": 0.75
+        },
+        {
+          "from": "lessons",
+          "rel": "depends-on",
+          "to": "mistakes",
+          "strength": 0.75
+        },
+        {
+          "from": "mistakes",
+          "rel": "relates-to",
+          "to": "sync",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/errors/README.md",
+      "contentLength": 649,
+      "concepts": [
+        {
+          "label": "create",
+          "weight": 1
+        },
+        {
+          "label": "err",
+          "weight": 1
+        },
+        {
+          "label": "error",
+          "weight": 1
+        },
+        {
+          "label": "errors",
+          "weight": 0.5
+        },
+        {
+          "label": "memory",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "create",
+          "rel": "relates-to",
+          "to": "err",
+          "strength": 1
+        },
+        {
+          "from": "err",
+          "rel": "extends",
+          "to": "error",
+          "strength": 1
+        },
+        {
+          "from": "error",
+          "rel": "depends-on",
+          "to": "errors",
+          "strength": 0.5
+        },
+        {
+          "from": "errors",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/errors/SCHEMA.md",
+      "contentLength": 736,
+      "concepts": [
+        {
+          "label": "error",
+          "weight": 1
+        },
+        {
+          "label": "schema",
+          "weight": 1
+        },
+        {
+          "label": "yyyy",
+          "weight": 1
+        },
+        {
+          "label": "story",
+          "weight": 0.75
+        },
+        {
+          "label": "xxxx",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "error",
+          "rel": "relates-to",
+          "to": "schema",
+          "strength": 1
+        },
+        {
+          "from": "schema",
+          "rel": "extends",
+          "to": "yyyy",
+          "strength": 1
+        },
+        {
+          "from": "yyyy",
+          "rel": "depends-on",
+          "to": "story",
+          "strength": 0.75
+        },
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "xxxx",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/errors/TAXONOMY.md",
+      "contentLength": 1210,
+      "concepts": [
+        {
+          "label": "errors",
+          "weight": 1
+        },
+        {
+          "label": "categories",
+          "weight": 0.75
+        },
+        {
+          "label": "category",
+          "weight": 0.75
+        },
+        {
+          "label": "error",
+          "weight": 0.75
+        },
+        {
+          "label": "documentation",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "errors",
+          "rel": "relates-to",
+          "to": "categories",
+          "strength": 0.75
+        },
+        {
+          "from": "categories",
+          "rel": "extends",
+          "to": "category",
+          "strength": 0.75
+        },
+        {
+          "from": "category",
+          "rel": "depends-on",
+          "to": "error",
+          "strength": 0.75
+        },
+        {
+          "from": "error",
+          "rel": "relates-to",
+          "to": "documentation",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/architecture-principles.md",
+      "contentLength": 602,
+      "concepts": [
+        {
+          "label": "principles",
+          "weight": 1
+        },
+        {
+          "label": "memory",
+          "weight": 0.6
+        },
+        {
+          "label": "architectural",
+          "weight": 0.4
+        },
+        {
+          "label": "architecture",
+          "weight": 0.4
+        },
+        {
+          "label": "long",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "principles",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 0.6
+        },
+        {
+          "from": "memory",
+          "rel": "extends",
+          "to": "architectural",
+          "strength": 0.4
+        },
+        {
+          "from": "architectural",
+          "rel": "depends-on",
+          "to": "architecture",
+          "strength": 0.4
+        },
+        {
+          "from": "architecture",
+          "rel": "relates-to",
+          "to": "long",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/cognitive-core.md",
+      "contentLength": 7297,
+      "concepts": [
+        {
+          "label": "cognitive",
+          "weight": 1
+        },
+        {
+          "label": "core",
+          "weight": 1
+        },
+        {
+          "label": "knowledge",
+          "weight": 0.5714285714285714
+        },
+        {
+          "label": "question",
+          "weight": 0.5357142857142857
+        },
+        {
+          "label": "gaps",
+          "weight": 0.39285714285714285
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "cognitive",
+          "rel": "relates-to",
+          "to": "core",
+          "strength": 1
+        },
+        {
+          "from": "core",
+          "rel": "extends",
+          "to": "knowledge",
+          "strength": 0.5714285714285714
+        },
+        {
+          "from": "knowledge",
+          "rel": "depends-on",
+          "to": "question",
+          "strength": 0.5357142857142857
+        },
+        {
+          "from": "question",
+          "rel": "relates-to",
+          "to": "gaps",
+          "strength": 0.39285714285714285
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/decisions.md",
+      "contentLength": 2402,
+      "concepts": [
+        {
+          "label": "cognitive",
+          "weight": 1
+        },
+        {
+          "label": "adr",
+          "weight": 0.9
+        },
+        {
+          "label": "decision",
+          "weight": 0.8
+        },
+        {
+          "label": "core",
+          "weight": 0.6
+        },
+        {
+          "label": "introduce",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "cognitive",
+          "rel": "relates-to",
+          "to": "adr",
+          "strength": 0.9
+        },
+        {
+          "from": "adr",
+          "rel": "extends",
+          "to": "decision",
+          "strength": 0.8
+        },
+        {
+          "from": "decision",
+          "rel": "depends-on",
+          "to": "core",
+          "strength": 0.6
+        },
+        {
+          "from": "core",
+          "rel": "relates-to",
+          "to": "introduce",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/engineering-gate.md",
+      "contentLength": 7026,
+      "concepts": [
+        {
+          "label": "gate",
+          "weight": 1
+        },
+        {
+          "label": "engineering",
+          "weight": 0.8571428571428571
+        },
+        {
+          "label": "implementation",
+          "weight": 0.8214285714285714
+        },
+        {
+          "label": "layer",
+          "weight": 0.39285714285714285
+        },
+        {
+          "label": "task",
+          "weight": 0.39285714285714285
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "gate",
+          "rel": "relates-to",
+          "to": "engineering",
+          "strength": 0.8571428571428571
+        },
+        {
+          "from": "engineering",
+          "rel": "extends",
+          "to": "implementation",
+          "strength": 0.8214285714285714
+        },
+        {
+          "from": "implementation",
+          "rel": "depends-on",
+          "to": "layer",
+          "strength": 0.39285714285714285
+        },
+        {
+          "from": "layer",
+          "rel": "relates-to",
+          "to": "task",
+          "strength": 0.39285714285714285
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/execution-history.md",
+      "contentLength": 417,
+      "concepts": [
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "history",
+          "weight": 0.6
+        },
+        {
+          "label": "append",
+          "weight": 0.4
+        },
+        {
+          "label": "entries",
+          "weight": 0.4
+        },
+        {
+          "label": "execution",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "history",
+          "strength": 0.6
+        },
+        {
+          "from": "history",
+          "rel": "extends",
+          "to": "append",
+          "strength": 0.4
+        },
+        {
+          "from": "append",
+          "rel": "depends-on",
+          "to": "entries",
+          "strength": 0.4
+        },
+        {
+          "from": "entries",
+          "rel": "relates-to",
+          "to": "execution",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/hypotheses.md",
+      "contentLength": 22441,
+      "concepts": [
+        {
+          "label": "knowledge",
+          "weight": 1
+        },
+        {
+          "label": "region",
+          "weight": 0.6428571428571429
+        },
+        {
+          "label": "regions",
+          "weight": 0.5178571428571429
+        },
+        {
+          "label": "memory",
+          "weight": 0.42857142857142855
+        },
+        {
+          "label": "concepts",
+          "weight": 0.375
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "knowledge",
+          "rel": "relates-to",
+          "to": "region",
+          "strength": 0.6428571428571429
+        },
+        {
+          "from": "region",
+          "rel": "extends",
+          "to": "regions",
+          "strength": 0.5178571428571429
+        },
+        {
+          "from": "regions",
+          "rel": "depends-on",
+          "to": "memory",
+          "strength": 0.42857142857142855
+        },
+        {
+          "from": "memory",
+          "rel": "relates-to",
+          "to": "concepts",
+          "strength": 0.375
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/knowledge-lifecycle.md",
+      "contentLength": 10982,
+      "concepts": [
+        {
+          "label": "concept",
+          "weight": 1
+        },
+        {
+          "label": "knowledge",
+          "weight": 0.7777777777777778
+        },
+        {
+          "label": "region",
+          "weight": 0.6388888888888888
+        },
+        {
+          "label": "artifact",
+          "weight": 0.5277777777777778
+        },
+        {
+          "label": "criteria",
+          "weight": 0.4722222222222222
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "concept",
+          "rel": "relates-to",
+          "to": "knowledge",
+          "strength": 0.7777777777777778
+        },
+        {
+          "from": "knowledge",
+          "rel": "extends",
+          "to": "region",
+          "strength": 0.6388888888888888
+        },
+        {
+          "from": "region",
+          "rel": "depends-on",
+          "to": "artifact",
+          "strength": 0.5277777777777778
+        },
+        {
+          "from": "artifact",
+          "rel": "relates-to",
+          "to": "criteria",
+          "strength": 0.4722222222222222
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/knowledge-regions.md",
+      "contentLength": 16599,
+      "concepts": [
+        {
+          "label": "knowledge",
+          "weight": 1
+        },
+        {
+          "label": "webway",
+          "weight": 0.6
+        },
+        {
+          "label": "region",
+          "weight": 0.4142857142857143
+        },
+        {
+          "label": "agent",
+          "weight": 0.38571428571428573
+        },
+        {
+          "label": "memory",
+          "weight": 0.37142857142857144
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "knowledge",
+          "rel": "relates-to",
+          "to": "webway",
+          "strength": 0.6
+        },
+        {
+          "from": "webway",
+          "rel": "extends",
+          "to": "region",
+          "strength": 0.4142857142857143
+        },
+        {
+          "from": "region",
+          "rel": "depends-on",
+          "to": "agent",
+          "strength": 0.38571428571428573
+        },
+        {
+          "from": "agent",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 0.37142857142857144
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/tech-debt.md",
+      "contentLength": 544,
+      "concepts": [
+        {
+          "label": "debt",
+          "weight": 1
+        },
+        {
+          "label": "accepted",
+          "weight": 0.7142857142857143
+        },
+        {
+          "label": "long",
+          "weight": 0.2857142857142857
+        },
+        {
+          "label": "memory",
+          "weight": 0.2857142857142857
+        },
+        {
+          "label": "technical",
+          "weight": 0.2857142857142857
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "debt",
+          "rel": "relates-to",
+          "to": "accepted",
+          "strength": 0.7142857142857143
+        },
+        {
+          "from": "accepted",
+          "rel": "extends",
+          "to": "long",
+          "strength": 0.2857142857142857
+        },
+        {
+          "from": "long",
+          "rel": "depends-on",
+          "to": "memory",
+          "strength": 0.2857142857142857
+        },
+        {
+          "from": "memory",
+          "rel": "relates-to",
+          "to": "technical",
+          "strength": 0.2857142857142857
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/long-term/webway-v1-research-plan.md",
+      "contentLength": 14725,
+      "concepts": [
+        {
+          "label": "concept",
+          "weight": 1
+        },
+        {
+          "label": "semantic",
+          "weight": 0.5581395348837209
+        },
+        {
+          "label": "region",
+          "weight": 0.4883720930232558
+        },
+        {
+          "label": "high",
+          "weight": 0.3953488372093023
+        },
+        {
+          "label": "cap",
+          "weight": 0.37209302325581395
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "concept",
+          "rel": "relates-to",
+          "to": "semantic",
+          "strength": 0.5581395348837209
+        },
+        {
+          "from": "semantic",
+          "rel": "extends",
+          "to": "region",
+          "strength": 0.4883720930232558
+        },
+        {
+          "from": "region",
+          "rel": "depends-on",
+          "to": "high",
+          "strength": 0.3953488372093023
+        },
+        {
+          "from": "high",
+          "rel": "relates-to",
+          "to": "cap",
+          "strength": 0.37209302325581395
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/working/active.md",
+      "contentLength": 601,
+      "concepts": [
+        {
+          "label": "active",
+          "weight": 1
+        },
+        {
+          "label": "memory",
+          "weight": 0.8
+        },
+        {
+          "label": "current",
+          "weight": 0.6
+        },
+        {
+          "label": "phase",
+          "weight": 0.6
+        },
+        {
+          "label": "skill",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "active",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 0.8
+        },
+        {
+          "from": "memory",
+          "rel": "extends",
+          "to": "current",
+          "strength": 0.6
+        },
+        {
+          "from": "current",
+          "rel": "depends-on",
+          "to": "phase",
+          "strength": 0.6
+        },
+        {
+          "from": "phase",
+          "rel": "relates-to",
+          "to": "skill",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/memory/working/story-index.md",
+      "contentLength": 530,
+      "concepts": [
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "index",
+          "weight": 0.5
+        },
+        {
+          "label": "memory",
+          "weight": 0.5
+        },
+        {
+          "label": "name",
+          "weight": 0.3333333333333333
+        },
+        {
+          "label": "phase",
+          "weight": 0.3333333333333333
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "index",
+          "strength": 0.5
+        },
+        {
+          "from": "index",
+          "rel": "extends",
+          "to": "memory",
+          "strength": 0.5
+        },
+        {
+          "from": "memory",
+          "rel": "depends-on",
+          "to": "name",
+          "strength": 0.3333333333333333
+        },
+        {
+          "from": "name",
+          "rel": "relates-to",
+          "to": "phase",
+          "strength": 0.3333333333333333
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/boot/boot-sequence.md",
+      "contentLength": 1788,
+      "concepts": [
+        {
+          "label": "monolith",
+          "weight": 1
+        },
+        {
+          "label": "context",
+          "weight": 0.5263157894736842
+        },
+        {
+          "label": "read",
+          "weight": 0.5263157894736842
+        },
+        {
+          "label": "map",
+          "weight": 0.42105263157894735
+        },
+        {
+          "label": "governance",
+          "weight": 0.3157894736842105
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "monolith",
+          "rel": "relates-to",
+          "to": "context",
+          "strength": 0.5263157894736842
+        },
+        {
+          "from": "context",
+          "rel": "extends",
+          "to": "read",
+          "strength": 0.5263157894736842
+        },
+        {
+          "from": "read",
+          "rel": "depends-on",
+          "to": "map",
+          "strength": 0.42105263157894735
+        },
+        {
+          "from": "map",
+          "rel": "relates-to",
+          "to": "governance",
+          "strength": 0.3157894736842105
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/cognitive-modes.md",
+      "contentLength": 2400,
+      "concepts": [
+        {
+          "label": "files",
+          "weight": 1
+        },
+        {
+          "label": "allowed",
+          "weight": 0.8888888888888888
+        },
+        {
+          "label": "forbidden",
+          "weight": 0.8888888888888888
+        },
+        {
+          "label": "mutations",
+          "weight": 0.8888888888888888
+        },
+        {
+          "label": "activation",
+          "weight": 0.7777777777777778
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "files",
+          "rel": "relates-to",
+          "to": "allowed",
+          "strength": 0.8888888888888888
+        },
+        {
+          "from": "allowed",
+          "rel": "extends",
+          "to": "forbidden",
+          "strength": 0.8888888888888888
+        },
+        {
+          "from": "forbidden",
+          "rel": "depends-on",
+          "to": "mutations",
+          "strength": 0.8888888888888888
+        },
+        {
+          "from": "mutations",
+          "rel": "relates-to",
+          "to": "activation",
+          "strength": 0.7777777777777778
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/dry-run.md",
+      "contentLength": 1329,
+      "concepts": [
+        {
+          "label": "dry",
+          "weight": 1
+        },
+        {
+          "label": "run",
+          "weight": 1
+        },
+        {
+          "label": "file",
+          "weight": 0.2727272727272727
+        },
+        {
+          "label": "protocol",
+          "weight": 0.2727272727272727
+        },
+        {
+          "label": "task",
+          "weight": 0.2727272727272727
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "dry",
+          "rel": "relates-to",
+          "to": "run",
+          "strength": 1
+        },
+        {
+          "from": "run",
+          "rel": "extends",
+          "to": "file",
+          "strength": 0.2727272727272727
+        },
+        {
+          "from": "file",
+          "rel": "depends-on",
+          "to": "protocol",
+          "strength": 0.2727272727272727
+        },
+        {
+          "from": "protocol",
+          "rel": "relates-to",
+          "to": "task",
+          "strength": 0.2727272727272727
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/execution-trace-format.md",
+      "contentLength": 925,
+      "concepts": [
+        {
+          "label": "execution",
+          "weight": 1
+        },
+        {
+          "label": "trace",
+          "weight": 0.8
+        },
+        {
+          "label": "traces",
+          "weight": 0.8
+        },
+        {
+          "label": "format",
+          "weight": 0.6
+        },
+        {
+          "label": "output",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "execution",
+          "rel": "relates-to",
+          "to": "trace",
+          "strength": 0.8
+        },
+        {
+          "from": "trace",
+          "rel": "extends",
+          "to": "traces",
+          "strength": 0.8
+        },
+        {
+          "from": "traces",
+          "rel": "depends-on",
+          "to": "format",
+          "strength": 0.6
+        },
+        {
+          "from": "format",
+          "rel": "relates-to",
+          "to": "output",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/cognition/semantic-planning.md",
+      "contentLength": 1196,
+      "concepts": [
+        {
+          "label": "planning",
+          "weight": 1
+        },
+        {
+          "label": "context",
+          "weight": 0.375
+        },
+        {
+          "label": "plan",
+          "weight": 0.375
+        },
+        {
+          "label": "protocol",
+          "weight": 0.375
+        },
+        {
+          "label": "architecture",
+          "weight": 0.25
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "planning",
+          "rel": "relates-to",
+          "to": "context",
+          "strength": 0.375
+        },
+        {
+          "from": "context",
+          "rel": "extends",
+          "to": "plan",
+          "strength": 0.375
+        },
+        {
+          "from": "plan",
+          "rel": "depends-on",
+          "to": "protocol",
+          "strength": 0.375
+        },
+        {
+          "from": "protocol",
+          "rel": "relates-to",
+          "to": "architecture",
+          "strength": 0.25
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/execution/hybrid-execution.md",
+      "contentLength": 1054,
+      "concepts": [
+        {
+          "label": "data",
+          "weight": 1
+        },
+        {
+          "label": "local",
+          "weight": 0.7142857142857143
+        },
+        {
+          "label": "model",
+          "weight": 0.7142857142857143
+        },
+        {
+          "label": "cloud",
+          "weight": 0.5714285714285714
+        },
+        {
+          "label": "execution",
+          "weight": 0.5714285714285714
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "data",
+          "rel": "relates-to",
+          "to": "local",
+          "strength": 0.7142857142857143
+        },
+        {
+          "from": "local",
+          "rel": "extends",
+          "to": "model",
+          "strength": 0.7142857142857143
+        },
+        {
+          "from": "model",
+          "rel": "depends-on",
+          "to": "cloud",
+          "strength": 0.5714285714285714
+        },
+        {
+          "from": "cloud",
+          "rel": "relates-to",
+          "to": "execution",
+          "strength": 0.5714285714285714
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/execution/local-llm-governance.md",
+      "contentLength": 927,
+      "concepts": [
+        {
+          "label": "local",
+          "weight": 1
+        },
+        {
+          "label": "model",
+          "weight": 0.5
+        },
+        {
+          "label": "execution",
+          "weight": 0.25
+        },
+        {
+          "label": "llm",
+          "weight": 0.25
+        },
+        {
+          "label": "models",
+          "weight": 0.25
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "local",
+          "rel": "relates-to",
+          "to": "model",
+          "strength": 0.5
+        },
+        {
+          "from": "model",
+          "rel": "extends",
+          "to": "execution",
+          "strength": 0.25
+        },
+        {
+          "from": "execution",
+          "rel": "depends-on",
+          "to": "llm",
+          "strength": 0.25
+        },
+        {
+          "from": "llm",
+          "rel": "relates-to",
+          "to": "models",
+          "strength": 0.25
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/command-policy.md",
+      "contentLength": 1139,
+      "concepts": [
+        {
+          "label": "git",
+          "weight": 1
+        },
+        {
+          "label": "confirmation",
+          "weight": 0.5555555555555556
+        },
+        {
+          "label": "execute",
+          "weight": 0.4444444444444444
+        },
+        {
+          "label": "npm",
+          "weight": 0.4444444444444444
+        },
+        {
+          "label": "without",
+          "weight": 0.4444444444444444
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "git",
+          "rel": "relates-to",
+          "to": "confirmation",
+          "strength": 0.5555555555555556
+        },
+        {
+          "from": "confirmation",
+          "rel": "extends",
+          "to": "execute",
+          "strength": 0.4444444444444444
+        },
+        {
+          "from": "execute",
+          "rel": "depends-on",
+          "to": "npm",
+          "strength": 0.4444444444444444
+        },
+        {
+          "from": "npm",
+          "rel": "relates-to",
+          "to": "without",
+          "strength": 0.4444444444444444
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/core-invariants.md",
+      "contentLength": 1308,
+      "concepts": [
+        {
+          "label": "invariants",
+          "weight": 1
+        },
+        {
+          "label": "current",
+          "weight": 0.6
+        },
+        {
+          "label": "never",
+          "weight": 0.6
+        },
+        {
+          "label": "story",
+          "weight": 0.6
+        },
+        {
+          "label": "add",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "invariants",
+          "rel": "relates-to",
+          "to": "current",
+          "strength": 0.6
+        },
+        {
+          "from": "current",
+          "rel": "extends",
+          "to": "never",
+          "strength": 0.6
+        },
+        {
+          "from": "never",
+          "rel": "depends-on",
+          "to": "story",
+          "strength": 0.6
+        },
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "add",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/memory-governance.md",
+      "contentLength": 1476,
+      "concepts": [
+        {
+          "label": "memory",
+          "weight": 1
+        },
+        {
+          "label": "story",
+          "weight": 0.6153846153846154
+        },
+        {
+          "label": "per",
+          "weight": 0.3076923076923077
+        },
+        {
+          "label": "governance",
+          "weight": 0.23076923076923078
+        },
+        {
+          "label": "working",
+          "weight": 0.23076923076923078
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "memory",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 0.6153846153846154
+        },
+        {
+          "from": "story",
+          "rel": "extends",
+          "to": "per",
+          "strength": 0.3076923076923077
+        },
+        {
+          "from": "per",
+          "rel": "depends-on",
+          "to": "governance",
+          "strength": 0.23076923076923078
+        },
+        {
+          "from": "governance",
+          "rel": "relates-to",
+          "to": "working",
+          "strength": 0.23076923076923078
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/metadata-schema.md",
+      "contentLength": 1278,
+      "concepts": [
+        {
+          "label": "protocol",
+          "weight": 1
+        },
+        {
+          "label": "schema",
+          "weight": 1
+        },
+        {
+          "label": "topology",
+          "weight": 1
+        },
+        {
+          "label": "type",
+          "weight": 1
+        },
+        {
+          "label": "referenced",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-software-engineering",
+        "name": "Software Engineering"
+      },
+      "links": [
+        {
+          "from": "protocol",
+          "rel": "relates-to",
+          "to": "schema",
+          "strength": 1
+        },
+        {
+          "from": "schema",
+          "rel": "extends",
+          "to": "topology",
+          "strength": 1
+        },
+        {
+          "from": "topology",
+          "rel": "depends-on",
+          "to": "type",
+          "strength": 1
+        },
+        {
+          "from": "type",
+          "rel": "relates-to",
+          "to": "referenced",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/skills.md",
+      "contentLength": 1567,
+      "concepts": [
+        {
+          "label": "skill",
+          "weight": 1
+        },
+        {
+          "label": "skills",
+          "weight": 1
+        },
+        {
+          "label": "memory",
+          "weight": 0.5
+        },
+        {
+          "label": "governance",
+          "weight": 0.3
+        },
+        {
+          "label": "read",
+          "weight": 0.3
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "skill",
+          "rel": "relates-to",
+          "to": "skills",
+          "strength": 1
+        },
+        {
+          "from": "skills",
+          "rel": "extends",
+          "to": "memory",
+          "strength": 0.5
+        },
+        {
+          "from": "memory",
+          "rel": "depends-on",
+          "to": "governance",
+          "strength": 0.3
+        },
+        {
+          "from": "governance",
+          "rel": "relates-to",
+          "to": "read",
+          "strength": 0.3
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/protocols/governance/work-session.md",
+      "contentLength": 1184,
+      "concepts": [
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "session",
+          "weight": 0.9
+        },
+        {
+          "label": "work",
+          "weight": 0.7
+        },
+        {
+          "label": "active",
+          "weight": 0.5
+        },
+        {
+          "label": "boot",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "session",
+          "strength": 0.9
+        },
+        {
+          "from": "session",
+          "rel": "extends",
+          "to": "work",
+          "strength": 0.7
+        },
+        {
+          "from": "work",
+          "rel": "depends-on",
+          "to": "active",
+          "strength": 0.5
+        },
+        {
+          "from": "active",
+          "rel": "relates-to",
+          "to": "boot",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/INDEX.md",
+      "contentLength": 973,
+      "concepts": [
+        {
+          "label": "skills",
+          "weight": 1
+        },
+        {
+          "label": "skill",
+          "weight": 0.7
+        },
+        {
+          "label": "status",
+          "weight": 0.6
+        },
+        {
+          "label": "monolith",
+          "weight": 0.4
+        },
+        {
+          "label": "story",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "skills",
+          "rel": "relates-to",
+          "to": "skill",
+          "strength": 0.7
+        },
+        {
+          "from": "skill",
+          "rel": "extends",
+          "to": "status",
+          "strength": 0.6
+        },
+        {
+          "from": "status",
+          "rel": "depends-on",
+          "to": "monolith",
+          "strength": 0.4
+        },
+        {
+          "from": "monolith",
+          "rel": "relates-to",
+          "to": "story",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/current-status/SKILL.md",
+      "contentLength": 875,
+      "concepts": [
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "current",
+          "weight": 0.6
+        },
+        {
+          "label": "phase",
+          "weight": 0.6
+        },
+        {
+          "label": "status",
+          "weight": 0.6
+        },
+        {
+          "label": "active",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "current",
+          "strength": 0.6
+        },
+        {
+          "from": "current",
+          "rel": "extends",
+          "to": "phase",
+          "strength": 0.6
+        },
+        {
+          "from": "phase",
+          "rel": "depends-on",
+          "to": "status",
+          "strength": 0.6
+        },
+        {
+          "from": "status",
+          "rel": "relates-to",
+          "to": "active",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/finalize-story/SKILL.md",
+      "contentLength": 1728,
+      "concepts": [
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "memory",
+          "weight": 0.6
+        },
+        {
+          "label": "step",
+          "weight": 0.35
+        },
+        {
+          "label": "working",
+          "weight": 0.35
+        },
+        {
+          "label": "update",
+          "weight": 0.3
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 0.6
+        },
+        {
+          "from": "memory",
+          "rel": "extends",
+          "to": "step",
+          "strength": 0.35
+        },
+        {
+          "from": "step",
+          "rel": "depends-on",
+          "to": "working",
+          "strength": 0.35
+        },
+        {
+          "from": "working",
+          "rel": "relates-to",
+          "to": "update",
+          "strength": 0.3
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/global-status/SKILL.md",
+      "contentLength": 1124,
+      "concepts": [
+        {
+          "label": "project",
+          "weight": 1
+        },
+        {
+          "label": "global",
+          "weight": 0.8333333333333334
+        },
+        {
+          "label": "phase",
+          "weight": 0.8333333333333334
+        },
+        {
+          "label": "architecture",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "decisions",
+          "weight": 0.6666666666666666
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "project",
+          "rel": "relates-to",
+          "to": "global",
+          "strength": 0.8333333333333334
+        },
+        {
+          "from": "global",
+          "rel": "extends",
+          "to": "phase",
+          "strength": 0.8333333333333334
+        },
+        {
+          "from": "phase",
+          "rel": "depends-on",
+          "to": "architecture",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "architecture",
+          "rel": "relates-to",
+          "to": "decisions",
+          "strength": 0.6666666666666666
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/skills/self-improvement/SKILL.md",
+      "contentLength": 1462,
+      "concepts": [
+        {
+          "label": "lesson",
+          "weight": 1
+        },
+        {
+          "label": "error",
+          "weight": 0.8571428571428571
+        },
+        {
+          "label": "learning",
+          "weight": 0.8571428571428571
+        },
+        {
+          "label": "memory",
+          "weight": 0.7142857142857143
+        },
+        {
+          "label": "step",
+          "weight": 0.7142857142857143
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "lesson",
+          "rel": "relates-to",
+          "to": "error",
+          "strength": 0.8571428571428571
+        },
+        {
+          "from": "error",
+          "rel": "extends",
+          "to": "learning",
+          "strength": 0.8571428571428571
+        },
+        {
+          "from": "learning",
+          "rel": "depends-on",
+          "to": "memory",
+          "strength": 0.7142857142857143
+        },
+        {
+          "from": "memory",
+          "rel": "relates-to",
+          "to": "step",
+          "strength": 0.7142857142857143
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/INDEX.md",
+      "contentLength": 2339,
+      "concepts": [
+        {
+          "label": "tests",
+          "weight": 1
+        },
+        {
+          "label": "scenarios",
+          "weight": 0.45454545454545453
+        },
+        {
+          "label": "validators",
+          "weight": 0.3181818181818182
+        },
+        {
+          "label": "validator",
+          "weight": 0.22727272727272727
+        },
+        {
+          "label": "verification",
+          "weight": 0.22727272727272727
+        }
+      ],
+      "region": {
+        "id": "kr-software-engineering",
+        "name": "Software Engineering"
+      },
+      "links": [
+        {
+          "from": "tests",
+          "rel": "relates-to",
+          "to": "scenarios",
+          "strength": 0.45454545454545453
+        },
+        {
+          "from": "scenarios",
+          "rel": "extends",
+          "to": "validators",
+          "strength": 0.3181818181818182
+        },
+        {
+          "from": "validators",
+          "rel": "depends-on",
+          "to": "validator",
+          "strength": 0.22727272727272727
+        },
+        {
+          "from": "validator",
+          "rel": "relates-to",
+          "to": "verification",
+          "strength": 0.22727272727272727
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/architecture-review.md",
+      "contentLength": 795,
+      "concepts": [
+        {
+          "label": "architecture",
+          "weight": 1
+        },
+        {
+          "label": "review",
+          "weight": 1
+        },
+        {
+          "label": "principles",
+          "weight": 0.42857142857142855
+        },
+        {
+          "label": "changes",
+          "weight": 0.2857142857142857
+        },
+        {
+          "label": "code",
+          "weight": 0.2857142857142857
+        }
+      ],
+      "region": {
+        "id": "kr-software-engineering",
+        "name": "Software Engineering"
+      },
+      "links": [
+        {
+          "from": "architecture",
+          "rel": "relates-to",
+          "to": "review",
+          "strength": 1
+        },
+        {
+          "from": "review",
+          "rel": "extends",
+          "to": "principles",
+          "strength": 0.42857142857142855
+        },
+        {
+          "from": "principles",
+          "rel": "depends-on",
+          "to": "changes",
+          "strength": 0.2857142857142857
+        },
+        {
+          "from": "changes",
+          "rel": "relates-to",
+          "to": "code",
+          "strength": 0.2857142857142857
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/debug-failure.md",
+      "contentLength": 787,
+      "concepts": [
+        {
+          "label": "fix",
+          "weight": 1
+        },
+        {
+          "label": "debugging",
+          "weight": 0.8
+        },
+        {
+          "label": "architecture",
+          "weight": 0.4
+        },
+        {
+          "label": "debug",
+          "weight": 0.4
+        },
+        {
+          "label": "failure",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "fix",
+          "rel": "relates-to",
+          "to": "debugging",
+          "strength": 0.8
+        },
+        {
+          "from": "debugging",
+          "rel": "extends",
+          "to": "architecture",
+          "strength": 0.4
+        },
+        {
+          "from": "architecture",
+          "rel": "depends-on",
+          "to": "debug",
+          "strength": 0.4
+        },
+        {
+          "from": "debug",
+          "rel": "relates-to",
+          "to": "failure",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/dry-run-activation.md",
+      "contentLength": 771,
+      "concepts": [
+        {
+          "label": "dry",
+          "weight": 1
+        },
+        {
+          "label": "run",
+          "weight": 1
+        },
+        {
+          "label": "effects",
+          "weight": 0.42857142857142855
+        },
+        {
+          "label": "severity",
+          "weight": 0.42857142857142855
+        },
+        {
+          "label": "side",
+          "weight": 0.42857142857142855
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "dry",
+          "rel": "relates-to",
+          "to": "run",
+          "strength": 1
+        },
+        {
+          "from": "run",
+          "rel": "extends",
+          "to": "effects",
+          "strength": 0.42857142857142855
+        },
+        {
+          "from": "effects",
+          "rel": "depends-on",
+          "to": "severity",
+          "strength": 0.42857142857142855
+        },
+        {
+          "from": "severity",
+          "rel": "relates-to",
+          "to": "side",
+          "strength": 0.42857142857142855
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/execution-trace-verification.md",
+      "contentLength": 803,
+      "concepts": [
+        {
+          "label": "trace",
+          "weight": 1
+        },
+        {
+          "label": "execution",
+          "weight": 0.5454545454545454
+        },
+        {
+          "label": "protocol",
+          "weight": 0.2727272727272727
+        },
+        {
+          "label": "traces",
+          "weight": 0.2727272727272727
+        },
+        {
+          "label": "creation",
+          "weight": 0.18181818181818182
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "trace",
+          "rel": "relates-to",
+          "to": "execution",
+          "strength": 0.5454545454545454
+        },
+        {
+          "from": "execution",
+          "rel": "extends",
+          "to": "protocol",
+          "strength": 0.2727272727272727
+        },
+        {
+          "from": "protocol",
+          "rel": "depends-on",
+          "to": "traces",
+          "strength": 0.2727272727272727
+        },
+        {
+          "from": "traces",
+          "rel": "relates-to",
+          "to": "creation",
+          "strength": 0.18181818181818182
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/finalize-story.md",
+      "contentLength": 875,
+      "concepts": [
+        {
+          "label": "story",
+          "weight": 1
+        },
+        {
+          "label": "pass",
+          "weight": 0.5
+        },
+        {
+          "label": "finalize",
+          "weight": 0.4
+        },
+        {
+          "label": "integrity",
+          "weight": 0.4
+        },
+        {
+          "label": "result",
+          "weight": 0.4
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "story",
+          "rel": "relates-to",
+          "to": "pass",
+          "strength": 0.5
+        },
+        {
+          "from": "pass",
+          "rel": "extends",
+          "to": "finalize",
+          "strength": 0.4
+        },
+        {
+          "from": "finalize",
+          "rel": "depends-on",
+          "to": "integrity",
+          "strength": 0.4
+        },
+        {
+          "from": "integrity",
+          "rel": "relates-to",
+          "to": "result",
+          "strength": 0.4
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/implement-feature.md",
+      "contentLength": 938,
+      "concepts": [
+        {
+          "label": "implementation",
+          "weight": 1
+        },
+        {
+          "label": "task",
+          "weight": 0.8
+        },
+        {
+          "label": "active",
+          "weight": 0.6
+        },
+        {
+          "label": "architecture",
+          "weight": 0.6
+        },
+        {
+          "label": "feature",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "implementation",
+          "rel": "relates-to",
+          "to": "task",
+          "strength": 0.8
+        },
+        {
+          "from": "task",
+          "rel": "extends",
+          "to": "active",
+          "strength": 0.6
+        },
+        {
+          "from": "active",
+          "rel": "depends-on",
+          "to": "architecture",
+          "strength": 0.6
+        },
+        {
+          "from": "architecture",
+          "rel": "relates-to",
+          "to": "feature",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/local-llm-delegation.md",
+      "contentLength": 822,
+      "concepts": [
+        {
+          "label": "local",
+          "weight": 1
+        },
+        {
+          "label": "model",
+          "weight": 0.875
+        },
+        {
+          "label": "data",
+          "weight": 0.75
+        },
+        {
+          "label": "sensitive",
+          "weight": 0.75
+        },
+        {
+          "label": "cloud",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "local",
+          "rel": "relates-to",
+          "to": "model",
+          "strength": 0.875
+        },
+        {
+          "from": "model",
+          "rel": "extends",
+          "to": "data",
+          "strength": 0.75
+        },
+        {
+          "from": "data",
+          "rel": "depends-on",
+          "to": "sensitive",
+          "strength": 0.75
+        },
+        {
+          "from": "sensitive",
+          "rel": "relates-to",
+          "to": "cloud",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/planning-request.md",
+      "contentLength": 777,
+      "concepts": [
+        {
+          "label": "plan",
+          "weight": 1
+        },
+        {
+          "label": "planning",
+          "weight": 0.8571428571428571
+        },
+        {
+          "label": "mode",
+          "weight": 0.42857142857142855
+        },
+        {
+          "label": "request",
+          "weight": 0.42857142857142855
+        },
+        {
+          "label": "user",
+          "weight": 0.42857142857142855
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "plan",
+          "rel": "relates-to",
+          "to": "planning",
+          "strength": 0.8571428571428571
+        },
+        {
+          "from": "planning",
+          "rel": "extends",
+          "to": "mode",
+          "strength": 0.42857142857142855
+        },
+        {
+          "from": "mode",
+          "rel": "depends-on",
+          "to": "request",
+          "strength": 0.42857142857142855
+        },
+        {
+          "from": "request",
+          "rel": "relates-to",
+          "to": "user",
+          "strength": 0.42857142857142855
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/sensitive-context-task.md",
+      "contentLength": 767,
+      "concepts": [
+        {
+          "label": "sensitive",
+          "weight": 1
+        },
+        {
+          "label": "data",
+          "weight": 0.8888888888888888
+        },
+        {
+          "label": "task",
+          "weight": 0.3333333333333333
+        },
+        {
+          "label": "api",
+          "weight": 0.2222222222222222
+        },
+        {
+          "label": "context",
+          "weight": 0.2222222222222222
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "sensitive",
+          "rel": "relates-to",
+          "to": "data",
+          "strength": 0.8888888888888888
+        },
+        {
+          "from": "data",
+          "rel": "extends",
+          "to": "task",
+          "strength": 0.3333333333333333
+        },
+        {
+          "from": "task",
+          "rel": "depends-on",
+          "to": "api",
+          "strength": 0.2222222222222222
+        },
+        {
+          "from": "api",
+          "rel": "relates-to",
+          "to": "context",
+          "strength": 0.2222222222222222
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/scenarios/validator-verification.md",
+      "contentLength": 814,
+      "concepts": [
+        {
+          "label": "validator",
+          "weight": 1
+        },
+        {
+          "label": "checks",
+          "weight": 0.625
+        },
+        {
+          "label": "pass",
+          "weight": 0.5
+        },
+        {
+          "label": "files",
+          "weight": 0.375
+        },
+        {
+          "label": "modes",
+          "weight": 0.375
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "validator",
+          "rel": "relates-to",
+          "to": "checks",
+          "strength": 0.625
+        },
+        {
+          "from": "checks",
+          "rel": "extends",
+          "to": "pass",
+          "strength": 0.5
+        },
+        {
+          "from": "pass",
+          "rel": "depends-on",
+          "to": "files",
+          "strength": 0.375
+        },
+        {
+          "from": "files",
+          "rel": "relates-to",
+          "to": "modes",
+          "strength": 0.375
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validation/expected-behavior.md",
+      "contentLength": 1782,
+      "concepts": [
+        {
+          "label": "every",
+          "weight": 1
+        },
+        {
+          "label": "memory",
+          "weight": 1
+        },
+        {
+          "label": "behavior",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "protocol",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "task",
+          "weight": 0.6666666666666666
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "every",
+          "rel": "relates-to",
+          "to": "memory",
+          "strength": 1
+        },
+        {
+          "from": "memory",
+          "rel": "extends",
+          "to": "behavior",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "behavior",
+          "rel": "depends-on",
+          "to": "protocol",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "protocol",
+          "rel": "relates-to",
+          "to": "task",
+          "strength": 0.6666666666666666
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/INDEX.md",
+      "contentLength": 751,
+      "concepts": [
+        {
+          "label": "routing",
+          "weight": 1
+        },
+        {
+          "label": "complete",
+          "weight": 0.75
+        },
+        {
+          "label": "cognitive",
+          "weight": 0.5
+        },
+        {
+          "label": "consistency",
+          "weight": 0.5
+        },
+        {
+          "label": "delegation",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "routing",
+          "rel": "relates-to",
+          "to": "complete",
+          "strength": 0.75
+        },
+        {
+          "from": "complete",
+          "rel": "extends",
+          "to": "cognitive",
+          "strength": 0.5
+        },
+        {
+          "from": "cognitive",
+          "rel": "depends-on",
+          "to": "consistency",
+          "strength": 0.5
+        },
+        {
+          "from": "consistency",
+          "rel": "relates-to",
+          "to": "delegation",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/delegation-semantics.md",
+      "contentLength": 671,
+      "concepts": [
+        {
+          "label": "model",
+          "weight": 1
+        },
+        {
+          "label": "tier",
+          "weight": 1
+        },
+        {
+          "label": "defines",
+          "weight": 0.6
+        },
+        {
+          "label": "delegation",
+          "weight": 0.6
+        },
+        {
+          "label": "semantics",
+          "weight": 0.6
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "model",
+          "rel": "relates-to",
+          "to": "tier",
+          "strength": 1
+        },
+        {
+          "from": "tier",
+          "rel": "extends",
+          "to": "defines",
+          "strength": 0.6
+        },
+        {
+          "from": "defines",
+          "rel": "depends-on",
+          "to": "delegation",
+          "strength": 0.6
+        },
+        {
+          "from": "delegation",
+          "rel": "relates-to",
+          "to": "semantics",
+          "strength": 0.6
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/mode-consistency.md",
+      "contentLength": 916,
+      "concepts": [
+        {
+          "label": "mode",
+          "weight": 1
+        },
+        {
+          "label": "defined",
+          "weight": 0.7272727272727273
+        },
+        {
+          "label": "activation",
+          "weight": 0.6363636363636364
+        },
+        {
+          "label": "allowed",
+          "weight": 0.6363636363636364
+        },
+        {
+          "label": "forbidden",
+          "weight": 0.6363636363636364
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "mode",
+          "rel": "relates-to",
+          "to": "defined",
+          "strength": 0.7272727272727273
+        },
+        {
+          "from": "defined",
+          "rel": "extends",
+          "to": "activation",
+          "strength": 0.6363636363636364
+        },
+        {
+          "from": "activation",
+          "rel": "depends-on",
+          "to": "allowed",
+          "strength": 0.6363636363636364
+        },
+        {
+          "from": "allowed",
+          "rel": "relates-to",
+          "to": "forbidden",
+          "strength": 0.6363636363636364
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/privacy-routing.md",
+      "contentLength": 704,
+      "concepts": [
+        {
+          "label": "privacy",
+          "weight": 1
+        },
+        {
+          "label": "routing",
+          "weight": 0.8333333333333334
+        },
+        {
+          "label": "checks",
+          "weight": 0.5
+        },
+        {
+          "label": "classification",
+          "weight": 0.5
+        },
+        {
+          "label": "execution",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-software-engineering",
+        "name": "Software Engineering"
+      },
+      "links": [
+        {
+          "from": "privacy",
+          "rel": "relates-to",
+          "to": "routing",
+          "strength": 0.8333333333333334
+        },
+        {
+          "from": "routing",
+          "rel": "extends",
+          "to": "checks",
+          "strength": 0.5
+        },
+        {
+          "from": "checks",
+          "rel": "depends-on",
+          "to": "classification",
+          "strength": 0.5
+        },
+        {
+          "from": "classification",
+          "rel": "relates-to",
+          "to": "execution",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/protocol-references.md",
+      "contentLength": 718,
+      "concepts": [
+        {
+          "label": "protocols",
+          "weight": 1
+        },
+        {
+          "label": "exists",
+          "weight": 0.6666666666666666
+        },
+        {
+          "label": "governance",
+          "weight": 0.5555555555555556
+        },
+        {
+          "label": "files",
+          "weight": 0.3333333333333333
+        },
+        {
+          "label": "protocol",
+          "weight": 0.3333333333333333
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "protocols",
+          "rel": "relates-to",
+          "to": "exists",
+          "strength": 0.6666666666666666
+        },
+        {
+          "from": "exists",
+          "rel": "extends",
+          "to": "governance",
+          "strength": 0.5555555555555556
+        },
+        {
+          "from": "governance",
+          "rel": "depends-on",
+          "to": "files",
+          "strength": 0.3333333333333333
+        },
+        {
+          "from": "files",
+          "rel": "relates-to",
+          "to": "protocol",
+          "strength": 0.3333333333333333
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": ".monolith/tests/validators/routing-integrity.md",
+      "contentLength": 923,
+      "concepts": [
+        {
+          "label": "exists",
+          "weight": 1
+        },
+        {
+          "label": "table",
+          "weight": 1
+        },
+        {
+          "label": "task",
+          "weight": 0.875
+        },
+        {
+          "label": "maps",
+          "weight": 0.75
+        },
+        {
+          "label": "routing",
+          "weight": 0.75
+        }
+      ],
+      "region": {
+        "id": "kr-data-systems",
+        "name": "Data Systems"
+      },
+      "links": [
+        {
+          "from": "exists",
+          "rel": "relates-to",
+          "to": "table",
+          "strength": 1
+        },
+        {
+          "from": "table",
+          "rel": "extends",
+          "to": "task",
+          "strength": 0.875
+        },
+        {
+          "from": "task",
+          "rel": "depends-on",
+          "to": "maps",
+          "strength": 0.75
+        },
+        {
+          "from": "maps",
+          "rel": "relates-to",
+          "to": "routing",
+          "strength": 0.75
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": "docs/webway-v0.md",
+      "contentLength": 3489,
+      "concepts": [
+        {
+          "label": "concepts",
+          "weight": 1
+        },
+        {
+          "label": "artifact",
+          "weight": 0.9
+        },
+        {
+          "label": "graph",
+          "weight": 0.7
+        },
+        {
+          "label": "semantic",
+          "weight": 0.7
+        },
+        {
+          "label": "knowledge",
+          "weight": 0.5
+        }
+      ],
+      "region": {
+        "id": "kr-cognitive-architecture",
+        "name": "Cognitive Architecture"
+      },
+      "links": [
+        {
+          "from": "concepts",
+          "rel": "relates-to",
+          "to": "artifact",
+          "strength": 0.9
+        },
+        {
+          "from": "artifact",
+          "rel": "extends",
+          "to": "graph",
+          "strength": 0.7
+        },
+        {
+          "from": "graph",
+          "rel": "depends-on",
+          "to": "semantic",
+          "strength": 0.7
+        },
+        {
+          "from": "semantic",
+          "rel": "relates-to",
+          "to": "knowledge",
+          "strength": 0.5
+        }
+      ],
+      "confidence": 0.8
+    },
+    {
+      "file": "README.md",
+      "contentLength": 2981,
+      "concepts": [
+        {
+          "label": "monolith",
+          "weight": 1
+        },
+        {
+          "label": "instance",
+          "weight": 0.7058823529411765
+        },
+        {
+          "label": "kernel",
+          "weight": 0.47058823529411764
+        },
+        {
+          "label": "project",
+          "weight": 0.47058823529411764
+        },
+        {
+          "label": "validate",
+          "weight": 0.4117647058823529
+        }
+      ],
+      "region": {
+        "id": "kr-general",
+        "name": "General"
+      },
+      "links": [
+        {
+          "from": "monolith",
+          "rel": "relates-to",
+          "to": "instance",
+          "strength": 0.7058823529411765
+        },
+        {
+          "from": "instance",
+          "rel": "extends",
+          "to": "kernel",
+          "strength": 0.47058823529411764
+        },
+        {
+          "from": "kernel",
+          "rel": "depends-on",
+          "to": "project",
+          "strength": 0.47058823529411764
+        },
+        {
+          "from": "project",
+          "rel": "relates-to",
+          "to": "validate",
+          "strength": 0.4117647058823529
+        }
+      ],
+      "confidence": 0.8
+    }
+  ]
+}

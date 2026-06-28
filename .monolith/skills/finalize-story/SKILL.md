@@ -88,6 +88,18 @@ status: COMPLETED
 
 ---
 
+### Step 2.5 — Extract and evaluate lessons (self-improvement sub-step)
+
+Read the "Lessons Learned" section of the capsule just written.
+
+For each item, apply the self-improvement write criteria (see `.monolith/skills/self-improvement/SKILL.md`).
+
+Output a decision table — then write LESSON-*.md files only for WRITE verdicts.
+
+This step is mandatory. If there are no lessons in the capsule, output: "No lesson candidates — skipping."
+
+---
+
 ### Step 3 — Update active.md
 
 Update `memory/working/active.md`:

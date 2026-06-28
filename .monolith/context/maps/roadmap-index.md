@@ -5,37 +5,51 @@ topology_role: root
 authority: authoritative
 ---
 
-# Roadmap Index — WEBWAY
+# Roadmap Index
 
 Navigable index of project phases and their status.
+
+Keep in sync with `memory/working/active.md` and `memory/working/story-index.md`.
 
 ---
 
 ## Phases
 
-<!-- Add phases below. Status: PLANNED | IN PROGRESS | COMPLETE -->
+### Phase 1 — Cognitive Core & First Evidence
 
-### Phase 1 — (Add phase name)
+**Status:** IN PROGRESS
 
-**Status:** PLANNED
+**Goal:** Establish the core cognitive architecture (conceptual layers, governance, protocols) and validate the knowledge-ingestion pipeline on MONOLITH's own corpus.
 
-Stories:
+| Story | Title | Status | Date |
+| ----- | ----- | ------ | ---- |
+| 1.1 | Cognitive Core Foundation + Webway Dogfood v0 | COMPLETED | 2026-06-26 |
+| 1.3 | Scriptorium, ERG, and Canonical Identity Resolution | COMPLETED | 2026-06-28 |
+| 1.? | *(next story — not yet defined)* | PLANNED | — |
 
-- STORY 1.1 — (Add story name)
+**Candidate next stories** (not decisions — require user definition):
+- Terra persistence layer — ADR-006 defines the strategy; no implementation yet
+- Corpus relationship density — 32 edges on 481 nodes is too sparse for useful graph traversal
+- Engineering Gate implementation — formalized in ADR-003, no runtime yet
+- Webway v1 improvements — frontmatter stripping, semantic linking
+
+---
+
+### Phase 2+
+
+**Status:** NOT DEFINED
 
 ---
 
 ## Current Focus
 
-<!-- Keep this in sync with memory/working/active.md -->
-
-Active Phase: —
-Active Story: —
+Active Phase: 1 — Cognitive Core & First Evidence
+Active Story: none
 
 ---
 
 ## Completion Summary
 
-| Phase | Stories | Status |
-| ----- | ------- | ------ |
-| —     | —       | —      |
+| Phase | Completed stories | Status |
+| ----- | ----------------- | ------ |
+| 1     | 2 / ? | IN PROGRESS |

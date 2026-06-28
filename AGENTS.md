@@ -5,7 +5,7 @@ topology_role: root
 authority: authoritative
 ---
 
-# WEBWAY — AI Assistant Guide
+# MONOLITH — AI Assistant Guide
 
 This is the primary entry point for AI assistants working in this project.  
 Read this file first on every session start. Do not start any task before completing the Boot Sequence.
@@ -27,7 +27,7 @@ Read this file first on every session start. Do not start any task before comple
 
 Transform raw information into structured knowledge by building semantic connections between concepts — not by keyword matching, but by meaning.
 
-WEBWAY is the cognitive layer of MONOLITH. It is the difference between a document store and a knowledge architecture.
+MONOLITH is a cognitive operating system. Its cognitive kernel consists of three subsystems now active: **Scriptorium** (deterministic ingestion), **ERG** (explicit relationship graph), and **Webway** (semantic connection layer).
 
 ---
 
@@ -35,18 +35,19 @@ WEBWAY is the cognitive layer of MONOLITH. It is the difference between a docume
 
 ```
 Artifact
-  → Concepts
-    → Semantic Links
-      → Knowledge Clusters
-        → Knowledge Regions
-          → Mental Models
-            → Emergent Insights
+  → Scriptorium (structural extraction)
+    → ERG (explicit relationship graph)
+      → Webway (semantic linking)
+        → Knowledge Clusters
+          → Knowledge Regions
+            → Mental Models
+              → Emergent Insights
 ```
 
 The long-term objective: a **Meaning Linker** capable of discovering non-obvious relationships across domains — without being told what to look for.
 
 Traditional RAG stores chunks and retrieves by similarity.  
-WEBWAY grows knowledge regions and reasons over structure.
+MONOLITH grows knowledge regions and reasons over structure.
 
 ---
 
@@ -87,43 +88,62 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Source Structure
 
-| Path                  | Purpose                                              |
-| --------------------- | ---------------------------------------------------- |
-| `src/webway/types.ts` | Core type contracts (Artifact → WebwayAnalysisResult) |
-| `src/webway/analyze.ts` | `analyzeArtifact()` — deterministic prototype      |
-| `src/webway/index.ts` | Module barrel export                                 |
-| `src/webway/webway.test.ts` | Vitest test suite (13 tests)                   |
-| `src/index.ts`        | Package entrypoint — re-exports everything           |
-| `docs/webway-v0.md`   | Webway v0 design document                            |
+| Path                              | Purpose                                                              |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `src/webway/types.ts`             | Core type contracts (Artifact → WebwayAnalysisResult)                |
+| `src/webway/analyze.ts`           | `analyzeArtifact()` — deterministic prototype                        |
+| `src/webway/index.ts`             | Module barrel export                                                 |
+| `src/webway/webway.test.ts`       | Vitest test suite (13 tests)                                         |
+| `src/scriptorium/types.ts`        | ScriptoriumInput, ScriptoriumResult, ConceptCandidate, Evidence, ... |
+| `src/scriptorium/compile.ts`      | `compileMarkdownArtifact()` — structural extraction pipeline         |
+| `src/scriptorium/frontmatter.ts`  | YAML frontmatter parser                                              |
+| `src/scriptorium/markdown.ts`     | Heading/content extraction                                           |
+| `src/scriptorium/index.ts`        | Module barrel export                                                 |
+| `src/scriptorium/scriptorium.test.ts` | Vitest test suite (138 tests)                                    |
+| `src/graph/types.ts`              | GraphNode, GraphEdge, ExplicitRelationshipGraph, ...                 |
+| `src/graph/builder.ts`            | `buildGraph()` — Pass 1 (nodes) + Pass 2 (edges) + Pass 2.5 (aliases) |
+| `src/graph/normalize.ts`          | `normalizeLabel()`, `selectCanonicalLabel()`                         |
+| `src/graph/index.ts`              | Module barrel export                                                 |
+| `src/graph/graph.test.ts`         | Vitest test suite (see integrity-result.md for count)                |
+| `src/index.ts`                    | Package entrypoint — re-exports all three modules                    |
 
 ---
 
-## Current Scope (v0)
+## Current Scope
 
-What WEBWAY does today:
+What MONOLITH does today (151 tests passing, typecheck clean):
 
-- **Concept extraction** — tokenizes artifact content, filters stopwords, extracts top-N words by frequency, assigns normalized weights
-- **Semantic linking** — creates directed typed links between adjacent top concepts (`relates-to`, `extends`, `depends-on`, rotating)
-- **Region assignment** — scores content against 4 predefined knowledge regions and selects the best match
-- **Mental model generation** — produces a single pattern description over the assigned region
-- **Full determinism** — same input always produces identical output; every behavior is testable
+**Scriptorium** (`compileMarkdownArtifact`):
+- Parses YAML frontmatter → extracts `id`, `title`, `type` fields
+- Extracts structural headings, content sections, concept candidates, relationship candidates
+- Produces `ScriptoriumResult` with `documentId` (from `id:`), `documentTitle` (from `title:`)
+- Full determinism — same input always produces identical output
 
-Entry point: `analyzeArtifact(artifact: Artifact): WebwayAnalysisResult`
+**ERG** (`buildGraph`):
+- Pass 1: builds `GraphNode` per compiled document (explicit `id:` required)
+- Pass 2: resolves relationship candidates to real node edges (explicit-only, no fuzzy matching)
+- Pass 2.5: registers aliases — `id:` → documentId, `title:` → documentTitle; first-document-wins on collision
+- Validation: 481 real nodes, 0 synthesized nodes, 32 explicit edges from MONOLITH corpus
+- ADR-007: explicit-only identity resolution (no fuzzy matching, no inferred aliases)
+
+**Webway** (`analyzeArtifact`):
+- Concept extraction, semantic linking, region assignment, mental model generation
+- Deterministic v0 prototype
 
 ---
 
-## Out of Scope (v0)
+## Out of Scope (current)
 
 The following are explicitly deferred. Do not implement without a finalized story:
 
 - LLM or embedding API calls
 - Vector database integration
 - Graph database (Neo4j, etc.)
-- Cross-artifact linking (multi-artifact graph)
+- Terra persistence layer (ADR-006 defines strategy, no implementation)
 - Corpus-level pattern learning
 - Real semantic similarity (cosine, dot product, etc.)
-- Persistent storage of any kind
 - UI or API layer
+- Engineering Gate runtime (ADR-003 formalized, not implemented)
 
 ---
 
@@ -132,9 +152,11 @@ The following are explicitly deferred. Do not implement without a finalized stor
 1. **Determinism first** — every capability must be testable before probabilistic layers are added. Frequency extraction before embeddings.
 2. **Typed contracts** — TypeScript interfaces are the API. Shape matters more than implementation.
 3. **No premature persistence** — in-memory structures first. Storage is a future story.
-4. **Module isolation** — `webway` is self-contained. It must not import from `init`, `validate`, or `cli`.
-5. **Additive evolution** — v0 outputs remain structurally valid when v1 enriches them. No breaking shape changes without a Decision record.
+4. **Module isolation** — each subsystem (`scriptorium`, `graph`, `webway`) is self-contained. Cross-module imports only through `src/index.ts`.
+5. **Additive evolution** — existing outputs remain structurally valid when later stories enrich them. No breaking shape changes without a Decision record.
 6. **Vertical slice first** — a working end-to-end flow is more valuable than a partially built abstraction.
+7. **Explicit-only identity** — ADR-007: aliases only from frontmatter `id:` and `title:`; no fuzzy matching; no inferred aliases. Provenance must be traceable.
+8. **TypeScript strict + ESM** — `"type": "module"` in package.json; `strict: true`; no `any`; all imports use `.js` extensions.
 
 ---
 
@@ -167,33 +189,27 @@ The following are explicitly deferred. Do not implement without a finalized stor
 
 ## Success Criteria
 
-### v0 — Deterministic Foundation (current)
-- [x] Core types defined (`Artifact`, `Concept`, `SemanticLink`, `KnowledgeRegion`, `MentalModel`, `WebwayAnalysisResult`)
-- [x] `analyzeArtifact()` implemented and deterministic
-- [x] 4 knowledge regions with keyword scoring
-- [x] 13 passing tests covering all behaviors including edge cases
-- [x] Module importable from package entrypoint
-- [x] Build clean, zero TypeScript errors
+### Phase 1 — Cognitive Core & First Evidence (IN PROGRESS)
 
-### v1 — Semantic Understanding
-- [ ] Embedding-based concept extraction replaces frequency counting
-- [ ] Semantic similarity scores replace keyword overlap
-- [ ] Concept labels carry embedding vectors
-- [ ] Backward-compatible with v0 `WebwayAnalysisResult` shape
+**Story 1.1 — Cognitive Core Foundation + Webway Dogfood v0** ✅ 2026-06-26
+- [x] Webway types + `analyzeArtifact()` implemented and deterministic
+- [x] 13 Webway tests passing
+- [x] MONOLITH corpus ingested as dogfood
 
-### v2 — Connected Knowledge Graph
-- [ ] `analyzeCorpus(artifacts[])` builds cross-artifact edges
-- [ ] Shared concepts create links between artifacts
-- [ ] Knowledge Clusters emerge from graph topology
+**Story 1.3 — Scriptorium, ERG, and Canonical Identity Resolution** ✅ 2026-06-28
+- [x] `compileMarkdownArtifact()` — structural extraction pipeline, 138 tests
+- [x] `buildGraph()` — Pass 1 + 2 + 2.5 alias system, explicit-only
+- [x] ADR-007: explicit-only identity resolution
+- [x] 481 real nodes, 0 synthesized nodes on MONOLITH corpus
+- [x] 151 total tests passing, typecheck clean
 
-### v3 — Region Intelligence
-- [ ] Knowledge Regions inferred from corpus, not predefined
-- [ ] Regions evolve as new artifacts arrive
+**Candidate next stories (not decisions):**
+- Terra persistence layer (ADR-006 defined, no implementation)
+- Corpus relationship density (32 edges / 481 nodes — too sparse)
+- Engineering Gate runtime (ADR-003 formalized, not implemented)
+- Webway v1 (embedding-based concept extraction, semantic similarity)
 
-### v4 — Emergent Insights
-- [ ] Cross-domain pattern recognition
-- [ ] Non-obvious relationships surface across regions
-- [ ] WEBWAY can answer: "How does X relate to Y?"
+### Phase 2+ — NOT DEFINED
 
 ---
 

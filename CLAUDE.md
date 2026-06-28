@@ -5,6 +5,20 @@ Before acting on any skill-triggering request, read the corresponding skill file
 
 ---
 
+## Session Start (every session)
+
+Before starting any task, read in order:
+
+1. `AGENTS.md` — project overview, architecture principles, current scope
+2. `.monolith/memory/working/active.md` — what story is active (or confirm none)
+3. `.monolith/context/maps/routing-map.md` — classify the task type
+4. `.monolith/learning/injection-map.md` — load lesson categories relevant to the task type
+5. `.monolith/protocols/cognition/cognitive-modes.md` — declare the behavioral mode for this task
+
+**Declare the cognitive mode before starting work.** State it explicitly: "Mode: implementation" or "Mode: exploration". This constrains what mutations are allowed.
+
+---
+
 ## Skill Activation
 
 When the user's request matches a trigger phrase, **read the skill file before taking any action**.

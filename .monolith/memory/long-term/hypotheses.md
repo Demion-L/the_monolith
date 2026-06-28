@@ -66,6 +66,7 @@ Defines the transformation contract WEBWAY must perform. If information alone we
 - Human cognition research (Minsky's frames, schema theory, Novak's concept maps) consistently demonstrates that comprehension requires structure — not just storage.
 - Expert performance in any domain correlates with richer concept maps, not larger information stores.
 - v0 `analyzeArtifact()` demonstrates that even frequency-based structure extraction produces semantically coherent region assignments, suggesting the structural signal is present in text and extractable.
+- **Story 1.3 (2026-06-28):** Scriptorium structural extraction applied to MONOLITH's own 481 documents: explicit `id:` / `title:` fields in frontmatter are sufficient to establish deterministic node identity. The absence of structural identity (documents without `id:` frontmatter) produced 0 usable graph nodes — confirming that structure (frontmatter schema) is required before meaning can emerge. Raw text alone produced no identity, no edges.
 
 **Unknowns:**
 - Whether machine-generated concept maps can meaningfully approximate human knowledge structures in precision and recall.
@@ -91,11 +92,13 @@ This is the core technical bet of WEBWAY. v0 uses frequency extraction as a dete
 - v0 prototype shows that frequency-based extraction already produces region assignments that align with human intuition (manually verified on software engineering and cognitive architecture artifacts).
 - Embedding-based semantic similarity in published systems consistently outperforms keyword matching on paraphrase, abstraction, and cross-document tasks.
 - Typed relationship graphs (knowledge graphs) have demonstrated improvements in question-answering accuracy over flat document retrieval in multiple published benchmarks.
+- **Story 1.3 (2026-06-28):** ERG Pass 2 applied to MONOLITH corpus: explicit `[[links]]` produced 32 edges on 481 nodes (6.6% density). This confirms that explicit relationship extraction works but reveals that most knowledge in the corpus currently lives in document structure, not in explicit inter-document links. Sparse graph = corpus does not yet encode relationships explicitly; link density is the binding constraint, not the extraction mechanism.
 
 **Unknowns:**
 - Magnitude of improvement that embedding-based extraction (v1) will provide over v0 frequency extraction in practice.
 - Whether relationship type labels add measurable downstream value, or whether the graph topology alone is sufficient.
 - Optimal embedding model for concept-level (not sentence-level) representation.
+- Whether corpus relationship density (currently 6.6%) is a document-authoring problem or a signal that explicit links are not the right encoding for this domain.
 
 **How to validate:**  
 A/B test v0 (frequency-based) vs v1 (embedding-based) on knowledge region assignment accuracy against a human-labeled test set of 50+ artifacts. Measure precision, recall, and F1 per region.
@@ -167,6 +170,7 @@ Defines the long-term product relationship between MONOLITH (the kernel) and WEB
 - v0 `analyzeArtifact()` can already be applied to any MONOLITH memory artifact (active.md, decisions.md, story capsules) and extract concepts, region assignments, and semantic links — without any changes to the kernel.
 - The `WebwayAnalysisResult` output shape is structurally compatible with future cross-document graph construction: concepts carry IDs and source references, links carry typed relationship labels.
 - The MONOLITH boot sequence already reads memory artifacts in a fixed order — WEBWAY analysis could be inserted as an enrichment step without breaking the existing protocol.
+- **Story 1.3 (2026-06-28):** Scriptorium + ERG now process MONOLITH's own documentation corpus deterministically. The complete pipeline from raw `.md` files to a typed graph of real nodes and explicit edges is operational — MONOLITH can now ingest itself. This is the prerequisite infrastructure H6 predicted would be needed. The next step (applying Webway analysis to the resulting graph for semantic enrichment) is now technically unblocked.
 
 **Unknowns:**
 - At which point in the MONOLITH boot sequence should WEBWAY analysis be applied (pre-load enrichment vs on-demand query-time analysis).

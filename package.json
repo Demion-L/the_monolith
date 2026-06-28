@@ -20,6 +20,7 @@
     "dev": "tsc -p tsconfig.json --watch",
     "test": "vitest run",
     "dogfood": "node dist/scripts/dogfood.js",
+    "dogfood-graph": "node dist/scripts/dogfood-graph.js",
     "prepare": "npm run build"
   },
   "keywords": [

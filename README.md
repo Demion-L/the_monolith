@@ -1,5 +1,7 @@
 # @monolith/core
 
+> **[MANIFESTO.md](./MANIFESTO.md)** — Why this project exists and the engineering principles that govern it.
+
 MONOLITH is a Cognitive Operating System (COS) that governs AI assistant behavior through deterministic enforcement, protocol integrity verification, and project-specific configuration.
 
 ## Core Design Principle

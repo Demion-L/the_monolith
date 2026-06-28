@@ -16,35 +16,39 @@ Update this file at the end of each work session before closing.
 
 ## Active Story
 
-None. STORY 1.1 was finalized on 2026-06-26.
+None. STORY 1.3 was finalized on 2026-06-28.
 
 ---
 
 ## Objective
 
-v0 is officially closed. No active story.
+Story 1.3 is closed. No active work.
 
 ---
 
 ## Completed This Session
 
-- Formalized Cognitive Core as a named conceptual layer (ADR-002, cognitive-core.md)
-- Formalized Engineering Gate as task-preparation layer (ADR-003, engineering-gate.md)
-- Refined H8: prediction = inference over unknown information; Schliemann/Troy example added
-- Added epistemic level (descriptive/explanatory/predictive) as proposed second axis in knowledge-regions.md
-- Added "Story as the Source of Artifacts" section to knowledge-lifecycle.md
-- Created and ran Webway Dogfood Experiment v0: 72 files analyzed, reports in .monolith/reports/
-- Formalized Story Lifecycle (story-lifecycle.md): Story as unit of engineering evolution, Decision as terminal state
-- Finalized STORY 1.1 — capsule, story-index, execution-history, active.md all updated
+- Ported Scriptorium and Explicit Relationship Graph modules from webway branch
+- Created `src/scripts/dogfood-graph.ts` — dogfood runner for MONOLITH corpus
+- Three-cycle experiment: dogfood → fix → dogfood → fix → dogfood
+  - v1: 4 edges, 0% real-to-real
+  - v1.1: 32 edges, 13% real-to-real (added relationship fields, heading noise filter, H1 title)
+  - v1.2: 32 edges, 100% real-to-real (canonical alias system from explicit frontmatter)
+- Added `documentId` / `documentTitle` to `ScriptoriumResult`; Pass 2.5 alias map in `buildGraph()`
+- Written ADR-007: Explicit-Only Identity Resolution in the ERG
+- Established `docs/` knowledge base (ADRs 004–007, research R-0001–R-0003, architecture, vision)
+- Created `CLAUDE.md` with skill activation table
+- Updated `finalize-story`, `current-status`, `global-status` skills to match current project state
+- Finalized STORY 1.3: capsule, story-index, execution-history, decisions, active.md all updated
+- 151 tests passing, typecheck clean
 
 ---
 
 ## Constraints
 
-- No runtime implementation for Cognitive Core, Engineering Gate, or Story Lifecycle until future stories
-- Epistemic level axis is **proposed** — do not apply to region entries until H8 validation criteria are met
-- Dogfood script (src/scripts/dogfood.ts) is an experiment artifact — not part of the published API
-- All ADRs (001, 002, 003) are Accepted; they define the conceptual architecture
+- Alias system is brittle to document `id:` renaming — no referential integrity check
+- 32 edges on 481 nodes is very sparse — Terra persistence useful only after relationship density improves
+- `documentTitle` alias may shadow future headings with identical normalized text — monitor in dogfood reports
 
 ---
 
@@ -53,13 +57,13 @@ v0 is officially closed. No active story.
 No next step defined. Begin by asking the user what to work on next.
 
 Candidate directions (not decisions):
-- v0.1 improvement: strip frontmatter before tokenization (highest-value single fix)
-- Terra persistence layer: cross-artifact concept storage (unblocks H4, H7)
-- Story capsule accumulation: run dogfood again after first real stories are written
-- Corpus region expansion: add "Systems Governance" region candidate based on dogfood finding
+- Terra persistence layer — ADR-006 defines the strategy; implementation not yet started
+- Story 1.4 — corpus relationship density: add explicit relationship fields to more documents
+- Engineering Gate implementation — formalized in ADR-003, no runtime yet
+- Webway v1 improvements — frontmatter stripping, semantic linking
 
 ---
 
 ## Files in Flight
 
-None. All files are complete.
+None. All files are committed and pushed.

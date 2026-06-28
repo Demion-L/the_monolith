@@ -25,20 +25,20 @@ No active phase.
 
 No active story.
 
-Previous: **STORY 1.1 — Cognitive Core Foundation + Webway Dogfood v0** (COMPLETED 2026-06-26)
+Previous: **STORY 1.3 — Scriptorium, Explicit Relationship Graph, and Canonical Identity Resolution** (COMPLETED 2026-06-28)
 
 ---
 
 ## Last Finalization
 
-**Story:** STORY 1.1 — Cognitive Core Foundation + Webway Dogfood v0  
-**Date:** 2026-06-26  
-**Capsule:** `.monolith/memory/working/phases/phase-1/stories/story-1.1-cognitive-core-and-dogfood-v0.md`
+**Story:** STORY 1.3 — Scriptorium, Explicit Relationship Graph, and Canonical Identity Resolution
+**Date:** 2026-06-28
+**Capsule:** `.monolith/memory/working/phases/phase-1/stories/story-1.3-scriptorium-erg-canonical-identity.md`
 
 ---
 
 ## Current Operational Focus
 
-v0 is officially closed. No active work.
+Story 1.3 closed. Graph pipeline is validated — 481 real nodes, 0 synthesized, 32 edges, 100% real-to-real.
 
-Next candidate work: v1 direction — embed-based semantic linking, frontmatter stripping, Terra persistence layer, or corpus growth via story capsule accumulation.
+Next candidate work: Terra persistence layer (ADR-006), corpus relationship density improvement, or Story 1.4 as defined in the roadmap.

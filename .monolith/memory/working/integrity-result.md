@@ -6,12 +6,11 @@ stability: volatile
 
 ## Last Integrity Check
 
-**Status:** PASS  
-**Date:** 2026-06-26  
-**Story:** Cognitive Core Foundation + Webway Dogfood v0
+**Status:** PASS
+**Date:** 2026-06-28
+**Story:** STORY 1.3 — Scriptorium, Explicit Relationship Graph, and Canonical Identity Resolution
 
 **Checks:**
-- [x] Build: tsc clean, no errors
-- [x] Tests: 13/13 pass (webway.test.ts)
-- [x] No runtime code changes introduced
-- [x] All new files are documentation only
+- [x] typecheck: tsc clean, 0 errors
+- [x] Tests: 151/151 pass (webway: 13, scriptorium: 75, graph: 63)
+- [x] Dogfood: 481 real nodes, 0 synthesized, 32 edges, 100% real-to-real

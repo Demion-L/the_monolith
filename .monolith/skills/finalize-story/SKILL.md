@@ -5,81 +5,176 @@ trigger: finalize-story
 enforcement: mandatory
 protocols:
   - memory-governance
-  - integrity-verification
+  - skills-governance
 ---
 
 # Skill: Finalize Story
 
-Workflow for completing a story and updating all memory artifacts.
+Workflow for closing a completed story and updating all memory artifacts.
 
 ---
 
 ## Activation
 
-Triggered by: "finalize story", "complete story", "mark story done"
+Triggered by: "finalize story", "finalize X.Y", "complete story", "mark story done", "финализируй"
 
 ---
 
 ## Pre-conditions
 
-- [ ] Active story exists in `memory/working/active.md`
-- [ ] All story tasks are complete
-- [ ] No blocking issues open
+- Story implementation is complete
+- User has confirmed the story is done (or the request itself implies it)
+- No active blockers
+
+Note: `active.md` may or may not have a registered story entry — proceed either way.
 
 ---
 
 ## Steps
 
-### Step 1 — Verify integrity
+### Step 1 — Verify build
 
-Run integrity verification. All checks must pass before proceeding.
+Run both checks. Both must pass before continuing.
 
-Expected output: `memory/working/integrity-result.md` updated with PASS.
+```
+pnpm typecheck
+pnpm test
+```
 
-### Step 2 — Run governance evaluation
+Report: N tests passing, typecheck clean (or list failures if any).
+Write summary to `memory/working/integrity-result.md`.
 
-Verify no governance rules are violated.
+---
 
-Expected output: `memory/working/governance-result.md` updated with PASS.
+### Step 2 — Write story capsule
 
-### Step 3 — Write story capsule
+Create file: `memory/working/phases/<phase-id>/stories/<story-id>-<story-slug>.md`
 
-Create `memory/working/phases/<phase-id>/stories/<story-id>.md` with:
+Capsule must include:
 
-- Objective
-- Implementation summary
-- Files changed
-- Key decisions
-- Lessons learned
+```markdown
+---
+type: story-capsule
+id: story-X.Y
+phase: phase-N
+title: <story title>
+date: YYYY-MM-DD
+status: COMPLETED
+---
 
-### Step 4 — Update working memory
+# STORY X.Y — <story title>
+
+## Objective
+<what this story was meant to deliver>
+
+## Implementation Summary
+<what was actually built, sub-story by sub-story if applicable>
+
+## Files Changed
+<list of new/modified files>
+
+## Tests
+<test counts, coverage notes>
+
+## Key Decisions
+<architectural choices made during this story>
+
+## ADRs Written
+<links to docs/adr/ entries created during this story, or "None">
+
+## Lessons Learned
+<what worked, what was surprising, what to carry forward>
+```
+
+---
+
+### Step 3 — Update active.md
 
 Update `memory/working/active.md`:
 
-- Mark current story as COMPLETED
-- Clear "Current Story" section
+- Set "Current Story" → "No active story."
+- Set "Previous" → completed story name + date
+- Update "Last Finalization" block
 
-### Step 5 — Update story index
+---
 
-Add story entry to `memory/working/story-index.md`.
+### Step 4 — Update story-index.md
 
-### Step 6 — Update long-term memory
+Append story entry to `memory/working/story-index.md` under the correct phase heading.
 
-- Append entry to `memory/long-term/execution-history.md`
-- Update `memory/long-term/decisions.md` if story introduced new decisions
+Format:
+```markdown
+### STORY X.Y — <story title>
 
-### Step 7 — Update HANDOFF.md
+**Date:** YYYY-MM-DD
+**Status:** COMPLETED
+**Capsule:** `.monolith/memory/working/phases/<phase>/stories/<capsule-file>.md`
 
-Write session handoff with story completion status.
+**Summary:** One paragraph covering what was built and why it mattered.
+
+**Key outputs:** <comma-separated list of notable files, ADRs, reports>
+```
+
+---
+
+### Step 5 — Update long-term memory
+
+**Always:** Append entry to `memory/long-term/execution-history.md` (append-only — never edit past entries):
+
+```markdown
+## STORY X.Y — <title> (YYYY-MM-DD)
+
+**Phase:** N — <phase name>
+**Decision:** <one-sentence summary of the architectural decision or outcome>
+**Build:** PASS — N tests, typecheck clean.
+**Capsule:** `.monolith/memory/working/phases/<phase>/stories/<capsule-file>.md`
+```
+
+**If story introduced an ADR:** Add pointer to `memory/long-term/decisions.md`:
+
+```markdown
+### ADR-XXX — <title>
+
+**Date:** YYYY-MM-DD
+**Status:** Accepted
+**Full record:** `docs/adr/ADR-XXX-<slug>.md`
+
+**Decision:** <one-sentence summary>
+```
+
+---
+
+### Step 6 — Update HANDOFF.md
+
+Rewrite `context/boot/HANDOFF.md` with current state:
+
+- Active Story: None (+ what was just finalized)
+- Completed This Session: bullet list of what was done
+- Constraints: any active constraints the next session should know
+- Next Step: next story if known, or "ask the user"
+
+---
+
+### Step 7 — Git commit
+
+Stage all modified memory files and commit:
+
+```
+git add .monolith/memory/ .monolith/context/boot/HANDOFF.md
+git commit -m "chore(story-X.Y): finalize — <story title>"
+```
+
+Do NOT push automatically. Ask the user if they want to push.
 
 ---
 
 ## Post-conditions
 
-- [ ] Integrity result: PASS
-- [ ] Governance result: PASS
+- [ ] Build verified: typecheck + tests pass
 - [ ] Story capsule written
-- [ ] active.md updated
-- [ ] story-index.md updated
-- [ ] execution-history.md appended
-- [ ] HANDOFF.md current
+- [ ] `active.md` updated
+- [ ] `story-index.md` updated
+- [ ] `execution-history.md` appended
+- [ ] `decisions.md` updated (if ADR was written)
+- [ ] `HANDOFF.md` current
+- [ ] Commit created

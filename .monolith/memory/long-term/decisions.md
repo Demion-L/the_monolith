@@ -55,8 +55,18 @@ Updated by the finalize-story skill when a story introduces a significant design
 
 ### ADR-003 — Introduce Engineering Gate Foundation
 
-**Date:** 2026-06-26  
-**Status:** Accepted  
+**Date:** 2026-06-26
+**Status:** Accepted
 **Full record:** `.monolith/adr/ADR-003-engineering-gate-foundation.md`
 
 **Decision:** Introduce Engineering Gate as the task-preparation layer of MONOLITH. Transforms ambiguous tasks into Implementation Packages (scope, source of truth, assumptions, unknowns, success criteria, constraints, implementation plan) before passing to executor agents. Does not write code. Separate from Cognitive Core: the Core generates learning pressure; the Gate prepares execution readiness. Pattern formalized from recurring use across myAPT, Second Brain, AgentCollect, Reasoning Projector, and MONOLITH.
+
+---
+
+### ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph
+
+**Date:** 2026-06-28
+**Status:** Accepted
+**Full record:** `docs/adr/ADR-007-explicit-identity-resolution.md`
+
+**Decision:** Aliases in the Explicit Relationship Graph are registered only from explicit frontmatter metadata (`id:` → `documentId`, `title:` → `documentTitle`). No fuzzy matching, no embeddings, no probabilistic inference. First-document-wins on alias collision. Canonical label remains the H1 heading text.

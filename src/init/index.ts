@@ -50,12 +50,21 @@ export async function runInit(options: InitOptions = { targetDir: process.cwd() 
   console.log(`  Root:          ${config.monolithRoot}/`);
   console.log(`  Files created: ${result.filesCreated}`);
   console.log('');
+  const instructionFileMap: Partial<Record<string, string>> = {
+    claude: 'CLAUDE.md',
+    cursor: '.cursorrules',
+    windsurf: '.windsurfrules',
+  };
+  const instructionFile = instructionFileMap[config.aiTool] ?? 'AGENTS.md';
+
+  console.log(`  AI tool:       ${config.aiTool} → ${instructionFile}`);
+  console.log('');
   console.log('  Next steps:');
-  console.log('    1. Edit AGENTS.md — add project description');
-  console.log(`    2. Edit ${config.monolithRoot}/context/maps/project-map.md — describe your structure`);
-  console.log(`    3. Edit ${config.monolithRoot}/context/maps/roadmap-index.md — add your phases`);
-  console.log(`    4. Edit ${config.monolithRoot}/protocols/governance/core-invariants.md — set Current Focus`);
-  console.log(`    5. Add tech stack protocols: ${config.monolithRoot}/protocols/engineering/`);
+  console.log(`    1. Edit ${instructionFile} — verify skill triggers and paths`);
+  console.log('    2. Edit AGENTS.md — add project description');
+  console.log(`    3. Edit ${config.monolithRoot}/context/maps/project-map.md — describe your structure`);
+  console.log(`    4. Edit ${config.monolithRoot}/context/maps/roadmap-index.md — add your phases`);
+  console.log(`    5. Edit ${config.monolithRoot}/protocols/governance/core-invariants.md — set Current Focus`);
   console.log(`    6. Start first story: edit ${config.monolithRoot}/memory/working/active.md`);
   console.log('');
 }

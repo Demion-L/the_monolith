@@ -1,0 +1,53 @@
+# {{PROJECT_NAME}} — Cursor Instructions
+
+This repository runs MONOLITH, a structured cognitive operating system.
+Before acting on any skill-triggering request, read the corresponding skill file.
+
+---
+
+## Session Start (every session)
+
+Before starting any task, read in order:
+
+1. `AGENTS.md` — project overview, architecture principles, current scope
+2. `{{MONOLITH_ROOT}}/memory/working/active.md` — what story is active (or confirm none)
+3. `{{MONOLITH_ROOT}}/context/maps/routing-map.md` — classify the task type
+4. `{{MONOLITH_ROOT}}/learning/injection-map.md` — load lesson categories relevant to the task type
+5. `{{MONOLITH_ROOT}}/protocols/cognition/cognitive-modes.md` — declare the behavioral mode for this task
+
+Declare the cognitive mode before starting work. State it explicitly: "Mode: implementation" or "Mode: exploration". This constrains what mutations are allowed.
+
+---
+
+## Skill Activation
+
+When the user's request matches a trigger phrase, read the skill file before taking any action.
+
+| Trigger phrases | Skill |
+|---|---|
+| "finalize story", "finalize X.Y", "complete story", "mark story done" | `{{MONOLITH_ROOT}}/skills/finalize-story/SKILL.md` |
+| "status", "what are we working on", "current status" | `{{MONOLITH_ROOT}}/skills/current-status/SKILL.md` |
+| "global overview", "project status", "global status" | `{{MONOLITH_ROOT}}/skills/global-status/SKILL.md` |
+| "analyze mistake", "learn from error", "self-improvement" | `{{MONOLITH_ROOT}}/skills/self-improvement/SKILL.md` |
+
+Full skill index: `{{MONOLITH_ROOT}}/skills/INDEX.md`
+Routing map: `{{MONOLITH_ROOT}}/context/maps/routing-map.md`
+
+---
+
+## Key Protocols
+
+- Memory governance: `{{MONOLITH_ROOT}}/protocols/governance/memory-governance.md`
+- Command policy: `{{MONOLITH_ROOT}}/protocols/governance/command-policy.md`
+- Core invariants: `{{MONOLITH_ROOT}}/protocols/governance/core-invariants.md`
+- Skills governance: `{{MONOLITH_ROOT}}/protocols/governance/skills.md`
+
+---
+
+## Project Structure (quick reference)
+
+| Layer | Path | Purpose |
+|---|---|---|
+| Working memory | `{{MONOLITH_ROOT}}/memory/working/` | Active story, story index |
+| Long-term memory | `{{MONOLITH_ROOT}}/memory/long-term/` | Decisions, execution history |
+| Skills | `{{MONOLITH_ROOT}}/skills/` | Workflow procedures |

@@ -4,6 +4,12 @@ import { join, dirname, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
 import type { ProjectConfig } from './types.js';
 
+const INSTRUCTION_FILE_MAP: Partial<Record<ProjectConfig['aiTool'], string>> = {
+  claude: 'CLAUDE.md',
+  cursor: '.cursorrules',
+  windsurf: '.windsurfrules',
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -124,6 +130,16 @@ export async function scaffoldInstance(
       const relPath = relative(monolithTemplates, tplFile);
       const targetPath = join(targetDir, r, stripTemplateSuffix(relPath));
       copyTemplate(tplFile, targetPath, vars);
+      filesCreated++;
+    }
+  }
+
+  // --- AI tool instruction file (CLAUDE.md / .cursorrules / .windsurfrules) ---
+  const instructionFileName = INSTRUCTION_FILE_MAP[config.aiTool];
+  if (instructionFileName) {
+    const tplPath = join(TEMPLATES_ROOT, 'instruction', instructionFileName);
+    if (existsSync(tplPath)) {
+      copyTemplate(tplPath, join(targetDir, instructionFileName), vars);
       filesCreated++;
     }
   }

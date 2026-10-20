@@ -3,7 +3,7 @@
  * The Kernel reads this at runtime — it never hardcodes these values itself.
  */
 export interface ProjectDefinition {
-  /** Directory name of the MONOLITH instance (e.g. '.devin'). */
+  /** Directory name of the MONOLITH instance (e.g. '.monolith'). */
   monolithRoot: string;
 
   /** Protocol ID used as the finalization gate. */

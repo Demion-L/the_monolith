@@ -1,6 +1,6 @@
 {
   "project": {
-    "name": "WEBWAY",
+    "name": "MONOLITH",
     "language": "typescript",
     "packageManager": "pnpm",
     "aiTool": "claude"

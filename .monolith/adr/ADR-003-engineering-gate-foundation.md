@@ -15,6 +15,10 @@ related_decisions:
 
 **Accepted** — 2026-06-26
 
+**Implementation status (2026-10-20):** Not implemented. No Engineering Gate
+runtime exists in `src/` — see `AGENTS.md` → Out of Scope and
+`.monolith/memory/long-term/tech-debt.md` (TD-005).
+
 ---
 
 ## Context

@@ -7,7 +7,7 @@ topology_role: node
 
 # Skills Index
 
-Available skills for WEBWAY.
+Available skills for MONOLITH.
 
 ---
 

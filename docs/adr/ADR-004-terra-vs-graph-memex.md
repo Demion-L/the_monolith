@@ -15,6 +15,14 @@ related_adrs:
 
 ---
 
+> **Implementation status (2026-10-20):** Partial. The Explicit Relationship
+> Graph (the "complementary layer" this ADR describes) is implemented at
+> `src/graph/`. Terra itself — the schema-enforced, lifecycle-managed
+> persistence substrate this ADR chooses as the primary strategy — is not
+> implemented; memory remains flat markdown with frontmatter (see
+> `ADR-006`'s "Current state"). The decision (Terra over Graph Memex) is
+> accepted and in effect for future work; it does not describe `src/` today.
+
 ## Context
 
 MONOLITH's memory is currently stored as flat markdown files with frontmatter, organized by stability tier (working / long-term / errors). As the system matures, two competing architectural directions emerged for the memory persistence substrate:

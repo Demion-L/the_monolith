@@ -20,6 +20,10 @@ related_decisions:
 
 **Accepted** — 2026-06-26
 
+**Implementation status (2026-10-20):** Not implemented. "No runtime
+implementation; conceptual layer only" per this ADR's own Decision above —
+still accurate. No code in `src/` corresponds to the Cognitive Core.
+
 ---
 
 ## Context

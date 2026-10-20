@@ -5,7 +5,7 @@ topology_role: root
 authority: authoritative
 ---
 
-# Project Map — WEBWAY
+# Project Map — MONOLITH
 
 Navigation guide for the cognitive architecture of this project.  
 Authority: `AGENTS.md`. When this file conflicts with AGENTS.md, AGENTS.md wins.

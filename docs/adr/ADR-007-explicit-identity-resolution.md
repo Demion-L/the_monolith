@@ -13,6 +13,11 @@ related_adrs:
 
 ---
 
+> **Implementation status (2026-10-20):** Implemented. `src/graph/builder.ts`
+> Pass 2.5 registers aliases only from frontmatter `id:`/`title:`, first-document-wins
+> on collision, exactly as decided below. Covered by the ERG test suite
+> (63 tests in `src/graph/graph.test.ts`).
+
 ## Context
 
 The Explicit Relationship Graph (ERG) resolves typed edges between documents by matching `fromLabel` and `toLabel` strings to node IDs in the graph. Node IDs are derived by normalizing concept labels extracted from document headings and list items via Scriptorium.

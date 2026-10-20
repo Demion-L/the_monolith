@@ -25,9 +25,25 @@ Read this file first on every session start. Do not start any task before comple
 
 ## Mission
 
-Transform raw information into structured knowledge by building semantic connections between concepts — not by keyword matching, but by meaning.
+**Portable Project Knowledge & Governance Toolkit for AI-Assisted Development.**
 
-MONOLITH is a cognitive operating system. Its cognitive kernel consists of two subsystems now active in this repository: **Scriptorium** (deterministic ingestion) and **ERG** (explicit relationship graph). **Webway** (semantic connection layer) was extracted into its own repository — see `Current Scope`.
+MONOLITH helps a human and an AI assistant preserve a shared understanding of a
+project — its knowledge, architectural decisions, and progress — across
+sessions, by structurally extracting and linking the project's own markdown
+artifacts rather than relying on an AI's unaided memory.
+
+Its cognitive kernel consists of two subsystems now active in this
+repository: **Scriptorium** (deterministic structural extraction) and **ERG**
+(explicit relationship graph). **Webway** (frequency-based semantic
+concept-linking) was an earlier, orthogonal research track with no runtime
+coupling to Scriptorium/ERG; it was extracted into its own repository — see
+`Current Scope`.
+
+> **Note on framing:** `MANIFESTO.md` and `docs/architecture/cognitive-infrastructure.md`
+> describe MONOLITH as a *research platform* studying cognitive architecture,
+> with the above two subsystems as an emerging "Cognitive Kernel" product.
+> That framing and this toolkit-oriented mission statement are not yet fully
+> reconciled — see the Knowledge Consistency Cleanup report for 2026-10-20.
 
 ---
 

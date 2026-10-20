@@ -18,6 +18,10 @@ related_adrs:
 > **Status: PROPOSED**
 > This ADR documents the proposed design for Terra. It is not yet accepted.
 > Acceptance requires: implementation design review, prototype, and integration plan.
+>
+> **Implementation status (2026-10-20):** Not implemented (consistent with
+> `proposed` status — this is the one ADR in this repository where decision
+> status and implementation status already agree).
 
 ---
 

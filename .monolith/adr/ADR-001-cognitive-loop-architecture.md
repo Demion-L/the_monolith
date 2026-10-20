@@ -16,6 +16,12 @@ related_regions:
 
 **Accepted** — 2026-06-24
 
+**Implementation status (2026-10-20):** Not implemented. This ADR records a
+conceptual/decision-level model for WEBWAY's long-term direction; no runtime
+loop (Observe → Understand → Detect Gaps → Generate Questions → Learn) exists
+in `src/`. Decision acceptance and code implementation are tracked
+separately — see `AGENTS.md` → Out of Scope for what is currently built.
+
 ---
 
 ## Context

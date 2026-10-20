@@ -15,6 +15,14 @@ related_adrs:
 
 ---
 
+> **Implementation status (2026-10-20):** This is a documentation/process
+> decision, not a code decision — "implementation" means consistent
+> terminology usage across documents, not a runtime artifact. No automated
+> validator checks documents against the Lexicon; conformance is manual.
+> The dedicated `docs/architecture/lexicon-mechanicus.md` document this ADR
+> calls for has also not been created yet (see `docs/MIGRATION_REPORT.md`
+> → Future Work).
+
 ## Context
 
 As MONOLITH's architecture expanded through Phase 1 (Scriptorium, Explicit Relationship Graph) and the parallel research program (R-0001, R-0002, R-0003), a terminology proliferation problem emerged.

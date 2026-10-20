@@ -2,7 +2,7 @@
  * @monolith/core — Public API surface
  *
  * This file is the package entrypoint. Exports grow here as Kernel modules
- * are extracted from the instance (.devin/) into this package.
+ * are extracted from project instances into this package.
  *
  * Current state: Phase 6 — validate implemented; Scriptorium (Story 1.2) and
  * Explicit Relationship Graph (Story 1.3) integrated.

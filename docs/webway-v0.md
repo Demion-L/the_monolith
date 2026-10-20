@@ -1,5 +1,12 @@
 # Webway v0 — The Meaning Linker
 
+> **Extracted.** Webway's implementation (`src/webway/`), tests, and this
+> document's source history now live at
+> [github.com/Demion-L/webway](https://github.com/Demion-L/webway). It had
+> zero runtime coupling to Scriptorium/ERG and is an independent research
+> track. This file is kept here as the historical design record for Story
+> 1.1 — see the linked repository for the current version.
+
 ## Purpose
 
 Webway is the semantic connection layer of MONOLITH.

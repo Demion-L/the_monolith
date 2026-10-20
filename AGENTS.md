@@ -27,7 +27,7 @@ Read this file first on every session start. Do not start any task before comple
 
 Transform raw information into structured knowledge by building semantic connections between concepts — not by keyword matching, but by meaning.
 
-MONOLITH is a cognitive operating system. Its cognitive kernel consists of three subsystems now active: **Scriptorium** (deterministic ingestion), **ERG** (explicit relationship graph), and **Webway** (semantic connection layer).
+MONOLITH is a cognitive operating system. Its cognitive kernel consists of two subsystems now active in this repository: **Scriptorium** (deterministic ingestion) and **ERG** (explicit relationship graph). **Webway** (semantic connection layer) was extracted into its own repository — see `Current Scope`.
 
 ---
 
@@ -90,10 +90,6 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 | Path                              | Purpose                                                              |
 | --------------------------------- | -------------------------------------------------------------------- |
-| `src/webway/types.ts`             | Core type contracts (Artifact → WebwayAnalysisResult)                |
-| `src/webway/analyze.ts`           | `analyzeArtifact()` — deterministic prototype                        |
-| `src/webway/index.ts`             | Module barrel export                                                 |
-| `src/webway/webway.test.ts`       | Vitest test suite (13 tests)                                         |
 | `src/scriptorium/types.ts`        | ScriptoriumInput, ScriptoriumResult, ConceptCandidate, Evidence, ... |
 | `src/scriptorium/compile.ts`      | `compileMarkdownArtifact()` — structural extraction pipeline         |
 | `src/scriptorium/frontmatter.ts`  | YAML frontmatter parser                                              |
@@ -105,13 +101,13 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/graph/normalize.ts`          | `normalizeLabel()`, `selectCanonicalLabel()`                         |
 | `src/graph/index.ts`              | Module barrel export                                                 |
 | `src/graph/graph.test.ts`         | Vitest test suite (see integrity-result.md for count)                |
-| `src/index.ts`                    | Package entrypoint — re-exports all three modules                    |
+| `src/index.ts`                    | Package entrypoint — re-exports Scriptorium and Graph                |
 
 ---
 
 ## Current Scope
 
-What MONOLITH does today (151 tests passing, typecheck clean):
+What MONOLITH does today (138 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -126,9 +122,10 @@ What MONOLITH does today (151 tests passing, typecheck clean):
 - Validation: 481 real nodes, 0 synthesized nodes, 32 explicit edges from MONOLITH corpus
 - ADR-007: explicit-only identity resolution (no fuzzy matching, no inferred aliases)
 
-**Webway** (`analyzeArtifact`):
-- Concept extraction, semantic linking, region assignment, mental model generation
-- Deterministic v0 prototype
+**Webway** (`analyzeArtifact`) — extracted to its own repository:
+- Originally Story 1.1's deterministic frequency-based concept extraction / semantic linking prototype
+- Had zero runtime coupling to Scriptorium/ERG; now developed independently at https://github.com/Demion-L/webway
+- Historical record: `docs/webway-v0.md`
 
 ---
 

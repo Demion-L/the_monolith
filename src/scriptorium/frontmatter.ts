@@ -10,6 +10,10 @@ const MONOLITH_RELATIONSHIP_FIELDS = new Set([
   'follow_up_adrs',
   'related_adrs',
   'related_research',
+  // Added in .monolith/ self-analysis dogfood: fields used in operational memory
+  'protocols',
+  'referenced_by',
+  'related_skills',
 ]);
 
 export interface FrontmatterField {

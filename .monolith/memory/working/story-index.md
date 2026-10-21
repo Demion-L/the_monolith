@@ -50,3 +50,15 @@ Use this when you need to know:
 **Summary:** Three-sub-story arc validating the Scriptorium + Explicit Relationship Graph pipeline on MONOLITH's own corpus. Sub-story 1.3.1 established baseline (4 edges, 0% real-to-real). Sub-story 1.3.2 added missing relationship fields and heading-noise filter (32 edges, 13% real-to-real). Sub-story 1.3.3 introduced canonical alias system grounded in explicit frontmatter metadata (0 synthesized nodes, 100% real-to-real). ADR-007 written.
 
 **Key outputs:** src/scriptorium/, src/graph/, src/scripts/dogfood-graph.ts, docs/adr/ADR-007, .monolith/reports/graph-dogfood-v1*.md, 151 tests passing
+
+---
+
+### COORDINATORIUM-001 — Tactical Coordinatorium: Mission Lifecycle MVP
+
+**Date:** 2026-10-21
+**Status:** COMPLETED
+**Capsule:** `.monolith/memory/working/phases/phase-1/stories/story-coordinatorium-001-tactical-mission-lifecycle.md`
+
+**Summary:** First vertical slice of Coordinatorium — a deterministic, file-based State Keeper (`.monolith/state.json`) and a `monolith mission start|list|show|finish` CLI for registering and closing development missions, independent of any single AI session's self-reported memory. Three same-day hardening passes closed, in turn: a live owner being preemptable purely by lock age, a non-atomic "re-read then delete" recovery race between two challengers, and a non-atomic lock-*creation* path that could leave an empty/partial canonical lock behind on a write failure. Strategic Coordinatorium remains schema-reserved only; mission registration is not runtime-enforced.
+
+**Key outputs:** src/coordinatorium/{types,state-keeper,lock,mission,cli,errors}.ts, docs/adr/ADR-008, 186 tests passing (48 Coordinatorium-specific: 13 state-keeper, 17 mission + CLI, 15 lock — including real multi-process concurrency and TOCTOU/partial-write regression tests — 3 init regression)

@@ -25,9 +25,13 @@ Keep in sync with `memory/working/active.md` and `memory/working/story-index.md`
 | ----- | ----- | ------ | ---- |
 | 1.1 | Cognitive Core Foundation + Webway Dogfood v0 | COMPLETED | 2026-06-26 |
 | 1.3 | Scriptorium, ERG, and Canonical Identity Resolution | COMPLETED | 2026-06-28 |
+| COORDINATORIUM-001 | Tactical Coordinatorium: Mission Lifecycle MVP | COMPLETED | 2026-10-21 |
 | 1.? | *(next story — not yet defined)* | PLANNED | — |
 
 **Candidate next stories** (not decisions — require user definition):
+- COORDINATORIUM-002 — Mission Checkpoints (design proposal drafted:
+  `.monolith/context/templates/plan-coordinatorium-002-mission-checkpoints.md`;
+  not started)
 - Corpus relationship density — 32 edges on 481 nodes is too sparse for useful graph traversal
 - Engineering Gate implementation — formalized in ADR-003, no runtime yet
 
@@ -55,4 +59,4 @@ Active Story: none
 
 | Phase | Completed stories | Status |
 | ----- | ----------------- | ------ |
-| 1     | 2 / ? | IN PROGRESS |
+| 1     | 3 / ? | IN PROGRESS |

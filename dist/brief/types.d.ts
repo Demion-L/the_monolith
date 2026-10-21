@@ -15,7 +15,7 @@ export type DiagnosticSeverity = 'info' | 'warn' | 'error';
  * budget decision is made, which is what lets render() reserve space for
  * them deterministically (see render.ts's two-phase budget accounting).
  */
-export type BriefDiagnosticCode = 'MONOLITH_NOT_INITIALIZED' | 'STATE_NOT_INITIALIZED' | 'STATE_EMPTY' | 'STATE_UNREADABLE' | 'STATE_LEGACY_SCHEMA_MIGRATED' | 'MULTIPLE_ACTIVE_MISSIONS' | 'CHECKPOINT_ORDER_MISMATCH' | 'ACTIVE_MD_MISSING' | 'ACTIVE_MD_NO_CURRENT_STORY';
+export type BriefDiagnosticCode = 'MONOLITH_NOT_INITIALIZED' | 'STATE_NOT_INITIALIZED' | 'STATE_EMPTY' | 'STATE_UNREADABLE' | 'STATE_LEGACY_SCHEMA_MIGRATED' | 'MULTIPLE_ACTIVE_MISSIONS' | 'CHECKPOINT_ORDER_MISMATCH' | 'ACTIVE_MD_MISSING' | 'ACTIVE_MD_NO_CURRENT_STORY' | 'CONFIG_UNREADABLE' | 'CONFIG_ADR_DIRS_INVALID' | 'DOC_DIR_UNREADABLE' | 'DOC_FILE_UNREADABLE' | 'DOC_DIR_OUTSIDE_PROJECT';
 export interface BriefDiagnostic {
     code: BriefDiagnosticCode;
     severity: DiagnosticSeverity;

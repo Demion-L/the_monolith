@@ -64,8 +64,13 @@ describe('collect — State Keeper classification', () => {
     write(dir, '.monolith/state.json', '');
     const model = await collect(dir);
     expect(model.stateKeeper.status).toBe('empty');
-    expect(model.diagnostics.map((d) => d.code)).toContain('STATE_EMPTY');
-    expect(model.diagnostics.some((d) => d.severity === 'error')).toBe(false);
+    const diag = model.diagnostics.find((d) => d.code === 'STATE_EMPTY');
+    expect(diag).toBeDefined();
+    // Review finding F-1: an empty state.json is a loss of information (no
+    // state could be read at all), not a benign "zero missions" result —
+    // it must carry severity 'error' so render() treats it as INCOMPLETE,
+    // the same way STATE_UNREADABLE already does.
+    expect(diag?.severity).toBe('error');
   });
 
   it('STATE_UNREADABLE for corrupted JSON, never silently treated as empty/zero missions', async () => {

@@ -16,17 +16,26 @@
  *   mandatory protocol pointer) with NO budget limit — P0 is never
  *   truncated or hidden (rule 5/7). If P0 alone (plus the reserved,
  *   fixed-size Completeness line) exceeds maxChars, that is reported via
- *   BUDGET_EXCEEDED_BY_REQUIRED and nothing else is attempted.
+ *   BUDGET_EXCEEDED_BY_REQUIRED (which also states explicitly that P1–P3
+ *   are skipped entirely as a result — review finding F-5) and nothing
+ *   else is attempted.
  *
  *   Phase 2 — whatever chars remain after P0 + the reserved Completeness
- *   line are handed to P1, then P2, then P3, in that fixed order. Each
+ *   line are handed to P1 (Checkpoints, then Story — Checkpoints first so
+ *   a long Story can never silently starve "Next steps" out of the budget;
+ *   review finding F-5), then P2, then P3, in that fixed order. Each
  *   section either fits whole, or (list sections) includes as many whole
  *   items as fit plus an explicit "N more omitted" marker, or (the Story
  *   excerpt) is field-truncated with an explicit `[truncated N chars]`
- *   marker, or is omitted outright with a one-line marker. Every one of
- *   these outcomes is itself measured and subtracted from the remaining
- *   budget before the next section is attempted — nothing is added "for
- *   free" after the fact.
+ *   marker, or — if not even that fits — falls back to a short, fixed-size
+ *   local omission marker so a section can never disappear from the output
+ *   without some local trace of its omission (review finding F-5; the only
+ *   residual case where a section can still vanish with zero local marker
+ *   is when `remaining` is too small even for that minimal marker, which
+ *   is itself already covered by the global Completeness: INCOMPLETE
+ *   signal). Every one of these outcomes is itself measured and subtracted
+ *   from the remaining budget before the next section is attempted —
+ *   nothing is added "for free" after the fact.
  */
 import type { BriefModel } from './types.js';
 export declare const DEFAULT_MAX_CHARS = 6000;

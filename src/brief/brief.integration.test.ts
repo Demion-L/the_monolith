@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readdirSync, chmodSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, readdirSync, chmodSync, mkdirSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { scaffoldInstance } from '../init/scaffold.js';
@@ -188,6 +188,44 @@ describe('monolith brief — end to end (init then brief)', () => {
     expect(stdout).toContain('MULTIPLE_ACTIVE_MISSIONS');
     expect(stdout).toContain('MIS-0001');
     expect(stdout).toContain('MIS-0002');
+  });
+
+  it('--strict exits 2 for an empty (0-byte) state.json (review finding F-1)', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+    writeFileSync(join(dir, '.monolith', 'state.json'), '', 'utf8');
+
+    const { exitCode, stdout } = await runBriefCaptured(['--strict'], dir);
+    expect(stdout).toContain('Completeness: INCOMPLETE');
+    expect(stdout).toContain('STATE_EMPTY');
+    expect(exitCode).toBe(2);
+  });
+
+  it('a corrupted monolith.config.json is reported and forces INCOMPLETE, never silently treated as a healthy default project (F-6)', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+    writeFileSync(join(dir, 'monolith.config.json'), '{ not json', 'utf8');
+
+    const { exitCode, stdout } = await runBriefCaptured(['--strict'], dir);
+    expect(stdout).toContain('Completeness: INCOMPLETE');
+    expect(stdout).toContain('CONFIG_UNREADABLE');
+    expect(exitCode).toBe(2);
+  });
+
+  it('a dangling symlink inside the ADR directory does not crash the brief and other ADRs are still collected (F-2)', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+    mkdirSync(join(dir, '.monolith', 'adr'), { recursive: true });
+    writeFileSync(
+      join(dir, '.monolith', 'adr', 'ADR-001.md'),
+      ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'),
+      'utf8',
+    );
+    symlinkSync(join(dir, '.monolith', 'adr', 'missing.md'), join(dir, '.monolith', 'adr', 'dangling.md'));
+
+    const { exitCode, stdout } = await runBriefCaptured([], dir);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('ADR-001');
   });
 
   it('never creates, modifies, or deletes any file on a read-only target directory', async () => {

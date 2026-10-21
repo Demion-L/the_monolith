@@ -77,11 +77,17 @@ async function readStateForBrief(
   // (DEC-CONTEXT-002: "corrupted state.json must not be treated as empty
   // state") precisely so the STATE_UNREADABLE path below is never reached
   // for this case by accident — it gets its own diagnostic instead.
+  //
+  // Review finding F-1: an empty state.json means no actual state could be
+  // read — that is a loss of information, not a benign "zero missions"
+  // result (which only a successfully parsed, valid file can report).
+  // severity 'error' here is what makes render() treat this as INCOMPLETE
+  // (and --strict exit 2), the same way STATE_UNREADABLE already does.
   if (raw.trim() === '') {
     diagnostics.push({
       code: 'STATE_EMPTY',
-      severity: 'warn',
-      message: `${provenance.source} exists but is empty.`,
+      severity: 'error',
+      message: `${provenance.source} exists but is empty — no state could be read.`,
     });
     return { summary: { status: 'empty', provenance }, state: createInitialState() };
   }
@@ -218,7 +224,7 @@ function collectStory(targetDir: string, monolithRoot: string, diagnostics: Brie
 
 export async function collect(targetDir: string): Promise<BriefModel> {
   const diagnostics: BriefDiagnostic[] = [];
-  const config = readBriefConfig(targetDir);
+  const config = readBriefConfig(targetDir, diagnostics);
   const monolithRootAbs = join(targetDir, config.monolithRoot);
   const monolithInitialized = existsSync(monolithRootAbs);
 
@@ -243,13 +249,13 @@ export async function collect(targetDir: string): Promise<BriefModel> {
 
   const protocolsRelDir = `${config.monolithRoot}/${PROTOCOLS_DIR}`;
   const mandatoryProtocols = {
-    items: discoverDocs(targetDir, [protocolsRelDir], (fields) => fields.get('enforcement') === 'mandatory'),
+    items: discoverDocs(targetDir, [protocolsRelDir], (fields) => fields.get('enforcement') === 'mandatory', diagnostics),
     provenance: { source: protocolsRelDir },
   };
 
   const adrDirs = [`${config.monolithRoot}/${STANDARD_ADR_DIR}`, ...config.extraAdrDirs];
   const adrs = {
-    items: discoverDocs(targetDir, adrDirs, (fields) => fields.get('status') === 'accepted'),
+    items: discoverDocs(targetDir, adrDirs, (fields) => fields.get('status') === 'accepted', diagnostics),
     provenance: { source: adrDirs.join(', ') },
   };
 

@@ -27,7 +27,12 @@ export type BriefDiagnosticCode =
   | 'MULTIPLE_ACTIVE_MISSIONS'
   | 'CHECKPOINT_ORDER_MISMATCH'
   | 'ACTIVE_MD_MISSING'
-  | 'ACTIVE_MD_NO_CURRENT_STORY';
+  | 'ACTIVE_MD_NO_CURRENT_STORY'
+  | 'CONFIG_UNREADABLE'
+  | 'CONFIG_ADR_DIRS_INVALID'
+  | 'DOC_DIR_UNREADABLE'
+  | 'DOC_FILE_UNREADABLE'
+  | 'DOC_DIR_OUTSIDE_PROJECT';
 
 export interface BriefDiagnostic {
   code: BriefDiagnosticCode;

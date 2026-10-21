@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, symlinkSync, chmodSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { discoverDocs } from './docs.js';
+import type { BriefDiagnostic } from './types.js';
 
 const tempDirs: string[] = [];
 
@@ -103,5 +104,102 @@ describe('discoverDocs', () => {
     writeDoc(dir, 'extra-adr/ADR-001.md', ['---', 'id: ADR-001', 'status: accepted', '---', '# A'].join('\n'));
     const items = discoverDocs(dir, ['adr', 'extra-adr'], (fields) => fields.get('status') === 'accepted');
     expect(items.map((i) => i.id)).toEqual(['ADR-001', 'ADR-002']);
+  });
+});
+
+describe('discoverDocs — resilience to a broken filesystem entry (F-2)', () => {
+  it('skips a dangling symlink without crashing, and still collects other documents', () => {
+    const dir = makeTempDir();
+    writeDoc(dir, 'adr/ADR-001.md', ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'));
+    symlinkSync(join(dir, 'adr', 'does-not-exist.md'), join(dir, 'adr', 'dangling.md'));
+
+    const diagnostics: BriefDiagnostic[] = [];
+    const items = discoverDocs(dir, ['adr'], (fields) => fields.get('status') === 'accepted', diagnostics);
+    expect(items.map((i) => i.id)).toEqual(['ADR-001']);
+    expect(diagnostics.some((d) => d.severity === 'error')).toBe(false); // a skipped symlink is not itself an error
+  });
+
+  it('does not hang or crash on a symlinked directory cycle', () => {
+    const dir = makeTempDir();
+    writeDoc(dir, 'adr/ADR-001.md', ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'));
+    mkdirSync(join(dir, 'adr', 'sub'), { recursive: true });
+    symlinkSync(join(dir, 'adr'), join(dir, 'adr', 'sub', 'loop')); // sub/loop -> adr, a cycle if ever followed
+
+    const items = discoverDocs(dir, ['adr'], (fields) => fields.get('status') === 'accepted');
+    expect(items.map((i) => i.id)).toEqual(['ADR-001']);
+  });
+
+  it('reports DOC_DIR_UNREADABLE and keeps collecting from sibling, readable directories', () => {
+    const dir = makeTempDir();
+    writeDoc(dir, 'adr/ADR-001.md', ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'));
+    mkdirSync(join(dir, 'adr', 'locked'), { recursive: true });
+    writeDoc(dir, 'adr/locked/ADR-999.md', ['---', 'id: ADR-999', 'status: accepted', '---', '# Hidden'].join('\n'));
+    chmodSync(join(dir, 'adr', 'locked'), 0o000);
+
+    try {
+      const diagnostics: BriefDiagnostic[] = [];
+      const items = discoverDocs(dir, ['adr'], (fields) => fields.get('status') === 'accepted', diagnostics);
+      expect(items.map((i) => i.id)).toEqual(['ADR-001']);
+      const diag = diagnostics.find((d) => d.code === 'DOC_DIR_UNREADABLE');
+      expect(diag?.severity).toBe('error');
+    } finally {
+      chmodSync(join(dir, 'adr', 'locked'), 0o755);
+    }
+  });
+
+  it('reports DOC_FILE_UNREADABLE and keeps collecting other files in the same directory', () => {
+    const dir = makeTempDir();
+    writeDoc(dir, 'adr/ADR-001.md', ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'));
+    writeDoc(dir, 'adr/ADR-002.md', ['---', 'id: ADR-002', 'status: accepted', '---', '# Two'].join('\n'));
+    chmodSync(join(dir, 'adr', 'ADR-002.md'), 0o000);
+
+    try {
+      const diagnostics: BriefDiagnostic[] = [];
+      const items = discoverDocs(dir, ['adr'], (fields) => fields.get('status') === 'accepted', diagnostics);
+      expect(items.map((i) => i.id)).toEqual(['ADR-001']);
+      const diag = diagnostics.find((d) => d.code === 'DOC_FILE_UNREADABLE');
+      expect(diag?.severity).toBe('error');
+    } finally {
+      chmodSync(join(dir, 'adr', 'ADR-002.md'), 0o644);
+    }
+  });
+});
+
+describe('discoverDocs — path containment (F-3)', () => {
+  it('rejects a configured directory that escapes the project root via ".." and never reads it', () => {
+    const dir = makeTempDir();
+    const outside = makeTempDir();
+    writeDoc(outside, 'secret/ADR-666.md', ['---', 'id: ADR-666', 'status: accepted', '---', '# Secret'].join('\n'));
+    const escapingRelDir = relative(dir, join(outside, 'secret'));
+    expect(escapingRelDir.startsWith('..')).toBe(true); // sanity check on the fixture itself
+
+    const diagnostics: BriefDiagnostic[] = [];
+    const items = discoverDocs(dir, [escapingRelDir], (fields) => fields.get('status') === 'accepted', diagnostics);
+    expect(items).toEqual([]);
+    const diag = diagnostics.find((d) => d.code === 'DOC_DIR_OUTSIDE_PROJECT');
+    expect(diag?.severity).toBe('error');
+  });
+
+  it('rejects a configured directory that is itself a symlink escaping the project root', () => {
+    const dir = makeTempDir();
+    const outside = makeTempDir();
+    writeDoc(outside, 'ADR-666.md', ['---', 'id: ADR-666', 'status: accepted', '---', '# Secret'].join('\n'));
+    symlinkSync(outside, join(dir, 'escape-adr'));
+
+    const diagnostics: BriefDiagnostic[] = [];
+    const items = discoverDocs(dir, ['escape-adr'], (fields) => fields.get('status') === 'accepted', diagnostics);
+    expect(items).toEqual([]);
+    const diag = diagnostics.find((d) => d.code === 'DOC_DIR_OUTSIDE_PROJECT');
+    expect(diag?.severity).toBe('error');
+  });
+
+  it('still accepts a normal, project-contained extra directory (contextGateway.adrDirs keeps working)', () => {
+    const dir = makeTempDir();
+    writeDoc(dir, 'docs/adr/ADR-001.md', ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'));
+
+    const diagnostics: BriefDiagnostic[] = [];
+    const items = discoverDocs(dir, ['docs/adr'], (fields) => fields.get('status') === 'accepted', diagnostics);
+    expect(items.map((i) => i.id)).toEqual(['ADR-001']);
+    expect(diagnostics.some((d) => d.code === 'DOC_DIR_OUTSIDE_PROJECT')).toBe(false);
   });
 });

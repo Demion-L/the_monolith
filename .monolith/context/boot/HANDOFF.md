@@ -57,13 +57,13 @@ Story 1.3 is closed. No active work.
 No next step defined. Begin by asking the user what to work on next.
 
 Candidate directions (not decisions):
-- Terra persistence layer — ADR-006 defines the strategy; implementation not yet started
 - Story 1.4 — corpus relationship density: add explicit relationship fields to more documents
 - Engineering Gate implementation — formalized in ADR-003, no runtime yet
 
-Webway v1 improvements (frontmatter stripping, semantic linking) are no
-longer a MONOLITH candidate direction — Webway is developed independently:
-https://github.com/Demion-L/webway
+Terra persistence (ADR-006) and Webway v1 improvements (frontmatter
+stripping, semantic linking) are no longer MONOLITH candidate directions —
+both belong to Webway's cognitive-architecture research program, developed
+independently: https://github.com/Demion-L/webway
 
 ---
 

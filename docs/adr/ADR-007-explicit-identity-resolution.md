@@ -126,8 +126,8 @@ Report: `.monolith/reports/graph-dogfood-v1-2.md`
 
 ## References
 
-- ADR-004 — Terra vs Graph Memex (ERG as complementary layer, explicit-provenance model)
-- ADR-005 — Lexicon Mechanicus (canonical terminology, ID conventions)
+- ADR-004 — Terra vs Graph Memex (ERG as complementary layer, explicit-provenance model) — moved to [Webway](https://github.com/Demion-L/webway), 2026-10-21
+- ADR-005 — Lexicon Mechanicus (canonical terminology, ID conventions) — moved to [Webway](https://github.com/Demion-L/webway), 2026-10-21
 - `src/graph/builder.ts` — Pass 2.5 implementation
 - `src/scriptorium/compile.ts` — `documentId` / `documentTitle` extraction
 - `src/scriptorium/types.ts` — `ScriptoriumResult.documentId`, `ScriptoriumResult.documentTitle`

@@ -39,14 +39,12 @@ Triggered by: "global overview", "project status", "big picture", "explain the p
 **Architecture:** Core subsystems and their roles.
 - Scriptorium — ...
 - Explicit Relationship Graph — ...
-- Terra — ...
+- Coordinatorium — ...
 - (etc.)
 
 **Knowledge base:** docs/ layer hierarchy
-- docs/research/ — external analysis
 - docs/adr/ — architecture decisions
 - docs/architecture/ — current system description
-- docs/vision/ — long-term direction
 
 **Progress:**
 - Phase 1 — Name: IN PROGRESS (N/M stories complete)

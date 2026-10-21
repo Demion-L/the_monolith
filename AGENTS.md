@@ -32,38 +32,42 @@ project — its knowledge, architectural decisions, and progress — across
 sessions, by structurally extracting and linking the project's own markdown
 artifacts rather than relying on an AI's unaided memory.
 
-Its cognitive kernel consists of two subsystems now active in this
-repository: **Scriptorium** (deterministic structural extraction) and **ERG**
+Its core consists of two subsystems now active in this repository:
+**Scriptorium** (deterministic structural extraction) and **ERG**
 (explicit relationship graph). **Webway** (frequency-based semantic
 concept-linking) was an earlier, orthogonal research track with no runtime
 coupling to Scriptorium/ERG; it was extracted into its own repository — see
 `Current Scope`.
 
-> **Note on framing:** `MANIFESTO.md` and `docs/architecture/cognitive-infrastructure.md`
-> describe MONOLITH as a *research platform* studying cognitive architecture,
-> with the above two subsystems as an emerging "Cognitive Kernel" product.
-> That framing and this toolkit-oriented mission statement are not yet fully
-> reconciled — see the Knowledge Consistency Cleanup report for 2026-10-20.
+> **Note on framing (resolved 2026-10-21):** `MANIFESTO.md` previously
+> described MONOLITH as a *research platform* studying cognitive
+> architecture, with Scriptorium/ERG framed as an emerging "Cognitive
+> Kernel" product alongside Terra, Graph Memex, and WEBWAY. That framing
+> and this toolkit-oriented mission statement were in tension. `MANIFESTO.md`
+> was rewritten to the toolkit mission above; the cognitive-architecture
+> research program (Terra, Graph Memex, the Cognitive Kernel vision, and
+> `docs/architecture/cognitive-infrastructure.md`) moved to
+> [Webway](https://github.com/Demion-L/webway) — see `docs/adr/README.md`.
 
 ---
 
 ## Vision
 
 ```
-Artifact
+Markdown artifact
   → Scriptorium (structural extraction)
     → ERG (explicit relationship graph)
-      → Webway (semantic linking)
-        → Knowledge Clusters
-          → Knowledge Regions
-            → Mental Models
-              → Emergent Insights
+      → governed project memory (working/long-term, ADRs, roadmap)
 ```
 
-The long-term objective: a **Meaning Linker** capable of discovering non-obvious relationships across domains — without being told what to look for.
+The objective is not similarity-based retrieval. It is an explicit,
+inspectable graph of what a project decided and why — every edge traceable
+to a declared frontmatter field, never inferred (ADR-007).
 
-Traditional RAG stores chunks and retrieves by similarity.  
-MONOLITH grows knowledge regions and reasons over structure.
+Webway, developed separately ([github.com/Demion-L/webway](https://github.com/Demion-L/webway)),
+pursues a related but distinct goal: discovering non-obvious semantic
+relationships across knowledge domains via a frequency/embedding-based
+"Meaning Linker." It is not part of MONOLITH's own roadmap.
 
 ---
 
@@ -181,7 +185,6 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - LLM or embedding API calls
 - Vector database integration
 - Graph database (Neo4j, etc.)
-- Terra persistence layer (ADR-006 defines strategy, no implementation)
 - Corpus-level pattern learning
 - Real semantic similarity (cosine, dot product, etc.)
 - UI or API layer
@@ -216,16 +219,12 @@ The following are explicitly deferred. Do not implement without a finalized stor
 
 | Term | Definition |
 | ---- | ---------- |
-| **Artifact** | A unit of raw information input. The atomic input to WEBWAY. |
-| **Concept** | A named semantic unit extracted from an Artifact, with a weight. |
-| **SemanticLink** | A directed, typed relationship between two Concepts. |
-| **Knowledge Cluster** | A dense local subgraph of strongly related Concepts. (future) |
-| **Knowledge Region** | A named domain cluster grouping related Concepts. (4 predefined in v0) |
-| **Mental Model** | A higher-order pattern abstraction over a Knowledge Region. |
-| **Emergent Insight** | A non-obvious relationship discovered across domains. (future) |
-| **Meaning Linker** | The role WEBWAY plays — connecting information by meaning, not keywords. |
-| **WebwayAnalysisResult** | The complete output of `analyzeArtifact()`. |
-| **MONOLITH** | The cognitive operating system kernel. WEBWAY is its first capability module. |
+| **MONOLITH** | Portable project knowledge and governance toolkit for AI-assisted development. |
+| **Scriptorium** | Deterministic structural extraction from a markdown artifact: `ScriptoriumInput` → `ScriptoriumResult` (`ConceptCandidate`, `RelationshipCandidate`, `Evidence`, `SourceReference`). |
+| **Explicit Relationship Graph (ERG)** | The typed graph (`GraphNode`, `GraphEdge`) built from compiled documents; edges resolve only from explicit frontmatter fields — no fuzzy matching (ADR-007). |
+| **Coordinatorium** | Tactical mission lifecycle: `Mission`, `CoordinatoriumState`, backed by `.monolith/state.json` (ADR-008). |
+| **Instance** | A project-specific MONOLITH deployment with its own `project.definition.mjs`. |
+| **Webway** | A separate, independently developed project (not part of MONOLITH) pursuing semantic/associative knowledge linking. See `docs/webway-v0.md` and [github.com/Demion-L/webway](https://github.com/Demion-L/webway). |
 
 ---
 
@@ -253,7 +252,6 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 151 total tests passing, typecheck clean
 
 **Candidate next stories (not decisions):**
-- Terra persistence layer (ADR-006 defined, no implementation)
 - Corpus relationship density (32 edges / 481 nodes — too sparse)
 - Engineering Gate runtime (ADR-003 formalized, not implemented)
 - Webway v1 (embedding-based concept extraction, semantic similarity)

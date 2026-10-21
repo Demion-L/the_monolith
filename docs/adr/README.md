@@ -21,11 +21,19 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-001 | Cognitive Loop Architecture (`.monolith/adr/`) | accepted | — | 2026-06-24 |
 | ADR-002 | Cognitive Core Foundation (`.monolith/adr/`) | accepted | — | 2026-06-26 |
 | ADR-003 | Engineering Gate Foundation (`.monolith/adr/`) | accepted | — | 2026-06-26 |
-| ADR-004 | Terra vs Graph Memex           | accepted   | R-0001, R-0002  | 2026-06-28 |
-| ADR-005 | Lexicon Mechanicus             | accepted   | R-0001, R-0003  | 2026-06-28 |
-| ADR-006 | Terra Persistence Strategy     | proposed   | R-0001, R-0002  | 2026-06-28 |
+| ADR-004 | Terra vs Graph Memex — **moved to [Webway](https://github.com/Demion-L/webway)** | accepted | R-0001, R-0002 | 2026-06-28 |
+| ADR-005 | Lexicon Mechanicus — **moved to [Webway](https://github.com/Demion-L/webway)** | accepted | R-0001, R-0003 | 2026-06-28 |
+| ADR-006 | Terra Persistence Strategy — **moved to [Webway](https://github.com/Demion-L/webway)** | proposed | R-0001, R-0002 | 2026-06-28 |
 | ADR-007 | Explicit-Only Identity Resolution | accepted | —            | 2026-06-28 |
 | ADR-008 | Coordinatorium — Tactical Mission Lifecycle | accepted | — | 2026-10-21 |
+
+**ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
+cognitive-architecture research program (Terra persistence, the Lexicon
+Mechanicus, Terra's design), not MONOLITH's own toolkit. The documents were
+physically moved to the Webway repository — see `docs/MIGRATION_REPORT.md`
+for the earlier (2026-06-28) reorganization that created this index, and
+the Webway repository's `docs/MIGRATION_NOTE.md` for this move. The IDs
+`ADR-004`–`ADR-006` are retired, not reused, per the numbering rule below.
 
 ---
 

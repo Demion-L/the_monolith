@@ -58,17 +58,6 @@ Navigation guide for the cognitive architecture of this project.
 
 ---
 
-## Logical Domains
-
-This repository contains two concurrent projects:
-
-**MONOLITH** — the research platform (research, ADRs, documentation, validation, CLI tooling)
-**Cognitive Kernel** — the cognitive architecture being developed inside MONOLITH (Scriptorium, Terra, Graph Memex, Document Store, and future subsystems)
-
-See `docs/architecture/cognitive-infrastructure.md` for the authoritative description of this separation.
-
----
-
 ## Knowledge Base
 
 | Location                              | Purpose                                              |
@@ -76,10 +65,11 @@ See `docs/architecture/cognitive-infrastructure.md` for the authoritative descri
 | `MANIFESTO.md`                        | Engineering foundation — why this project exists     |
 | `docs/README.md`                      | Knowledge base navigation index                      |
 | `docs/DOCUMENTATION_PRINCIPLES.md`   | Documentation rules and layer hierarchy              |
-| `docs/research/`                      | External analysis and literature reviews (MONOLITH)  |
-| `docs/adr/`                           | Architecture Decision Records (MONOLITH)             |
-| `docs/architecture/`                  | Current system description (Cognitive Kernel)        |
-| `docs/vision/`                        | Long-term direction (both)                           |
+| `docs/adr/`                           | Architecture Decision Records                        |
+| `docs/architecture/`                  | Current system description                           |
+
+Add `docs/research/` and `docs/vision/` layers if this project's own
+knowledge base needs them — they are not provisioned by default.
 
 ---
 

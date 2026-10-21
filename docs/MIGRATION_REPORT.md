@@ -8,6 +8,15 @@ date: 2026-06-28
 
 Knowledge base reorganization for MONOLITH. Completed 2026-06-28.
 
+> **Addendum (2026-10-21):** The `docs/research/` and `docs/vision/`
+> directories created below, along with `ADR-004`, `ADR-005`, and `ADR-006`,
+> were later found to describe Webway's cognitive-architecture research
+> program rather than MONOLITH's own toolkit, and were physically moved to
+> [the Webway repository](https://github.com/Demion-L/webway). This report
+> is left unedited below as the historical record of what was created on
+> 2026-06-28 — see `docs/adr/README.md` and `docs/README.md` for the
+> current state.
+
 ---
 
 ## Summary

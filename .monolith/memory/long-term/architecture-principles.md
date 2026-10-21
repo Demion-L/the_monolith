@@ -17,7 +17,7 @@ Stable architectural principles for this project. Read before every implementati
 
 1. **Determinism first** — every capability must be testable before probabilistic layers are added. Frequency counting before embeddings.
 2. **Typed contracts** — TypeScript interfaces are the API. Shape matters more than implementation detail.
-3. **No premature persistence** — in-memory structures first. Storage is a future story (ADR-006: Terra).
+3. **No premature persistence** — in-memory structures first. Storage is a future story.
 4. **Module isolation** — each subsystem (`scriptorium`, `graph`, `webway`) is self-contained. Cross-module imports only through `src/index.ts`.
 5. **Additive evolution** — existing outputs remain structurally valid when later stories enrich them. No breaking shape changes without a Decision record.
 6. **Vertical slice first** — a working end-to-end flow is more valuable than a partially built abstraction.

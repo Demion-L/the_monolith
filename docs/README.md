@@ -6,10 +6,19 @@ authority: authoritative
 
 # MONOLITH Knowledge Base
 
-Navigation index for the MONOLITH research and architecture documentation.
+Navigation index for MONOLITH's own architecture documentation.
 
 This directory is the project's long-term knowledge base.
 It is separate from the operational template (`templates/`), which is what instances deploy.
+
+**2026-10-21:** The `research/` and `vision/` layers below, and ADR-004/005/006,
+described Webway's cognitive-architecture research program rather than
+MONOLITH's own toolkit, and were physically moved to
+[the Webway repository](https://github.com/Demion-L/webway). See
+`MIGRATION_REPORT.md` for the original (2026-06-28) reorganization and
+`adr/README.md` for the move. This directory currently has no `research/`
+or `vision/` layer of its own — add them back if MONOLITH's own toolkit
+ever needs them.
 
 ---
 
@@ -19,28 +28,17 @@ It is separate from the operational template (`templates/`), which is what insta
 docs/
 ├── README.md                        — this file
 ├── DOCUMENTATION_PRINCIPLES.md      — rules governing this knowledge base
-│
-├── research/                        — discoveries from external analysis
-│   ├── README.md
-│   ├── R-0001-iai-personal-memory-engine.md
-│   ├── R-0002-oracle-memory-systems.md
-│   └── R-0003-cognitive-architecture-notes.md
+├── MIGRATION_REPORT.md              — 2026-06-28 docs/ reorganization record
+├── webway-v0.md                     — historical pointer to Webway (extracted)
 │
 ├── adr/                             — architectural decision records
 │   ├── README.md
-│   ├── ADR-004-terra-vs-graph-memex.md
-│   ├── ADR-005-lexicon-mechanicus.md
-│   └── ADR-006-terra-persistence-strategy.md
+│   ├── ADR-007-explicit-identity-resolution.md
+│   └── ADR-008-coordinatorium-tactical-mission-lifecycle.md
 │
-├── architecture/                    — current system description
-│   ├── README.md
-│   ├── cognitive-infrastructure.md
-│   ├── memory-architecture.md
-│   └── knowledge-pipeline.md
-│
-└── vision/                          — long-term direction
+└── architecture/                    — current system description
     ├── README.md
-    └── long-term-vision.md
+    └── toolkit-pipeline.md
 ```
 
 ---
@@ -50,17 +48,15 @@ docs/
 | Question                                         | Go to                                                    |
 | ------------------------------------------------ | -------------------------------------------------------- |
 | Why does this project exist?                     | `../MANIFESTO.md`                                        |
-| What external systems did we analyze?            | `research/`                                              |
 | Why was this design choice made?                 | `adr/`                                                   |
 | What does the system look like today?            | `architecture/`                                          |
-| Where is the system going?                       | `vision/`                                                |
-| What do these terms mean?                        | `architecture/cognitive-infrastructure.md` (Terminology) |
-| What changed because of a research finding?      | Each `R-XXXX` document's **Research Outcomes** section   |
+| What do these terms mean?                        | `../AGENTS.md` (Glossary)                                |
+| What was Webway, and why isn't it here anymore?  | `webway-v0.md`, `adr/README.md`                          |
 
 ---
 
 ## Knowledge Flow
 
-Research discovers → ADRs decide → Architecture reflects → Vision guides
+ADRs decide → Architecture reflects.
 
 See `DOCUMENTATION_PRINCIPLES.md` for the full hierarchy and cross-reference rules.

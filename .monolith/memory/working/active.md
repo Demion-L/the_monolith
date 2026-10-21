@@ -44,4 +44,4 @@ COORDINATORIUM-001 implemented: deterministic State Keeper at `.monolith/state.j
 
 Scope cut for this slice: Strategic Coordinatorium (product/subsystem state) is schema-reserved only, not implemented. Mission registration is not runtime-enforced.
 
-Next candidate work after review/finalization: Terra persistence layer (ADR-006), corpus relationship density improvement, Strategic Coordinatorium (COORDINATORIUM-002), or Story 1.4 as defined in the roadmap.
+Next candidate work after review/finalization: corpus relationship density improvement, Strategic Coordinatorium (COORDINATORIUM-002), or Story 1.4 as defined in the roadmap. (Terra persistence / ADR-006 is no longer a MONOLITH candidate direction — it moved to Webway's research program on 2026-10-21.)

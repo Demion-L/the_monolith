@@ -10,6 +10,7 @@
  *   monolith status     — show current protocol state and drift summary
  *   monolith dry-run    — run finalization gate without writing output
  *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
+ *   monolith brief       — deterministic, bounded project context summary
  */
 
 import { MONOLITH_VERSION } from '../version.js';
@@ -30,6 +31,9 @@ Commands:
   status      Show active protocol, phase, story, and drift summary
   dry-run     Simulate finalization gate — no writes, exit-code only
   mission     Manage Tactical Coordinatorium missions (start/list/show/finish/checkpoint/checkpoints)
+  brief       Print a deterministic, bounded summary of project state (Story,
+              active Missions, latest Checkpoints, mandatory Protocols,
+              accepted ADRs) — read-only, no LLM/network/ERG involved.
 
 Mission usage:
   monolith mission start --title "..." --system "..."
@@ -38,6 +42,9 @@ Mission usage:
   monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
   monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
   monolith mission checkpoints <missionId>
+
+Brief usage:
+  monolith brief [--max-chars N] [--strict]
 
 Options:
   --help, -h      Show this help
@@ -117,6 +124,12 @@ async function main() {
           console.log(USAGE);
           process.exit(1);
       }
+      break;
+    }
+
+    case 'brief': {
+      const { runBrief } = await import('../brief/cli.js');
+      await runBrief(args.slice(1));
       break;
     }
 

@@ -1,0 +1,129 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  readdirSync,
+} from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { runInit, InitConflictError } from './index.js';
+
+const tempDirs: string[] = [];
+
+function makeTempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'monolith-init-safety-'));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function listAllFiles(dir: string): string[] {
+  const results: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...listAllFiles(full));
+    } else {
+      results.push(full);
+    }
+  }
+  return results.sort();
+}
+
+describe('monolith init — overwrite safety (LESSON-2026-0006 / TD-007)', () => {
+  it('succeeds in a clean directory', async () => {
+    const dir = makeTempDir();
+
+    await runInit({ targetDir: dir, yes: true });
+
+    expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);
+    expect(existsSync(join(dir, '.monolith', 'state.json'))).toBe(true);
+    expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
+  });
+
+  it('refuses to run against an existing AGENTS.md and leaves it untouched', async () => {
+    const dir = makeTempDir();
+    const agentsPath = join(dir, 'AGENTS.md');
+    writeFileSync(agentsPath, '# My real project notes\n', 'utf8');
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(readFileSync(agentsPath, 'utf8')).toBe('# My real project notes\n');
+    // No other side effects — init must not have written anything at all.
+    expect(existsSync(join(dir, '.monolith'))).toBe(false);
+    expect(existsSync(join(dir, 'monolith.config.json'))).toBe(false);
+  });
+
+  it('refuses to run against an existing .monolith/ with real user data', async () => {
+    const dir = makeTempDir();
+    const activePath = join(dir, '.monolith', 'memory', 'working', 'active.md');
+    mkdirSync(join(dir, '.monolith', 'memory', 'working'), { recursive: true });
+    writeFileSync(activePath, '# Active Working Memory\n\nreal in-progress story notes\n', 'utf8');
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(readFileSync(activePath, 'utf8')).toBe(
+      '# Active Working Memory\n\nreal in-progress story notes\n',
+    );
+    expect(existsSync(join(dir, 'AGENTS.md'))).toBe(false);
+  });
+
+  it('--yes does not authorize overwriting existing data (conflict still rejected)', async () => {
+    const dir = makeTempDir();
+    writeFileSync(join(dir, 'monolith.config.json'), '{"custom":true}', 'utf8');
+
+    const err = await runInit({ targetDir: dir, yes: true }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(InitConflictError);
+    expect((err as InitConflictError).conflicts).toContain('monolith.config.json');
+    expect(readFileSync(join(dir, 'monolith.config.json'), 'utf8')).toBe('{"custom":true}');
+  });
+
+  it('a partially initialized project (one pre-existing tracked file) blocks the entire init — no half-scaffolded instance', async () => {
+    const dir = makeTempDir();
+    // Only one deep template-target file pre-exists; everything else is
+    // missing. The preflight check must still catch it and refuse to write
+    // *anything*, rather than writing everything else and only skipping
+    // (or failing on) this one file.
+    const partialPath = join(dir, '.monolith', 'protocols', 'governance', 'command-policy.md');
+    mkdirSync(join(dir, '.monolith', 'protocols', 'governance'), { recursive: true });
+    writeFileSync(partialPath, 'pre-existing custom command policy\n', 'utf8');
+
+    const filesBefore = listAllFiles(dir);
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(listAllFiles(dir)).toEqual(filesBefore);
+    expect(readFileSync(partialPath, 'utf8')).toBe('pre-existing custom command policy\n');
+  });
+
+  it('a repeated (re-run) init on an already-initialized project is refused, not silently re-scaffolded', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const filesAfterFirstInit = listAllFiles(dir);
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    // Nothing changed as a result of the rejected second run.
+    expect(listAllFiles(dir)).toEqual(filesAfterFirstInit);
+  });
+
+  it('leaves no side effects in the target directory after a rejected init', async () => {
+    const dir = makeTempDir();
+    writeFileSync(join(dir, 'AGENTS.md'), 'untouched\n', 'utf8');
+    const filesBefore = listAllFiles(dir);
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(listAllFiles(dir)).toEqual(filesBefore);
+  });
+});

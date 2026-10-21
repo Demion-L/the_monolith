@@ -10,7 +10,8 @@
 import { existsSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
-import type { Mission, MissionResult } from './types.js';
+import { createCheckpoint, listCheckpoints } from './checkpoint.js';
+import type { Mission, MissionResult, Checkpoint } from './types.js';
 
 // Mirrors src/validate/index.ts's readMonolithRoot(). Duplicated rather than
 // imported to avoid coupling this subsystem's CLI layer to the validate
@@ -35,6 +36,15 @@ function parseFlag(args: string[], name: string): string | undefined {
   const i = args.indexOf(name);
   if (i === -1 || i === args.length - 1) return undefined;
   return args[i + 1];
+}
+
+/** Like parseFlag, but collects every occurrence (e.g. repeated `--remaining`). */
+function parseRepeatedFlag(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length - 1; i++) {
+    if (args[i] === name) values.push(args[i + 1]);
+  }
+  return values;
 }
 
 function formatMission(m: Mission): string {
@@ -92,6 +102,55 @@ export async function runMissionShow(args: string[], targetDir = process.cwd()):
   }
   const mission = await getMission(stateDirFor(targetDir), id);
   console.log(formatMission(mission));
+}
+
+function formatCheckpoint(c: Checkpoint): string {
+  const lines = [
+    `  id:              ${c.id}`,
+    `  missionId:       ${c.missionId}`,
+    `  createdAt:       ${c.createdAt}`,
+    `  summary:         ${c.summary}`,
+    `  remainingSteps:  ${c.remainingSteps.length === 0 ? '(none)' : ''}`,
+    ...c.remainingSteps.map((s) => `    - ${s}`),
+    `  context:         ${c.context ?? '(none)'}`,
+  ];
+  return lines.join('\n');
+}
+
+export async function runMissionCheckpoint(args: string[], targetDir = process.cwd()): Promise<void> {
+  const missionId = args[0];
+  const summary = parseFlag(args, '--summary');
+  if (!missionId || !summary) {
+    throw new Error(
+      'Usage: monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]',
+    );
+  }
+  const remainingSteps = parseRepeatedFlag(args, '--remaining');
+  const context = parseFlag(args, '--context');
+  const checkpoint = await createCheckpoint(stateDirFor(targetDir), missionId, {
+    summary,
+    remainingSteps,
+    context: context ?? null,
+  });
+  console.log(`Created checkpoint ${checkpoint.id} for mission ${checkpoint.missionId}`);
+  console.log(formatCheckpoint(checkpoint));
+}
+
+export async function runMissionCheckpoints(args: string[], targetDir = process.cwd()): Promise<void> {
+  const missionId = args[0];
+  if (!missionId) {
+    throw new Error('Usage: monolith mission checkpoints <missionId>');
+  }
+  const checkpoints = await listCheckpoints(stateDirFor(targetDir), missionId);
+  if (checkpoints.length === 0) {
+    console.log(`No checkpoints for mission ${missionId}.`);
+    return;
+  }
+  console.log(`Checkpoints for mission ${missionId} (${checkpoints.length}):`);
+  for (const c of checkpoints) {
+    console.log('');
+    console.log(formatCheckpoint(c));
+  }
 }
 
 export async function runMissionFinish(args: string[], targetDir = process.cwd()): Promise<void> {

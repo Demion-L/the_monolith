@@ -19,8 +19,28 @@ export declare function stateFilePath(stateDir: string): string;
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
- * match the v1 schema — this function never "fixes" or partially accepts
- * malformed state.
+ * match a supported schema version — this function never "fixes" or
+ * partially accepts malformed state.
+ *
+ * Supports exactly two on-disk shapes:
+ * - `schemaVersion: 2` (current) — `tactical.checkpoints` is required.
+ * - `schemaVersion: 1` (legacy, pre-COORDINATORIUM-002) — migrated
+ *   in-memory to v2 on read (see `migrateV1ToV2`). Anything else
+ *   (including a *newer* version this binary doesn't know about) is
+ *   rejected outright — this is the deliberate fix for the compatibility
+ *   gap an independent review found in the first COORDINATORIUM-002 cut:
+ *   that cut kept `schemaVersion` at 1 while adding `tactical.checkpoints`,
+ *   so an *older* binary (hardcoded to `schemaVersion === 1`, with no
+ *   notion of checkpoints) could read a checkpoint-bearing v1-tagged file,
+ *   reconstruct state from only the fields it knew about (`tactical: {
+ *   missions }`, dropping checkpoints entirely — this function has never
+ *   been a passthrough for unknown fields), and silently overwrite the
+ *   file on its next mutateState call, destroying checkpoint history with
+ *   no error raised. Bumping to 2 converts that silent data loss into a
+ *   loud, immediate `StateSchemaError` for any reader that doesn't
+ *   understand v2 — the version check below runs before anything is ever
+ *   read into a mutable draft, so mutateState never reaches its write step
+ *   (same proven pattern as the existing corrupted-JSON guard).
  */
 export declare function validateState(raw: unknown): CoordinatoriumState;
 /**

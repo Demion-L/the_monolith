@@ -52,6 +52,197 @@ related_adrs:
 > creation: staging + atomic hard-link publish" below. 4 new deterministic
 > tests, including a real forked-process interleaving test. 186 tests
 > total.
+>
+> **COORDINATORIUM-002 addendum (2026-10-21): Mission Checkpoints.**
+> Implemented as a strictly additive extension of this ADR, not a new ADR
+> number — same convention as the three same-day hardening passes above.
+>
+> A **Checkpoint** (`id`, `missionId`, `createdAt`, `summary`,
+> `remainingSteps: string[]`, `context: string | null`) is a durable,
+> append-only progress note belonging to exactly one Mission, stored in a
+> new sibling top-level map, `tactical.checkpoints: Record<string,
+> Checkpoint>` — *not* nested inside `Mission`. `Mission` and
+> `validateMission()` are untouched. The API
+> (`src/coordinatorium/checkpoint.ts`) is append-only by design:
+> `createCheckpoint`, `listCheckpoints`, `getCheckpoint` — there is no
+> update or delete path, full stop.
+>
+> **Backward compatibility, confirmed against the real validator before
+> writing any implementation code (no `schemaVersion` bump) — superseded,
+> see the compatibility-fix addendum below; this claim was incomplete, not
+> wrong about what it tested:** `validateState()` now treats
+> `tactical.checkpoints` as optional on read — absent entirely (any
+> state.json written before this story) defaults to `{}`;
+> present-but-malformed still throws `StateSchemaError`, same as every
+> other section. Regression-tested directly against hand-written legacy
+> fixtures (`state-keeper.test.ts`) and through
+> `createCheckpoint`/`listCheckpoints` against such a fixture
+> (`checkpoint.test.ts`). **What this analysis checked — "new code reading
+> an old file" — was correct. What it never checked was the reverse
+> direction — "old code reading a new file" — which is exactly where the
+> compatibility-fix addendum below found a real, confirmed defect.**
+>
+> **Mission-active gate:** `createCheckpoint` is rejected with a new
+> `MissionNotActiveError` (code `MISSION_NOT_ACTIVE`) unless the target
+> mission's status is `in_progress` — mirroring `finishMission`'s own
+> terminal-state rejection (`InvalidTransitionError`). Reading checkpoints
+> (`listCheckpoints`/`getCheckpoint`) is never gated by mission status — a
+> completed mission's checkpoint history stays fully readable. A new
+> `CheckpointNotFoundError` (code `CHECKPOINT_NOT_FOUND`) parallels
+> `MissionNotFoundError` for `getCheckpoint` on an unknown id.
+>
+> **ID format and concurrency:** `<missionId>-CKPT-NNNN` (e.g.
+> `MIS-0002-CKPT-0001`), derived per-mission by scanning
+> `tactical.checkpoints` for the highest existing ordinal for that
+> `missionId` — no separate counter field, same rationale as
+> `nextMissionId`. The mission-existence check, the `in_progress` check,
+> and the ordinal derivation all happen inside the same `mutateState()`
+> critical section as the write — a direct, free consequence of reusing
+> the existing lock + read-modify-write primitive, not new concurrency
+> design. Verified, not assumed: `checkpoint.test.ts` spawns real,
+> independent `node` child processes (same transpile-and-fork harness as
+> `state-keeper.test.ts`'s mission concurrency test) that call
+> `createCheckpoint` against the same mission simultaneously — unique IDs,
+> zero lost updates, `revision` advances by exactly the number of
+> successful calls.
+>
+> **Bounded `context` (and every other text field):** `context` was
+> explicitly required not to become an unbounded free-form blob.
+> `createCheckpoint` enforces length caps before the lock is ever taken —
+> `summary` and `context` ≤ 4000 characters, each `remainingSteps` entry ≤
+> 500 characters, at most 50 `remainingSteps` entries — all non-empty after
+> trimming, rejected with `ValidationError` otherwise. These are creation-
+> time guardrails in `checkpoint.ts`, matching the same layering as
+> `mission.ts`'s `requireNonEmptyString`; `state-keeper.ts`'s schema-layer
+> `validateCheckpoint` stays type/shape-only (mirroring `validateMission`'s
+> existing precedent), so a pre-existing on-disk record is never rejected
+> retroactively just because this story's new length caps didn't exist
+> when it was written.
+>
+> **CLI:** `monolith mission checkpoint <missionId> --summary "..."
+> [--remaining "..." ...] [--context "..."]` and `monolith mission
+> checkpoints <missionId>`, wired into `src/coordinatorium/cli.ts` and
+> `src/cli/index.ts` by direct analogy with `mission start`/`list`.
+>
+> **TD-006 (`state-keeper.ts`'s mission-specific coupling) reassessed, not
+> fixed:** adding `tactical.checkpoints` as a sibling top-level section
+> extends the existing `Record<id, record>` / scan-derived-ID / dedicated-
+> validator pattern by direct analogy — it does not deepen the coupling or
+> require refactoring `state-keeper.ts` first. TD-006 stays open in
+> `.monolith/memory/long-term/tech-debt.md`, to be revisited specifically
+> if a *third*, differently-shaped top-level section (most plausibly
+> Strategic Coordinatorium) is ever added.
+>
+> **Test count:** 225 total (186 before this addendum; 39 new — 34 in
+> `checkpoint.test.ts` incl. a real multi-process concurrency test, 5
+> backward-compatibility/schema-validation cases added to
+> `state-keeper.test.ts`). Typecheck and build clean.
+>
+> **Deliberately left untouched — superseded, see the compatibility-fix
+> addendum below:** `templates/default-instance/monolith/state.json` (the
+> literal template `monolith init` copies for new projects) and its
+> exact-shape assertion in `src/init/init.test.ts` were not updated to add
+> a `checkpoints: {}` key. This is intentional, not an oversight: it
+> exercises the backward-compatibility path for real on every
+> freshly-scaffolded project (a legacy-shaped file is valid and is
+> correctly upgraded in-memory on first checkpoint write), and the
+> init/scaffold subsystem (including `TD-007`) was explicitly out of scope
+> for this story to avoid colliding with parallel work there. **This
+> reasoning no longer holds once `schemaVersion` bumps to 2** (below): the
+> template now needs to stamp the current version so a freshly-scaffolded
+> project isn't needlessly carrying a legacy-tagged file from day one, so
+> it was updated after all — this is the template's literal *shape*, not
+> `TD-007`'s init *behavior*, so updating it does not reopen that
+> out-of-scope item.
+>
+> **COORDINATORIUM-002 compatibility-fix addendum (2026-10-21, same day):**
+> an independent architectural review raised a potential data-loss
+> BLOCKER against the addendum above, before integration. **Confirmed
+> real, not a false alarm** — verified directly against the actual
+> pre-002 `validateState()` (`git show 681d88d:src/coordinatorium/
+> state-keeper.ts`), not assumed: that function has never been a
+> passthrough for unknown fields — its final `return` was, and remains,
+> an explicit field-by-field reconstruction (`tactical: { missions }`,
+> nothing else). That means an **old** binary (anything built from before
+> this story, hardcoded to `schemaVersion === 1`, no concept of
+> checkpoints) reading a **new**, checkpoint-bearing file that the first
+> cut above still tagged `schemaVersion: 1` would pass the version check,
+> reconstruct state from only the fields it recognized, drop
+> `tactical.checkpoints` entirely from the in-memory result, and then —
+> on literally any `mutateState` call that old binary ever makes (`mission
+> start`, `finish`, anything) — atomically overwrite the file with that
+> checkpoint-free draft. No exception anywhere in that path. Silent,
+> permanent loss of checkpoint history. The original addendum's backward-
+> compatibility analysis above was real and correctly tested, but it only
+> ever checked one direction (new code reading an old file); it never
+> checked the reverse (old code reading a new file), which is where this
+> defect actually lived.
+>
+> **Fix: `STATE_SCHEMA_VERSION` bumped to 2.** `tactical.checkpoints` is
+> now a *required* field of the current (v2) shape — every v2 writer
+> always serializes it (even as `{}`), so its absence in a v2-tagged file
+> is itself treated as corruption (`StateSchemaError`), not a legacy case.
+> `validateState()` additionally accepts exactly one other value,
+> `LEGACY_SCHEMA_VERSION_V1 = 1` (`types.ts`), as a **migration** input:
+> a v1 file's `tactical.checkpoints` stays optional/defaulted (covers both
+> a genuine pre-002 file, which never has the key, and defensively, a file
+> written by the now-superseded transitional code above, which may already
+> have one) — missions, revision, and any present checkpoints are carried
+> over exactly; only the in-memory `schemaVersion` is relabeled to 2.
+> Anything else (no version, or a version newer than this binary
+> understands) is rejected outright, same as before.
+>
+> **No new write mechanism, no new lock.** Migration happens purely
+> in-memory inside `validateState`/`readState` — reads still have no side
+> effect (same rule as the pre-existing missing-file case), so a pure
+> `readState` call never writes anything. The migrated v2 shape is only
+> ever persisted the next time `mutateState`'s existing, already-atomic
+> read-modify-write cycle runs for any other reason (a checkpoint, a
+> mission start/finish) — the very same lock, the very same temp-file-
+> then-`rename` write this ADR already relies on throughout. No partial or
+> half-migrated state can land on disk for the same reason no partial
+> *mutation* ever could: the write is one atomic `rename`, all or nothing.
+>
+> **Old binary refuses to touch a v2 file — proven with the actual
+> historical code, not a reimplementation.** The version-mismatch guard
+> that makes this safe (`raw.schemaVersion !== STATE_SCHEMA_VERSION &&
+> raw.schemaVersion !== LEGACY_SCHEMA_VERSION_V1` → throw) already existed
+> and was already relied on for corrupted JSON; bumping the version is
+> what makes it fire for this case too, for free. `checkpoint.test.ts`
+> ("pre-COORDINATORIUM-002 binary safety against a v2 file") transpiles
+> the real pre-002 sources straight from git history (commit `681d88d`,
+> the commit immediately before this story) and runs them as a genuinely
+> separate child process against a real v2 file carrying a real
+> checkpoint: the historical `startMission` throws
+> `StateSchemaError`/"Unsupported schemaVersion" before `mutateState`
+> ever reaches its write step, and the file on disk is confirmed
+> byte-for-byte unchanged afterward.
+>
+> **Migration is exercised concretely, not just reasoned about:**
+> `checkpoint.test.ts` covers a genuine pre-002 v1 file migrating to v2 on
+> its first checkpoint (and, separately, on an ordinary `finishMission`
+> call — any mutation migrates it, not only checkpoint creation);
+> tolerating and preserving a v1-tagged file that already carries
+> checkpoints (the transitional shape); rejecting a v2 file with a missing
+> `checkpoints` key; rejecting an unsupported `schemaVersion` outright; and
+> real concurrent `createCheckpoint` calls against the same legacy v1 file
+> — unique ids, no lost updates, `revision` advancing by exactly the
+> number of successful calls, exactly one migration landing on disk.
+>
+> **Updated:** `templates/default-instance/monolith/state.json` now stamps
+> `schemaVersion: 2` and includes `tactical.checkpoints: {}` (its
+> corresponding `src/init/init.test.ts` exact-shape assertion was updated
+> to match — this is the literal template shape, not `TD-007`/init
+> *behavior*, so it stayed in scope for this compatibility fix). `AGENTS.md`
+> and this ADR's own schema references were updated to say `schemaVersion:
+> 2`. `TD-006`'s re-assessment from the addendum above is unaffected by
+> this fix — the version bump changes how many *versions* `state-keeper.ts`
+> understands, not whether it stays mission-agnostic in its shape handling.
+>
+> **Test count:** 234 total (225 before this fix; 9 new — 5 migration/
+> rejection cases in `checkpoint.test.ts` plus the real historical-code
+> old-binary-safety test, 3 added to `state-keeper.test.ts`). Typecheck and
+> build clean.
 
 ## Context
 
@@ -603,8 +794,12 @@ Consequences).
 - There is no enforcement that an AI session actually calls `mission
   start`/`finish` — a session can silently do work with no mission record
   at all. `AGENTS.md` documents the expectation; nothing checks it.
-- No mission checkpointing, resume, or session-to-mission linkage. A
-  mission only has the fields listed above.
+- Mission checkpointing is implemented (COORDINATORIUM-002 addendum
+  above). **Resume and session-to-mission linkage remain explicitly
+  out of scope**: a checkpoint is a structured note for a human/AI to
+  read, not a serialized tool-call/conversation state that could
+  auto-resume a session, and there is still no Session entity — a
+  checkpoint records a moment, not "who was present."
 - `state.json` has no referential link to `active.md`'s free-text story —
   the two can drift (e.g. a story closed in `active.md` with its mission
   left `in_progress`). Reconciling them is future work, not this slice.

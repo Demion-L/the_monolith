@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readdirSync, readFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, readdirSync, readFileSync, mkdirSync, chmodSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -117,6 +117,53 @@ describe('mutateState', () => {
     const state = await readState(dir);
     expect(state.revision).toBe(1);
     expect(state.tactical.missions['MIS-0001'].title).toBe('kept');
+  });
+
+  it('throws (and never reaches the lock-protected write) when reading corrupted state', async () => {
+    const dir = makeTempDir();
+    await mutateState(dir, (draft) => {
+      draft.tactical.missions['MIS-0001'] = {
+        id: 'MIS-0001', title: 'kept', system: 'y', status: 'in_progress',
+        startedAt: 'a', updatedAt: 'a', summary: null,
+      };
+    });
+    // Corrupt the file out-of-band (simulating external damage between calls).
+    writeFileSync(stateFilePath(dir), '{ not json at all', 'utf8');
+
+    await expect(mutateState(dir, () => undefined)).rejects.toBeInstanceOf(StateCorruptedError);
+
+    // Nothing was written: the corrupted file is untouched, no temp files linger.
+    expect(readFileSync(stateFilePath(dir), 'utf8')).toBe('{ not json at all');
+    expect(readdirSync(dir)).toEqual(['state.json']);
+  });
+
+  it('preserves the previous valid state.json when the write itself fails', async () => {
+    const dir = makeTempDir();
+    await mutateState(dir, (draft) => {
+      draft.tactical.missions['MIS-0001'] = {
+        id: 'MIS-0001', title: 'kept', system: 'y', status: 'in_progress',
+        startedAt: 'a', updatedAt: 'a', summary: null,
+      };
+    });
+    const before = readFileSync(stateFilePath(dir), 'utf8');
+
+    chmodSync(dir, 0o555); // read+execute only — temp-file write must fail
+    try {
+      await expect(
+        mutateState(dir, (draft) => {
+          draft.tactical.missions['MIS-0002'] = {
+            id: 'MIS-0002', title: 'should not persist', system: 'y', status: 'in_progress',
+            startedAt: 'a', updatedAt: 'a', summary: null,
+          };
+        }),
+      ).rejects.toThrow();
+    } finally {
+      chmodSync(dir, 0o755); // restore so afterEach cleanup can remove the dir
+    }
+
+    expect(readFileSync(stateFilePath(dir), 'utf8')).toBe(before);
+    const state = await readState(dir);
+    expect(state.tactical.missions['MIS-0002']).toBeUndefined();
   });
 
   it('preserves existing state fields it does not touch', async () => {

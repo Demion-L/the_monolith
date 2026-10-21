@@ -17,6 +17,17 @@ related_adrs:
 > start|list|show|finish`. 31 tests (`src/coordinatorium/*.test.ts`,
 > `src/init/init.test.ts`), including a real multi-process concurrency test.
 > Strategic Coordinatorium is schema-reserved only — see Scope below.
+>
+> **Hardening update (2026-10-21, same day):** an independent review found
+> that the original locking design's stale-lock recovery conflated "owner
+> is dead" with "lock is merely old" (`isStale()` returned true on EITHER
+> condition), so a live owner could in principle lose its lock purely from
+> elapsed time. `src/coordinatorium/lock.ts` was rewritten around three
+> explicit invariants (see "Locking protocol" below); age is no longer a
+> factor in any decision. 10 new tests added (`lock.test.ts` — real forked
+> processes for liveness/crash/concurrent-recovery scenarios; extra cases
+> in `state-keeper.test.ts` for write-failure and corrupted-state-via-
+> mutateState). 179 tests total.
 
 ## Context
 
@@ -117,13 +128,8 @@ Strategic Coordinatorium later.
   `open(path, 'wx')` syscall (atomic create-if-absent on every platform).
   The entire read → mutate → write cycle, including mission-ID generation,
   happens inside the locked section.
-- **Stale-lock recovery:** the lock file's body is `pid:timestamp`. A waiter
-  that cannot acquire the lock checks whether the recorded `pid` is still
-  alive (`process.kill(pid, 0)`) and whether the lock is older than 30s; if
-  either check fails, it steals the lock. This recovers from a crashed
-  `monolith` process without a background reaper. A lock a process does
-  hold successfully is only ever released by checking that the `pid` in the
-  file is still its own (never clears another holder's lock).
+- **Lock recovery:** the lock file's body is `pid:nonce`. Recovery is
+  liveness-gated only — see "Locking protocol" below for the full model.
 - **Revision:** every successful `mutateState` call increments `revision`
   by exactly 1. It is a corruption/audit signal, not a concurrency version
   check (no optimistic-locking/CAS semantics) — the lock is the mechanism
@@ -132,9 +138,84 @@ Strategic Coordinatorium later.
 This was verified, not assumed: `state-keeper.test.ts` spawns real,
 independent `node` child processes (via `typescript`'s `transpileModule`,
 not a mock) that call `startMission` against the same `state.json`
-simultaneously, and `monolith mission start` was run as 6 real concurrent
+simultaneously, and `monolith mission start` was run as 8 real concurrent
 shell processes against a scratch instance — both show unique IDs, zero
 lost updates, `revision === N`.
+
+### Locking protocol (hardened 2026-10-21)
+
+Three invariants govern every decision in `lock.ts`, and are enforced in
+code, not just documented intent:
+
+> **"Lock ownership is not time-based."**
+> The age of the lock file is never, by itself, a reason to take it. The
+> original design's `isStale()` returned true if the recorded owner was
+> dead **or** the lock was simply older than 30 seconds — an unconditional
+> OR, not "age as a fallback for PID reuse" as originally rationalized.
+> That meant a live owner mid-write could lose the lock to a waiter once
+> 30 seconds had elapsed since acquisition — reproduced empirically (a
+> forked process held the lock, stayed alive and provably still running,
+> and a second process stole it once the age threshold passed). The
+> rewrite removes `staleMs` from `LockOptions` entirely: recovery is
+> liveness-gated only, full stop.
+>
+> **"Uncertainty never grants ownership."**
+> If the lock file cannot be read, is empty, or does not parse as a
+> well-formed `pid:nonce` record, that is **not** evidence the lock is
+> free or stale — it is evidence of nothing, and is treated as "busy."
+> The *previous* version of this code did the opposite: an unparseable
+> record (`readLockHolder` returning `null`) fell into the same branch as
+> a confirmed-dead owner and was immediately stealable. That is corrected:
+> `readLockRecord` returning `null` now only ever leads to "wait and
+> retry," never to deletion or acquisition.
+>
+> **"Timeout ends waiting, not ownership."**
+> `timeoutMs` bounds how long a *challenger* is willing to wait. It has no
+> effect on how long the current owner may hold the lock — there is no
+> code path in which merely waiting longer causes a live owner to lose
+> ownership.
+
+**Liveness is the only recovery signal**, and it is three-valued, not
+boolean (`checkLiveness()` in `lock.ts`):
+- `process.kill(pid, 0)` succeeds → **alive** → never recover.
+- throws `ESRCH` ("no such process") → **dead** → eligible for recovery.
+- throws `EPERM` (process exists, not ours to signal) → treated as
+  **alive** → never recover, per the brief's own framing ("EPERM means
+  the process may be alive, so capture is forbidden").
+- throws anything else → **unknown** → never recover (an unrecognized
+  error is not proof of death).
+
+**Recovery (dead owner only), race-safe without a dedicated mutex:** on a
+confirmed-dead verdict, the challenger re-reads the lock file immediately
+before deleting it and compares it byte-for-byte to the record it based
+the "dead" verdict on. If unchanged, it deletes it and loops back to
+retry `open(path, 'wx')`. If changed or gone — another challenger beat it
+to the same decision — it does nothing and re-evaluates from scratch. A
+separate "recovery mutex" file was considered and deliberately **not**
+added: the compare-then-delete step, combined with `open(..., 'wx')`'s own
+atomicity for both the delete-then-recreate race and the final
+acquisition, is sufficient to guarantee at most one challenger ever wins a
+given recovery — adding a second lock file to protect the first would not
+close a gap this doesn't already close, and the brief explicitly asks not
+to add infrastructure that isn't earning its keep. This was verified with
+5 concurrent challengers racing to recover a single crashed owner
+(`lock.test.ts`, "Scenario B — concurrent recovery challengers") — their
+acquired/released windows never overlap.
+
+**`release()` only ever removes a lock file that is still, byte-for-byte,
+the record it created** (`pid:nonce`, not just `pid` — a nonce closes the
+narrow theoretical gap where a PID could be reused across two unrelated
+acquisitions). It is always called from `mutateState`'s `finally` block,
+so it runs whether the mutator or the write failed.
+
+**Known limitation, stated plainly:** this is a local-filesystem lock
+built on `open(..., 'wx')` and `rename()` atomicity. It makes no claim
+about distributed coordination, and its guarantees are not evaluated on
+network filesystems (NFS, SMB, etc.) where that atomicity is not always
+dependable. Liveness checks are also local — `process.kill(pid, 0)` only
+makes sense when lock challengers and the owner share the same PID
+namespace (true for `monolith` processes on one machine; not evaluated
+across containers/namespaces/hosts).
 
 ### Mission ID generation
 
@@ -206,24 +287,37 @@ generation sequence, not just the final write.
   consistent with "no database, no background services, keep implementation
   minimal."
 - Directory-based locks (`mkdir` as lock) are equally atomic but need an
-  extra file inside the directory to carry `pid:timestamp` for stale
+  extra file inside the directory to carry `pid:nonce` for liveness-based
   recovery anyway; a single file is simpler.
 - `flock()` is not available (as address-space-shared, cooperative) in a
   portable, dependency-free way from Node without a native addon or a CLI
   shell-out, and its semantics around NFS and certain Windows filesystems
-  are inconsistent. The explicit-ownership + staleness file lock avoids that
-  portability risk entirely at the cost of needing the stale-recovery logic
-  this ADR documents.
+  are inconsistent. The explicit-ownership file lock avoids that
+  portability risk entirely at the cost of needing the liveness-gated
+  recovery logic this ADR documents.
 
-### Why stale-lock recovery by PID liveness, not just by age
+### Why stale-lock recovery is liveness-only, with no age fallback at all
 
-A fixed age-based timeout alone would force a human to manually delete a
-stale lock after every crashed process, or risk a long-running (legitimate)
-mutation being preempted by too short a timeout. Checking PID liveness
-first (`process.kill(pid, 0)`) recovers from a crash immediately rather
-than waiting out the `staleMs` window, while the 30s age fallback still
-catches a host-recycled-PID edge case (a new, unrelated process reusing the
-dead holder's PID) that liveness alone cannot.
+The original design paired a PID-liveness check with a 30-second age
+fallback, reasoning that age would catch a PID-reuse edge case liveness
+alone couldn't. That reasoning doesn't survive scrutiny: age and liveness
+were combined with OR, not "liveness first, age only as a tie-breaker
+for PID reuse" — so the age branch could fire against a demonstrably
+live, still-working owner, which is a strictly worse failure mode (silent
+lost updates) than the problem it was trying to solve (a lock that stays
+held slightly too long after a crash). A fixed age-based timeout also
+forces an arbitrary choice between two bad outcomes: too short, and a
+legitimate slow mutation gets preempted while still running; too long,
+and a crashed holder blocks everyone for that whole window regardless.
+Liveness alone has neither failure mode: a crash is detected the instant
+anyone checks (`ESRCH`), and a live owner is never second-guessed no
+matter how long it legitimately runs. The PID-reuse edge case the age
+fallback was meant to catch is instead closed by the recovery protocol's
+compare-before-delete step (see "Locking protocol") and the `nonce` in
+the lock record — a new process must still go through `open(path, 'wx')`
+to claim the lock before its PID matters at all, so a reused PID
+belonging to an unrelated, brand-new process is never mistaken for the
+old dead holder.
 
 ### Why mission IDs are derived, not a stored counter
 
@@ -308,19 +402,34 @@ Consequences).
 
 ## Validation
 
-- 169 total tests passing (was 138 before this slice — scriptorium 75,
-  graph 63, unchanged); typecheck clean; build clean.
-- 31 new tests: 11 state-keeper (schema validation, corruption, atomicity,
-  revision monotonicity, state-field preservation, one real multi-process
-  concurrency test), 17 mission lifecycle + CLI integration, 3 init
-  regression (state.json creation, non-overwrite, `monolith validate`
-  still passes on a freshly scaffolded instance).
+- 179 total tests passing (138 before this slice — scriptorium 75, graph
+  63, unchanged — then 31 for the original slice, then 10 more from the
+  2026-10-21 hardening); typecheck clean; build clean.
+- First-slice tests (31): 11 state-keeper, 17 mission lifecycle + CLI
+  integration, 3 init regression.
+- Hardening tests (10, all in the same `lock.test.ts` / `state-keeper.test.ts`
+  files as the originals): real-process coverage for a live owner never
+  being preempted regardless of hold duration, a crashed owner being
+  recovered quickly, empty/malformed/unparseable lock content never being
+  claimed, 5 concurrent recovery challengers never overlapping in
+  ownership, `release()` refusing to delete a changed or already-gone
+  lock file, a write failure (directory made read-only mid-mutation)
+  leaving the previous valid `state.json` intact, and `mutateState` on an
+  externally-corrupted file throwing without writing anything.
 - Manual CLI smoke test: `init` → `mission start` ×2 → `list` → `show` →
   `finish --result completed` → `list` (active/finished split correct) →
   unknown-id and double-finish both exit 1 with a clear message.
-- Manual concurrency smoke test: 6 real concurrent `node dist/cli/index.js
+- Manual concurrency smoke test: 8 real concurrent `node dist/cli/index.js
   mission start` shell processes against one scratch instance →
-  `revision === 6`, 6 unique IDs, no corruption.
+  `revision === 8`, 8 unique IDs, no corruption, no lock file left behind.
+- What is proven by test vs. assumed: the "no lost updates" and "live
+  owner never preempted" properties are demonstrated for processes on one
+  machine sharing a PID namespace, within the timeouts exercised by the
+  tests (seconds, not hours). No test runs for hours or exercises clock
+  changes (NTP step, manual clock adjustment) — since the design no longer
+  reasons about elapsed time at all, clock behavior should be irrelevant,
+  but that irrelevance follows from code inspection, not from a dedicated
+  test exercising a clock jump during an active lock hold.
 
 ---
 
@@ -334,4 +443,5 @@ Consequences).
 - `src/coordinatorium/mission.ts` — mission lifecycle semantics
 - `src/coordinatorium/cli.ts`, `src/cli/index.ts` — `monolith mission` wiring
 - `src/coordinatorium/state-keeper.test.ts`,
-  `src/coordinatorium/mission.test.ts`, `src/init/init.test.ts`
+  `src/coordinatorium/mission.test.ts`, `src/coordinatorium/lock.test.ts`,
+  `src/init/init.test.ts`

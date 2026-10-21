@@ -55,7 +55,7 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     const mutated = {
       schemaVersion: 1,
       revision: 3,
-      strategic: { systems: {} },
+      strategic: { systems: { core: { note: 'reserved for Strategic Coordinatorium — must survive re-init' } } },
       tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'keep me', system: 's', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } } },
     };
     writeFileSync(statePath, JSON.stringify(mutated), 'utf8');

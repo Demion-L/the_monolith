@@ -59,6 +59,23 @@ npx monolith dry-run    # simulate finalization gate without writes (not yet imp
 `status` and `dry-run` currently print `not yet implemented` and exit 1 — see
 `src/cli/index.ts`.
 
+### `monolith init`
+
+Scaffolds a new MONOLITH instance into `process.cwd()`. There is no
+positional target-directory argument — `cd` into the directory you want to
+scaffold first. Any positional argument or unrecognized flag is a hard
+error (non-zero exit), never silently ignored.
+
+`init` refuses to run — before writing anything — if any file it would
+write already exists (`AGENTS.md`, `monolith.config.json`, any file under
+the target `.monolith/`, the AI-tool instruction file, etc.), listing the
+conflicting paths. `--yes` only skips the interactive prompts for project
+metadata on an otherwise-clean directory; it does not authorize overwriting
+existing data, and re-running `init` against an already-initialized project
+is refused rather than treated as an upgrade. The one exception is
+`.monolith/state.json` (Coordinatorium runtime data, ADR-008), which is
+never written to if it already exists and is not treated as a conflict.
+
 ### `monolith validate`
 
 Checks that the current directory contains a valid MONOLITH instance. Three

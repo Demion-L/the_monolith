@@ -81,6 +81,48 @@ function createEmptyDirs(targetRoot, r) {
         writeFileSync(join(full, '.gitkeep'), '', 'utf8');
     }
 }
+/**
+ * Preflight: compute every tracked template target path scaffoldInstance
+ * would write, and return the ones that already exist on disk. Must be
+ * called — and found empty — before scaffoldInstance runs, so a conflict
+ * is caught before any file is written (no half-scaffolded instance).
+ *
+ * `state.json` is intentionally excluded: scaffoldInstance never overwrites
+ * it (mutable Coordinatorium runtime data, ADR-008), so its presence is not
+ * a conflict.
+ */
+export function planScaffoldConflicts(targetDir, config) {
+    const r = config.monolithRoot;
+    const conflicts = [];
+    const projectrootTemplates = join(TEMPLATES_ROOT, 'projectroot');
+    if (existsSync(projectrootTemplates)) {
+        for (const tplFile of walkDir(projectrootTemplates)) {
+            const relPath = relative(projectrootTemplates, tplFile);
+            const targetPath = join(targetDir, stripTemplateSuffix(relPath));
+            if (existsSync(targetPath))
+                conflicts.push(relative(targetDir, targetPath));
+        }
+    }
+    const monolithTemplates = join(TEMPLATES_ROOT, 'monolith');
+    if (existsSync(monolithTemplates)) {
+        for (const tplFile of walkDir(monolithTemplates)) {
+            const relPath = relative(monolithTemplates, tplFile);
+            const strippedRelPath = stripTemplateSuffix(relPath);
+            if (strippedRelPath === 'state.json')
+                continue;
+            const targetPath = join(targetDir, r, strippedRelPath);
+            if (existsSync(targetPath))
+                conflicts.push(relative(targetDir, targetPath));
+        }
+    }
+    const instructionFileName = INSTRUCTION_FILE_MAP[config.aiTool];
+    if (instructionFileName) {
+        const targetPath = join(targetDir, instructionFileName);
+        if (existsSync(targetPath))
+            conflicts.push(relative(targetDir, targetPath));
+    }
+    return conflicts;
+}
 export async function scaffoldInstance(targetDir, config) {
     const vars = buildVars(config);
     const r = config.monolithRoot;

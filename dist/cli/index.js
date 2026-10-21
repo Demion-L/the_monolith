@@ -11,6 +11,7 @@
  *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
  */
 import { MONOLITH_VERSION } from '../version.js';
+import { parseInitArgs } from './init-args.js';
 const USAGE = `
 monolith v${MONOLITH_VERSION}
 
@@ -18,7 +19,10 @@ Usage:
   monolith <command> [options]
 
 Commands:
-  init        Scaffold a new MONOLITH instance (.monolith/ + project files)
+  init        Scaffold a new MONOLITH instance in the current directory.
+              No positional target-directory argument; refuses to run if it
+              would overwrite any existing tracked file (--yes only skips
+              interactive prompts, it does not force an overwrite).
   validate    Run enforcement gates and integrity validators
   status      Show active protocol, phase, story, and drift summary
   dry-run     Simulate finalization gate — no writes, exit-code only
@@ -49,9 +53,14 @@ async function main() {
     const command = args[0];
     switch (command) {
         case 'init': {
+            const parsed = parseInitArgs(args.slice(1));
+            if (!parsed.ok) {
+                console.error(parsed.message + '\n');
+                process.exit(1);
+                return;
+            }
             const { runInit } = await import('../init/index.js');
-            const yes = args.includes('--yes') || args.includes('-y');
-            await runInit({ targetDir: process.cwd(), yes });
+            await runInit({ targetDir: process.cwd(), yes: parsed.yes });
             break;
         }
         case 'validate': {

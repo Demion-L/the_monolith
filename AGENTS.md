@@ -121,12 +121,13 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/graph/normalize.ts`          | `normalizeLabel()`, `selectCanonicalLabel()`                         |
 | `src/graph/index.ts`              | Module barrel export                                                 |
 | `src/graph/graph.test.ts`         | Vitest test suite (see integrity-result.md for count)                |
-| `src/coordinatorium/types.ts`     | `CoordinatoriumState`, `Mission`, schema version                     |
+| `src/coordinatorium/types.ts`     | `CoordinatoriumState`, `Mission`, `Checkpoint`, schema version        |
 | `src/coordinatorium/state-keeper.ts` | `readState()`, `mutateState()` — lock + atomic write + validation |
 | `src/coordinatorium/lock.ts`      | Cross-process file lock with stale-lock recovery                     |
 | `src/coordinatorium/mission.ts`   | `startMission()`, `listMissions()`, `getMission()`, `finishMission()` |
-| `src/coordinatorium/cli.ts`       | `monolith mission` command handlers                                  |
-| `src/coordinatorium/*.test.ts`    | Vitest test suite (31 tests, incl. real multi-process concurrency)   |
+| `src/coordinatorium/checkpoint.ts` | `createCheckpoint()`, `listCheckpoints()`, `getCheckpoint()` — append-only |
+| `src/coordinatorium/cli.ts`       | `monolith mission` command handlers (incl. `checkpoint`/`checkpoints`) |
+| `src/coordinatorium/*.test.ts`    | Vitest test suite (225 tests, incl. real multi-process concurrency)  |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
 ---
@@ -154,8 +155,9 @@ What MONOLITH does today (138 tests passing, typecheck clean):
 - Historical record: `docs/webway-v0.md`
 
 **Coordinatorium — Tactical Mission Lifecycle** (first vertical slice, ADR-008):
-- `.monolith/state.json` — canonical, schema-versioned project state (`schemaVersion`, `revision`, `strategic.systems` reserved, `tactical.missions`)
+- `.monolith/state.json` — canonical, schema-versioned project state (`schemaVersion`, `revision`, `strategic.systems` reserved, `tactical.missions`, `tactical.checkpoints`)
 - `monolith mission start|list|show|finish` — register and close out missions; see Mission Lifecycle section below
+- `monolith mission checkpoint|checkpoints` (COORDINATORIUM-002) — durable, append-only progress checkpoints for an `in_progress` mission; no `schemaVersion` bump (additive, backward-compatible with pre-002 state.json)
 - Deterministic State Keeper: cross-process file lock + atomic write, no lost updates, no LLM/database/background service involved
 - Strategic Coordinatorium (product/subsystem state) is **not implemented** — schema-reserved only
 
@@ -168,6 +170,8 @@ monolith mission start --title "..." --system "..."
 monolith mission list
 monolith mission show <id>
 monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
+monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
+monolith mission checkpoints <missionId>
 ```
 
 This records development missions in `.monolith/state.json`, independent of
@@ -175,6 +179,18 @@ any single AI session's memory. **This is not runtime-enforced in v0.1:**
 nothing prevents an AI session from editing code without ever calling
 `mission start`/`finish`. It is a recommended discipline, not a gate. Full
 rationale: ADR-008 (`docs/adr/ADR-008-coordinatorium-tactical-mission-lifecycle.md`).
+
+**Mission Checkpoints (COORDINATORIUM-002):** an `in_progress` mission can
+accumulate durable, append-only checkpoints — `summary` (required),
+`remainingSteps` (0+ repeated `--remaining` flags), `context` (optional) —
+recording progress between AI sessions. Checkpoints are immutable once
+created: there is no update or delete command. `mission checkpoint` is
+rejected for a mission that is not `in_progress` (completed/failed/
+cancelled); `mission checkpoints` keeps listing a finished mission's
+history regardless. IDs are `<missionId>-CKPT-NNNN` (e.g.
+`MIS-0002-CKPT-0001`), per-mission, derived the same way mission IDs are —
+no separate counter. Same non-enforcement caveat as mission start/finish:
+nothing requires an AI session to call this.
 
 ---
 
@@ -250,6 +266,14 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [ ] Strategic Coordinatorium — not in scope for this slice
 - [x] 481 real nodes, 0 synthesized nodes on MONOLITH corpus
 - [x] 151 total tests passing, typecheck clean
+
+**COORDINATORIUM-002 — Mission Checkpoints** — implemented 2026-10-21, pending review/finalization
+- [x] `Checkpoint` domain entity, `tactical.checkpoints` sibling map (additive, no `schemaVersion` bump)
+- [x] `createCheckpoint`/`listCheckpoints`/`getCheckpoint` (append-only — no update/delete path)
+- [x] `monolith mission checkpoint|checkpoints` CLI
+- [x] `MissionNotActiveError`/`CheckpointNotFoundError` added to the Coordinatorium error taxonomy
+- [x] ADR-008 amended with a dated addendum (same convention as the 2026-10-21 hardening passes)
+- [x] 225 total tests passing (39 new), typecheck and build clean
 
 **Candidate next stories (not decisions):**
 - Corpus relationship density (32 edges / 481 nodes — too sparse)

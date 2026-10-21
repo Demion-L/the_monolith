@@ -64,6 +64,8 @@ monolith mission start --title "..." --system "..."
 monolith mission list
 monolith mission show <id>
 monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
+monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
+monolith mission checkpoints <missionId>
 ```
 
 This records development missions in `{{MONOLITH_ROOT}}/state.json`,
@@ -71,6 +73,13 @@ independent of any single AI session's memory. **This is not
 runtime-enforced in v0.1:** nothing prevents an AI session from editing
 code without ever calling `mission start`/`finish`. It is a recommended
 discipline, not a gate.
+
+**Mission Checkpoints (COORDINATORIUM-002):** an `in_progress` mission can
+accumulate durable, append-only checkpoints (`summary` required,
+`remainingSteps` via repeated `--remaining`, optional `context`) —
+immutable once created, no update/delete command. Rejected for a
+completed/failed/cancelled mission; `mission checkpoints` keeps listing a
+finished mission's history regardless.
 
 ---
 

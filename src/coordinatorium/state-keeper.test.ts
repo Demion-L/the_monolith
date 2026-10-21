@@ -71,6 +71,87 @@ describe('validateState', () => {
     const good = createInitialState();
     expect(validateState(good)).toEqual(good);
   });
+
+  // -------------------------------------------------------------------------
+  // COORDINATORIUM-002 backward compatibility: a state.json written before
+  // Mission Checkpoints existed has no `tactical.checkpoints` key at all.
+  // It must remain readable — no schemaVersion bump, no throw.
+  // -------------------------------------------------------------------------
+
+  it('defaults tactical.checkpoints to {} when the key is entirely absent (pre-002 state.json)', () => {
+    const legacy = {
+      schemaVersion: 1,
+      revision: 3,
+      strategic: { systems: {} },
+      tactical: {
+        missions: {
+          'MIS-0001': {
+            id: 'MIS-0001',
+            title: 'Pre-checkpoints mission',
+            system: 'coordinatorium',
+            status: 'completed',
+            startedAt: '2026-10-21T00:00:00.000Z',
+            updatedAt: '2026-10-21T00:01:00.000Z',
+            summary: 'done',
+          },
+        },
+        // no `checkpoints` key — simulates a COORDINATORIUM-001-era file.
+      },
+    };
+    const state = validateState(legacy);
+    expect(state.tactical.checkpoints).toEqual({});
+    expect(state.tactical.missions['MIS-0001'].title).toBe('Pre-checkpoints mission');
+  });
+
+  it('readState parses a legacy on-disk file with no tactical.checkpoints key without throwing', async () => {
+    const dir = makeTempDir();
+    const legacy = {
+      schemaVersion: 1,
+      revision: 0,
+      strategic: { systems: {} },
+      tactical: { missions: {} },
+    };
+    writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
+    const state = await readState(dir);
+    expect(state.tactical.checkpoints).toEqual({});
+  });
+
+  it('rejects tactical.checkpoints when present but not a plain object', () => {
+    const bad = {
+      ...createInitialState(),
+      tactical: { missions: {}, checkpoints: 'not-an-object' },
+    };
+    expect(() => validateState(bad)).toThrow(StateSchemaError);
+  });
+
+  it('validates each checkpoint entry when tactical.checkpoints is present', () => {
+    const bad = {
+      ...createInitialState(),
+      tactical: {
+        missions: {},
+        checkpoints: {
+          'MIS-0001-CKPT-0001': { id: 'MIS-0001-CKPT-0001', missionId: 'MIS-0001' /* missing summary etc. */ },
+        },
+      },
+    };
+    expect(() => validateState(bad)).toThrow(StateSchemaError);
+  });
+
+  it('accepts a well-formed checkpoint entry and round-trips it', () => {
+    const checkpoint = {
+      id: 'MIS-0001-CKPT-0001',
+      missionId: 'MIS-0001',
+      createdAt: '2026-10-21T00:00:00.000Z',
+      summary: 'did a thing',
+      remainingSteps: ['next step'],
+      context: null,
+    };
+    const good = {
+      ...createInitialState(),
+      tactical: { missions: {}, checkpoints: { [checkpoint.id]: checkpoint } },
+    };
+    expect(validateState(good).tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
+  });
 });
 
 // ---------------------------------------------------------------------------

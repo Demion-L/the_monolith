@@ -85,3 +85,20 @@ export class ValidationError extends CoordinatoriumError {
         this.name = 'ValidationError';
     }
 }
+/**
+ * Thrown when a checkpoint is requested to be created against a mission
+ * that exists but is not `in_progress` (COORDINATORIUM-002). Reading
+ * checkpoints for such a mission is unaffected — only creation is blocked.
+ */
+export class MissionNotActiveError extends CoordinatoriumError {
+    constructor(id, status) {
+        super('MISSION_NOT_ACTIVE', `Mission "${id}" is not active (status: "${status}") — cannot create a checkpoint`);
+        this.name = 'MissionNotActiveError';
+    }
+}
+export class CheckpointNotFoundError extends CoordinatoriumError {
+    constructor(id) {
+        super('CHECKPOINT_NOT_FOUND', `No checkpoint found with id "${id}"`);
+        this.name = 'CheckpointNotFoundError';
+    }
+}

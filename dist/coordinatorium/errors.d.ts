@@ -6,7 +6,7 @@
  * future caller (or a test) can distinguish failure classes without
  * string-matching messages.
  */
-export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR';
+export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'CHECKPOINT_NOT_FOUND';
 export declare class CoordinatoriumError extends Error {
     readonly code: CoordinatoriumErrorCode;
     constructor(code: CoordinatoriumErrorCode, message: string);
@@ -66,5 +66,16 @@ export declare class InvalidTransitionError extends CoordinatoriumError {
 }
 export declare class ValidationError extends CoordinatoriumError {
     constructor(message: string);
+}
+/**
+ * Thrown when a checkpoint is requested to be created against a mission
+ * that exists but is not `in_progress` (COORDINATORIUM-002). Reading
+ * checkpoints for such a mission is unaffected — only creation is blocked.
+ */
+export declare class MissionNotActiveError extends CoordinatoriumError {
+    constructor(id: string, status: string);
+}
+export declare class CheckpointNotFoundError extends CoordinatoriumError {
+    constructor(id: string);
 }
 //# sourceMappingURL=errors.d.ts.map

@@ -12,6 +12,6 @@ export function createInitialState() {
         schemaVersion: STATE_SCHEMA_VERSION,
         revision: 0,
         strategic: { systems: {} },
-        tactical: { missions: {} },
+        tactical: { missions: {}, checkpoints: {} },
     };
 }

@@ -19,7 +19,14 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { acquireLock, type LockOptions } from './lock.js';
 import { StateCorruptedError, StateSchemaError } from './errors.js';
-import { STATE_SCHEMA_VERSION, createInitialState, type CoordinatoriumState, type Mission, type MissionStatus } from './types.js';
+import {
+  STATE_SCHEMA_VERSION,
+  createInitialState,
+  type CoordinatoriumState,
+  type Mission,
+  type MissionStatus,
+  type Checkpoint,
+} from './types.js';
 
 export const STATE_FILE_NAME = 'state.json';
 
@@ -66,6 +73,39 @@ function validateMission(id: string, raw: unknown): Mission {
   return { id, title, system, status: status as MissionStatus, startedAt, updatedAt, summary };
 }
 
+function validateCheckpoint(id: string, raw: unknown): Checkpoint {
+  if (!isPlainObject(raw)) {
+    throw new StateSchemaError(`Checkpoint "${id}" is not an object`);
+  }
+  const { missionId, createdAt, summary, remainingSteps, context } = raw;
+  if (raw.id !== id) {
+    throw new StateSchemaError(`Checkpoint "${id}" has mismatched id field "${String(raw.id)}"`);
+  }
+  if (typeof missionId !== 'string' || missionId.length === 0) {
+    throw new StateSchemaError(`Checkpoint "${id}" has an invalid missionId`);
+  }
+  if (typeof createdAt !== 'string') {
+    throw new StateSchemaError(`Checkpoint "${id}" has an invalid createdAt`);
+  }
+  if (typeof summary !== 'string' || summary.length === 0) {
+    throw new StateSchemaError(`Checkpoint "${id}" has an invalid summary`);
+  }
+  if (!Array.isArray(remainingSteps) || !remainingSteps.every((s) => typeof s === 'string' && s.length > 0)) {
+    throw new StateSchemaError(`Checkpoint "${id}" has an invalid remainingSteps`);
+  }
+  if (context !== null && typeof context !== 'string') {
+    throw new StateSchemaError(`Checkpoint "${id}" has an invalid context`);
+  }
+  return {
+    id,
+    missionId,
+    createdAt,
+    summary,
+    remainingSteps: [...(remainingSteps as string[])],
+    context: (context as string | null) ?? null,
+  };
+}
+
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
@@ -96,11 +136,26 @@ export function validateState(raw: unknown): CoordinatoriumState {
     missions[id] = validateMission(id, m);
   }
 
+  // tactical.checkpoints (COORDINATORIUM-002) is additive and optional on
+  // read: a state.json written before this story has no `checkpoints` key
+  // at all. Its absence is not an error — default to {} — but if present
+  // it must be a plain object, and every entry must validate.
+  const rawCheckpoints = raw.tactical.checkpoints;
+  if (rawCheckpoints !== undefined && !isPlainObject(rawCheckpoints)) {
+    throw new StateSchemaError('Invalid tactical.checkpoints');
+  }
+  const checkpoints: Record<string, Checkpoint> = {};
+  if (rawCheckpoints !== undefined) {
+    for (const [id, c] of Object.entries(rawCheckpoints)) {
+      checkpoints[id] = validateCheckpoint(id, c);
+    }
+  }
+
   return {
     schemaVersion: STATE_SCHEMA_VERSION,
     revision: raw.revision,
     strategic: { systems: { ...raw.strategic.systems } },
-    tactical: { missions },
+    tactical: { missions, checkpoints },
   };
 }
 

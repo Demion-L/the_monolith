@@ -28,8 +28,31 @@ export interface StrategicState {
   systems: Record<string, unknown>;
 }
 
+/**
+ * A durable, append-only progress note attached to exactly one Mission
+ * (COORDINATORIUM-002). Checkpoints are never updated or deleted once
+ * created — `id` and `createdAt` are stamped by the keeper, never
+ * caller-supplied, exactly like `Mission.id`/`startedAt`.
+ */
+export interface Checkpoint {
+  id: string;
+  missionId: string;
+  createdAt: string;
+  summary: string;
+  remainingSteps: string[];
+  context: string | null;
+}
+
 export interface TacticalState {
   missions: Record<string, Mission>;
+  /**
+   * Sibling top-level map to `missions`, not nested inside `Mission` — see
+   * ADR-008's 2026-10-21 Mission Checkpoints addendum. Optional on read for
+   * backward compatibility: a state.json written before COORDINATORIUM-002
+   * has no `checkpoints` key at all and must still parse (state-keeper.ts
+   * defaults it to `{}`).
+   */
+  checkpoints: Record<string, Checkpoint>;
 }
 
 export interface CoordinatoriumState {
@@ -44,6 +67,6 @@ export function createInitialState(): CoordinatoriumState {
     schemaVersion: STATE_SCHEMA_VERSION,
     revision: 0,
     strategic: { systems: {} },
-    tactical: { missions: {} },
+    tactical: { missions: {}, checkpoints: {} },
   };
 }

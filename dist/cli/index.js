@@ -22,13 +22,15 @@ Commands:
   validate    Run enforcement gates and integrity validators
   status      Show active protocol, phase, story, and drift summary
   dry-run     Simulate finalization gate — no writes, exit-code only
-  mission     Manage Tactical Coordinatorium missions (start/list/show/finish)
+  mission     Manage Tactical Coordinatorium missions (start/list/show/finish/checkpoint/checkpoints)
 
 Mission usage:
   monolith mission start --title "..." --system "..."
   monolith mission list
   monolith mission show <id>
   monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
+  monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
+  monolith mission checkpoints <missionId>
 
 Options:
   --help, -h      Show this help
@@ -63,7 +65,7 @@ async function main() {
         case 'mission': {
             const sub = args[1];
             const rest = args.slice(2);
-            const { runMissionStart, runMissionList, runMissionShow, runMissionFinish, } = await import('../coordinatorium/cli.js');
+            const { runMissionStart, runMissionList, runMissionShow, runMissionFinish, runMissionCheckpoint, runMissionCheckpoints, } = await import('../coordinatorium/cli.js');
             switch (sub) {
                 case 'start':
                     await runMissionStart(rest);
@@ -76,6 +78,12 @@ async function main() {
                     break;
                 case 'finish':
                     await runMissionFinish(rest);
+                    break;
+                case 'checkpoint':
+                    await runMissionCheckpoint(rest);
+                    break;
+                case 'checkpoints':
+                    await runMissionCheckpoints(rest);
                     break;
                 default:
                     console.error(`Unknown mission subcommand: ${sub ?? '(none)'}\n`);

@@ -60,7 +60,10 @@ Candidate directions (not decisions):
 - Terra persistence layer — ADR-006 defines the strategy; implementation not yet started
 - Story 1.4 — corpus relationship density: add explicit relationship fields to more documents
 - Engineering Gate implementation — formalized in ADR-003, no runtime yet
-- Webway v1 improvements — frontmatter stripping, semantic linking
+
+Webway v1 improvements (frontmatter stripping, semantic linking) are no
+longer a MONOLITH candidate direction — Webway is developed independently:
+https://github.com/Demion-L/webway
 
 ---
 

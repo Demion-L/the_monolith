@@ -34,7 +34,6 @@ Authority: `AGENTS.md`. When this file conflicts with AGENTS.md, AGENTS.md wins.
 the_monolith/
 ├── src/                    ← all source code (TypeScript)
 │   ├── index.ts            ← package entrypoint, re-exports everything
-│   ├── webway/             ← first-class module: semantic connection layer
 │   ├── init/               ← kernel module: instance scaffolding
 │   ├── validate/           ← kernel module: instance validation
 │   ├── cli/                ← CLI entrypoint (bin: monolith)
@@ -58,28 +57,15 @@ the_monolith/
 
 ## Source Modules
 
-### `src/webway/` — Semantic Connection Layer (implemented)
+### Webway — Semantic Connection Layer (extracted, historical)
 
-The first cognitive capability of MONOLITH. Transforms raw Artifacts into structured knowledge.
-
-| File | Responsibility |
-| ---- | -------------- |
-| `types.ts` | Core type contracts: `Artifact`, `Concept`, `SemanticLink`, `KnowledgeRegion`, `MentalModel`, `WebwayAnalysisResult`, `SemanticRelationshipType` |
-| `analyze.ts` | `analyzeArtifact()` — deterministic frequency-based extraction prototype |
-| `index.ts` | Barrel export for the module |
-| `webway.test.ts` | Vitest test suite (13 tests) |
-
-What belongs in `src/webway/`:
-- Type definitions for the knowledge representation model
-- Pure transformation functions: Artifact → WebwayAnalysisResult
-- Knowledge region definitions and scoring logic
-- Tests for all deterministic behaviors
-
-What does NOT belong in `src/webway/`:
-- LLM or embedding API calls (deferred to v1)
-- File system or database access (no persistence in v0)
-- Imports from `init/`, `validate/`, or `cli/` (module isolation)
-- HTTP or network layer
+Originally MONOLITH's first cognitive capability (`src/webway/`): deterministic
+frequency-based extraction prototype (`Artifact` → `WebwayAnalysisResult`).
+Had zero runtime coupling to Scriptorium/ERG and was extracted into its own
+repository — see `AGENTS.md` Mission section. It no longer exists under
+`src/` in this repo. Historical design record: `docs/webway-v0.md`. Active
+development: https://github.com/Demion-L/webway. Do not recreate a
+`src/webway/` module here without a new story.
 
 ### `src/init/` — Instance Scaffolding (implemented)
 
@@ -99,7 +85,7 @@ Do not add business logic here.
 ### `src/types/` — Shared Kernel Types (implemented)
 
 `ProjectDefinition`, `GateCheckResult`, `VerificationContext`, `VerificationReport`.  
-Webway types live in `src/webway/types.ts`, not here.
+Webway's types now live in its own repository: https://github.com/Demion-L/webway
 
 ---
 

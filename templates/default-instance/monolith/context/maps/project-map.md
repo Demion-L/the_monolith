@@ -63,7 +63,7 @@ Navigation guide for the cognitive architecture of this project.
 This repository contains two concurrent projects:
 
 **MONOLITH** — the research platform (research, ADRs, documentation, validation, CLI tooling)
-**Cognitive Kernel** — the cognitive architecture being developed inside MONOLITH (Scriptorium, Terra, Graph Memex, Document Store, WEBWAY, and future subsystems)
+**Cognitive Kernel** — the cognitive architecture being developed inside MONOLITH (Scriptorium, Terra, Graph Memex, Document Store, and future subsystems)
 
 See `docs/architecture/cognitive-infrastructure.md` for the authoritative description of this separation.
 

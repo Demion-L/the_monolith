@@ -22,7 +22,7 @@ Where authoritative truth lives for each semantic domain.
 | Knowledge regions map  | `memory/long-term/knowledge-regions.md` |
 | Knowledge lifecycle    | `memory/long-term/knowledge-lifecycle.md` |
 | Story lifecycle        | `memory/long-term/story-lifecycle.md`     |
-| Webway v1 research plan | `memory/long-term/webway-v1-research-plan.md` |
+| Webway v1 research plan (historical — Webway now developed externally: https://github.com/Demion-L/webway) | `memory/long-term/webway-v1-research-plan.md` |
 | Cognitive Core definition | `memory/long-term/cognitive-core.md` |
 | Engineering Gate definition | `memory/long-term/engineering-gate.md` |
 | Execution log          | `memory/long-term/execution-history.md` |

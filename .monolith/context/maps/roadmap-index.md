@@ -31,7 +31,10 @@ Keep in sync with `memory/working/active.md` and `memory/working/story-index.md`
 - Terra persistence layer — ADR-006 defines the strategy; no implementation yet
 - Corpus relationship density — 32 edges on 481 nodes is too sparse for useful graph traversal
 - Engineering Gate implementation — formalized in ADR-003, no runtime yet
-- Webway v1 improvements — frontmatter stripping, semantic linking
+
+Webway v1 improvements (frontmatter stripping, semantic linking) are no
+longer a MONOLITH candidate direction — Webway is developed independently:
+https://github.com/Demion-L/webway
 
 ---
 

@@ -51,6 +51,7 @@ and which validators are active.
 ```bash
 npx monolith init       # scaffold a new instance from templates/ (implemented)
 npx monolith validate   # check instance integrity (implemented, see below)
+npx monolith mission    # Tactical Coordinatorium mission lifecycle (implemented, see ADR-008)
 npx monolith status     # show active protocol, phase, story, drift summary (not yet implemented)
 npx monolith dry-run    # simulate finalization gate without writes (not yet implemented)
 ```

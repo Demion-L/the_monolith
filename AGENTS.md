@@ -117,7 +117,13 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/graph/normalize.ts`          | `normalizeLabel()`, `selectCanonicalLabel()`                         |
 | `src/graph/index.ts`              | Module barrel export                                                 |
 | `src/graph/graph.test.ts`         | Vitest test suite (see integrity-result.md for count)                |
-| `src/index.ts`                    | Package entrypoint — re-exports Scriptorium and Graph                |
+| `src/coordinatorium/types.ts`     | `CoordinatoriumState`, `Mission`, schema version                     |
+| `src/coordinatorium/state-keeper.ts` | `readState()`, `mutateState()` — lock + atomic write + validation |
+| `src/coordinatorium/lock.ts`      | Cross-process file lock with stale-lock recovery                     |
+| `src/coordinatorium/mission.ts`   | `startMission()`, `listMissions()`, `getMission()`, `finishMission()` |
+| `src/coordinatorium/cli.ts`       | `monolith mission` command handlers                                  |
+| `src/coordinatorium/*.test.ts`    | Vitest test suite (31 tests, incl. real multi-process concurrency)   |
+| `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
 ---
 
@@ -142,6 +148,29 @@ What MONOLITH does today (138 tests passing, typecheck clean):
 - Originally Story 1.1's deterministic frequency-based concept extraction / semantic linking prototype
 - Had zero runtime coupling to Scriptorium/ERG; now developed independently at https://github.com/Demion-L/webway
 - Historical record: `docs/webway-v0.md`
+
+**Coordinatorium — Tactical Mission Lifecycle** (first vertical slice, ADR-008):
+- `.monolith/state.json` — canonical, schema-versioned project state (`schemaVersion`, `revision`, `strategic.systems` reserved, `tactical.missions`)
+- `monolith mission start|list|show|finish` — register and close out missions; see Mission Lifecycle section below
+- Deterministic State Keeper: cross-process file lock + atomic write, no lost updates, no LLM/database/background service involved
+- Strategic Coordinatorium (product/subsystem state) is **not implemented** — schema-reserved only
+
+---
+
+## Mission Lifecycle (Coordinatorium v0.1)
+
+```
+monolith mission start --title "..." --system "..."
+monolith mission list
+monolith mission show <id>
+monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
+```
+
+This records development missions in `.monolith/state.json`, independent of
+any single AI session's memory. **This is not runtime-enforced in v0.1:**
+nothing prevents an AI session from editing code without ever calling
+`mission start`/`finish`. It is a recommended discipline, not a gate. Full
+rationale: ADR-008 (`docs/adr/ADR-008-coordinatorium-tactical-mission-lifecycle.md`).
 
 ---
 
@@ -213,6 +242,13 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] `compileMarkdownArtifact()` — structural extraction pipeline, 138 tests
 - [x] `buildGraph()` — Pass 1 + 2 + 2.5 alias system, explicit-only
 - [x] ADR-007: explicit-only identity resolution
+
+**COORDINATORIUM-001 — Tactical Mission Lifecycle (First Vertical Slice)** — implemented 2026-10-21, pending review/finalization
+- [x] Deterministic State Keeper (`.monolith/state.json`) — lock + atomic write, no lost updates
+- [x] `monolith mission start|list|show|finish` CLI
+- [x] ADR-008: Coordinatorium — Tactical Mission Lifecycle
+- [x] 31 tests (incl. real multi-process concurrency), 169 total passing
+- [ ] Strategic Coordinatorium — not in scope for this slice
 - [x] 481 real nodes, 0 synthesized nodes on MONOLITH corpus
 - [x] 151 total tests passing, typecheck clean
 

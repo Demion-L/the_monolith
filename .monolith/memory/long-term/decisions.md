@@ -70,3 +70,13 @@ Updated by the finalize-story skill when a story introduces a significant design
 **Full record:** `docs/adr/ADR-007-explicit-identity-resolution.md`
 
 **Decision:** Aliases in the Explicit Relationship Graph are registered only from explicit frontmatter metadata (`id:` → `documentId`, `title:` → `documentTitle`). No fuzzy matching, no embeddings, no probabilistic inference. First-document-wins on alias collision. Canonical label remains the H1 heading text.
+
+---
+
+### ADR-008 — Coordinatorium: Tactical Mission Lifecycle (First Vertical Slice)
+
+**Date:** 2026-10-21
+**Status:** Accepted
+**Full record:** `docs/adr/ADR-008-coordinatorium-tactical-mission-lifecycle.md`
+
+**Decision:** Introduce a deterministic, file-based State Keeper at `.monolith/state.json` and a `monolith mission start|list|show|finish` CLI for registering and closing out development missions. Read-modify-write mutations are serialized by a cross-process file lock (atomic `open(path, 'wx')`, with stale-lock recovery by PID liveness) and persisted via write-temp-then-rename, with a monotonically incrementing `revision`. Strategic Coordinatorium (product/subsystem state) is schema-reserved only — no mutations in this slice. Mission registration is not runtime-enforced: an AI session can still edit code without ever calling `mission start`.

@@ -9,6 +9,7 @@
  *   monolith validate   — run all enforcement + integrity checks
  *   monolith status     — show current protocol state and drift summary
  *   monolith dry-run    — run finalization gate without writing output
+ *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
  */
 
 import { MONOLITH_VERSION } from '../version.js';
@@ -24,6 +25,13 @@ Commands:
   validate    Run enforcement gates and integrity validators
   status      Show active protocol, phase, story, and drift summary
   dry-run     Simulate finalization gate — no writes, exit-code only
+  mission     Manage Tactical Coordinatorium missions (start/list/show/finish)
+
+Mission usage:
+  monolith mission start --title "..." --system "..."
+  monolith mission list
+  monolith mission show <id>
+  monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
 
 Options:
   --help, -h      Show this help
@@ -59,6 +67,37 @@ async function main() {
       const { runValidate } = await import('../validate/index.js');
       const quiet = args.includes('--quiet') || args.includes('-q');
       await runValidate({ targetDir: process.cwd(), quiet });
+      break;
+    }
+
+    case 'mission': {
+      const sub = args[1];
+      const rest = args.slice(2);
+      const {
+        runMissionStart,
+        runMissionList,
+        runMissionShow,
+        runMissionFinish,
+      } = await import('../coordinatorium/cli.js');
+
+      switch (sub) {
+        case 'start':
+          await runMissionStart(rest);
+          break;
+        case 'list':
+          await runMissionList(rest);
+          break;
+        case 'show':
+          await runMissionShow(rest);
+          break;
+        case 'finish':
+          await runMissionFinish(rest);
+          break;
+        default:
+          console.error(`Unknown mission subcommand: ${sub ?? '(none)'}\n`);
+          console.log(USAGE);
+          process.exit(1);
+      }
       break;
     }
 

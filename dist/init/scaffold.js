@@ -101,7 +101,14 @@ export async function scaffoldInstance(targetDir, config) {
     if (existsSync(monolithTemplates)) {
         for (const tplFile of walkDir(monolithTemplates)) {
             const relPath = relative(monolithTemplates, tplFile);
-            const targetPath = join(targetDir, r, stripTemplateSuffix(relPath));
+            const strippedRelPath = stripTemplateSuffix(relPath);
+            const targetPath = join(targetDir, r, strippedRelPath);
+            // Coordinatorium state (ADR-008) is mutable runtime data, not a
+            // document template — re-running init must never clobber missions
+            // an existing instance has already recorded.
+            if (strippedRelPath === 'state.json' && existsSync(targetPath)) {
+                continue;
+            }
             copyTemplate(tplFile, targetPath, vars);
             filesCreated++;
         }

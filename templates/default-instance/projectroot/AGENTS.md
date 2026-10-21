@@ -57,6 +57,23 @@ See full sequence: `{{MONOLITH_ROOT}}/protocols/boot/boot-sequence.md`
 
 ---
 
+## Mission Lifecycle (Coordinatorium v0.1)
+
+```
+monolith mission start --title "..." --system "..."
+monolith mission list
+monolith mission show <id>
+monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
+```
+
+This records development missions in `{{MONOLITH_ROOT}}/state.json`,
+independent of any single AI session's memory. **This is not
+runtime-enforced in v0.1:** nothing prevents an AI session from editing
+code without ever calling `mission start`/`finish`. It is a recommended
+discipline, not a gate.
+
+---
+
 ## Core Rule
 
 One story at a time. Vertical slice first. No autonomous capability expansion.

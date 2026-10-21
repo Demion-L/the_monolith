@@ -77,24 +77,40 @@ function buildVars(config: ProjectConfig): Vars {
   };
 }
 
+// Relative to config.monolithRoot (`r`). Shared between createEmptyDirs
+// (what init writes) and planScaffoldConflicts (what init must refuse to
+// overwrite) so the two can never drift apart — see gitkeepTargets().
+const GITKEEP_DIRS = [
+  'memory/working/phases',
+  'memory/execution/traces',
+  'protocols/engineering',
+  'learning/mistakes/architecture',
+  'learning/mistakes/dependencies',
+  'learning/mistakes/nonexistent-api',
+  'learning/mistakes/context-sync',
+  'learning/mistakes/workflow',
+  'learning/mistakes/typescript',
+  'learning/mistakes/documentation',
+  'adr',
+];
+
+/** `.gitkeep` paths (relative to targetDir) that init creates for `r`. */
+function gitkeepTargets(r: string): string[] {
+  return GITKEEP_DIRS.map((rel) => `${r}/${rel}/.gitkeep`);
+}
+
 function createEmptyDirs(targetRoot: string, r: string): void {
-  const gitkeepDirs = [
-    `${r}/memory/working/phases`,
-    `${r}/memory/execution/traces`,
-    `${r}/protocols/engineering`,
-    `${r}/learning/mistakes/architecture`,
-    `${r}/learning/mistakes/dependencies`,
-    `${r}/learning/mistakes/nonexistent-api`,
-    `${r}/learning/mistakes/context-sync`,
-    `${r}/learning/mistakes/workflow`,
-    `${r}/learning/mistakes/typescript`,
-    `${r}/learning/mistakes/documentation`,
-    `${r}/adr`,
-  ];
-  for (const rel of gitkeepDirs) {
-    const full = join(targetRoot, rel);
+  for (const rel of GITKEEP_DIRS) {
+    const full = join(targetRoot, r, rel);
     ensureDir(full);
-    writeFileSync(join(full, '.gitkeep'), '', 'utf8');
+    const gitkeepPath = join(full, '.gitkeep');
+    // An existing .gitkeep (possibly user-authored, non-empty) must never be
+    // overwritten. planScaffoldConflicts() is expected to have already
+    // refused the run in this case; this is a second, cheap guard at the
+    // actual write site, not a substitute for that preflight check.
+    if (!existsSync(gitkeepPath)) {
+      writeFileSync(gitkeepPath, '', 'utf8');
+    }
   }
 }
 
@@ -140,6 +156,11 @@ export function planScaffoldConflicts(targetDir: string, config: ProjectConfig):
   const instructionFileName = INSTRUCTION_FILE_MAP[config.aiTool];
   if (instructionFileName) {
     const targetPath = join(targetDir, instructionFileName);
+    if (existsSync(targetPath)) conflicts.push(relative(targetDir, targetPath));
+  }
+
+  for (const rel of gitkeepTargets(r)) {
+    const targetPath = join(targetDir, rel);
     if (existsSync(targetPath)) conflicts.push(relative(targetDir, targetPath));
   }
 

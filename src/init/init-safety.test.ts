@@ -127,3 +127,70 @@ describe('monolith init — overwrite safety (LESSON-2026-0006 / TD-007)', () =>
     expect(listAllFiles(dir)).toEqual(filesBefore);
   });
 });
+
+describe('monolith init — .gitkeep overwrite safety', () => {
+  // scaffoldInstance's createEmptyDirs() used to call
+  // writeFileSync(gitkeepPath, '') unconditionally, truncating any
+  // pre-existing (possibly non-empty, user-authored) .gitkeep. These
+  // paths were also absent from planScaffoldConflicts(), so the conflict
+  // was never caught before the write.
+  const GITKEEP_REL = '.monolith/learning/mistakes/architecture/.gitkeep';
+
+  it('refuses init when a tracked .gitkeep already has non-empty content, and leaves it byte-for-byte unchanged', async () => {
+    const dir = makeTempDir();
+    const gitkeepPath = join(dir, GITKEEP_REL);
+    mkdirSync(join(dir, '.monolith', 'learning', 'mistakes', 'architecture'), { recursive: true });
+    const customContent = '# keep this directory tracked — custom note\n';
+    writeFileSync(gitkeepPath, customContent, 'utf8');
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(readFileSync(gitkeepPath, 'utf8')).toBe(customContent);
+  });
+
+  it('does not partially scaffold other files when only a .gitkeep conflicts', async () => {
+    const dir = makeTempDir();
+    const gitkeepPath = join(dir, GITKEEP_REL);
+    mkdirSync(join(dir, '.monolith', 'learning', 'mistakes', 'architecture'), { recursive: true });
+    writeFileSync(gitkeepPath, 'custom\n', 'utf8');
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(existsSync(join(dir, 'AGENTS.md'))).toBe(false);
+    expect(existsSync(join(dir, '.monolith', 'state.json'))).toBe(false);
+  });
+
+  it('--yes does not bypass .gitkeep protection', async () => {
+    const dir = makeTempDir();
+    const gitkeepPath = join(dir, GITKEEP_REL);
+    mkdirSync(join(dir, '.monolith', 'learning', 'mistakes', 'architecture'), { recursive: true });
+    writeFileSync(gitkeepPath, 'custom\n', 'utf8');
+
+    const err = await runInit({ targetDir: dir, yes: true }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(InitConflictError);
+    expect((err as InitConflictError).conflicts).toContain(GITKEEP_REL);
+    expect(readFileSync(gitkeepPath, 'utf8')).toBe('custom\n');
+  });
+
+  it('creates the expected .gitkeep placeholders on a clean init', async () => {
+    const dir = makeTempDir();
+
+    await runInit({ targetDir: dir, yes: true });
+
+    const gitkeepPath = join(dir, GITKEEP_REL);
+    expect(existsSync(gitkeepPath)).toBe(true);
+    expect(readFileSync(gitkeepPath, 'utf8')).toBe('');
+  });
+
+  it('a repeated init is refused without touching .gitkeep files created by the first run', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const gitkeepPath = join(dir, GITKEEP_REL);
+    const contentAfterFirstInit = readFileSync(gitkeepPath, 'utf8');
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(readFileSync(gitkeepPath, 'utf8')).toBe(contentAfterFirstInit);
+  });
+});

@@ -18,7 +18,7 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { acquireLock } from './lock.js';
 import { StateCorruptedError, StateSchemaError } from './errors.js';
-import { STATE_SCHEMA_VERSION, createInitialState, } from './types.js';
+import { STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1, createInitialState, } from './types.js';
 export const STATE_FILE_NAME = 'state.json';
 export function stateFilePath(stateDir) {
     return join(stateDir, STATE_FILE_NAME);
@@ -93,15 +93,36 @@ function validateCheckpoint(id, raw) {
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
- * match the v1 schema — this function never "fixes" or partially accepts
- * malformed state.
+ * match a supported schema version — this function never "fixes" or
+ * partially accepts malformed state.
+ *
+ * Supports exactly two on-disk shapes:
+ * - `schemaVersion: 2` (current) — `tactical.checkpoints` is required.
+ * - `schemaVersion: 1` (legacy, pre-COORDINATORIUM-002) — migrated
+ *   in-memory to v2 on read (see `migrateV1ToV2`). Anything else
+ *   (including a *newer* version this binary doesn't know about) is
+ *   rejected outright — this is the deliberate fix for the compatibility
+ *   gap an independent review found in the first COORDINATORIUM-002 cut:
+ *   that cut kept `schemaVersion` at 1 while adding `tactical.checkpoints`,
+ *   so an *older* binary (hardcoded to `schemaVersion === 1`, with no
+ *   notion of checkpoints) could read a checkpoint-bearing v1-tagged file,
+ *   reconstruct state from only the fields it knew about (`tactical: {
+ *   missions }`, dropping checkpoints entirely — this function has never
+ *   been a passthrough for unknown fields), and silently overwrite the
+ *   file on its next mutateState call, destroying checkpoint history with
+ *   no error raised. Bumping to 2 converts that silent data loss into a
+ *   loud, immediate `StateSchemaError` for any reader that doesn't
+ *   understand v2 — the version check below runs before anything is ever
+ *   read into a mutable draft, so mutateState never reaches its write step
+ *   (same proven pattern as the existing corrupted-JSON guard).
  */
 export function validateState(raw) {
     if (!isPlainObject(raw)) {
         throw new StateSchemaError('State root is not an object');
     }
-    if (raw.schemaVersion !== STATE_SCHEMA_VERSION) {
-        throw new StateSchemaError(`Unsupported schemaVersion "${String(raw.schemaVersion)}" (expected ${STATE_SCHEMA_VERSION})`);
+    if (raw.schemaVersion !== STATE_SCHEMA_VERSION && raw.schemaVersion !== LEGACY_SCHEMA_VERSION_V1) {
+        throw new StateSchemaError(`Unsupported schemaVersion "${String(raw.schemaVersion)}" ` +
+            `(expected ${STATE_SCHEMA_VERSION}, or legacy ${LEGACY_SCHEMA_VERSION_V1} for migration)`);
     }
     if (typeof raw.revision !== 'number' || !Number.isInteger(raw.revision) || raw.revision < 0) {
         throw new StateSchemaError(`Invalid revision "${String(raw.revision)}"`);
@@ -116,20 +137,42 @@ export function validateState(raw) {
     for (const [id, m] of Object.entries(raw.tactical.missions)) {
         missions[id] = validateMission(id, m);
     }
-    // tactical.checkpoints (COORDINATORIUM-002) is additive and optional on
-    // read: a state.json written before this story has no `checkpoints` key
-    // at all. Its absence is not an error — default to {} — but if present
-    // it must be a plain object, and every entry must validate.
     const rawCheckpoints = raw.tactical.checkpoints;
-    if (rawCheckpoints !== undefined && !isPlainObject(rawCheckpoints)) {
-        throw new StateSchemaError('Invalid tactical.checkpoints');
-    }
     const checkpoints = {};
-    if (rawCheckpoints !== undefined) {
+    if (raw.schemaVersion === LEGACY_SCHEMA_VERSION_V1) {
+        // v1→v2 migration path: a genuine pre-COORDINATORIUM-002 file has no
+        // `checkpoints` key at all — default to {}. Tolerate (and validate) one
+        // being present anyway, defensively, in case a file was ever written by
+        // the since-corrected transitional code that kept schemaVersion at 1
+        // while already writing checkpoints — nothing is lost either way.
+        if (rawCheckpoints !== undefined && !isPlainObject(rawCheckpoints)) {
+            throw new StateSchemaError('Invalid tactical.checkpoints');
+        }
+        if (rawCheckpoints !== undefined) {
+            for (const [id, c] of Object.entries(rawCheckpoints)) {
+                checkpoints[id] = validateCheckpoint(id, c);
+            }
+        }
+    }
+    else {
+        // schemaVersion === STATE_SCHEMA_VERSION (2): every v2 writer always
+        // serializes tactical.checkpoints (even as {}), so its absence here is
+        // itself a sign of a malformed/hand-edited file, not a legacy case —
+        // required, not defaulted.
+        if (!isPlainObject(rawCheckpoints)) {
+            throw new StateSchemaError('Invalid tactical.checkpoints');
+        }
         for (const [id, c] of Object.entries(rawCheckpoints)) {
             checkpoints[id] = validateCheckpoint(id, c);
         }
     }
+    // Migration is applied purely in-memory here — revision and every
+    // mission/checkpoint field are carried over exactly, only schemaVersion
+    // is relabeled. No write happens during a read (same "reads are never a
+    // side effect" rule as the missing-file case in readState below); the
+    // migrated v2 shape is only ever persisted to disk the next time
+    // mutateState's existing atomic read-modify-write cycle runs — no
+    // separate migration-write path, no new on-disk mechanism.
     return {
         schemaVersion: STATE_SCHEMA_VERSION,
         revision: raw.revision,

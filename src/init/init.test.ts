@@ -40,10 +40,10 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     expect(existsSync(statePath)).toBe(true);
     const state = JSON.parse(readFileSync(statePath, 'utf8'));
     expect(state).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       revision: 0,
       strategic: { systems: {} },
-      tactical: { missions: {} },
+      tactical: { missions: {}, checkpoints: {} },
     });
   });
 
@@ -52,6 +52,10 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     await scaffoldInstance(dir, CONFIG);
 
     const statePath = join(dir, '.monolith', 'state.json');
+    // Deliberately a legacy (schemaVersion: 1) shape here — this test's
+    // only claim is "re-init never touches an existing state.json,
+    // regardless of its content/shape", which is actually a stronger
+    // check with a legacy-shaped fixture than a current one.
     const mutated = {
       schemaVersion: 1,
       revision: 3,

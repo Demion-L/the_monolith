@@ -127,7 +127,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/coordinatorium/mission.ts`   | `startMission()`, `listMissions()`, `getMission()`, `finishMission()` |
 | `src/coordinatorium/checkpoint.ts` | `createCheckpoint()`, `listCheckpoints()`, `getCheckpoint()` — append-only |
 | `src/coordinatorium/cli.ts`       | `monolith mission` command handlers (incl. `checkpoint`/`checkpoints`) |
-| `src/coordinatorium/*.test.ts`    | Vitest test suite (225 tests, incl. real multi-process concurrency)  |
+| `src/coordinatorium/*.test.ts`    | Vitest test suite (234 tests, incl. real multi-process concurrency and a real-historical-code compat test) |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
 ---
@@ -155,9 +155,9 @@ What MONOLITH does today (138 tests passing, typecheck clean):
 - Historical record: `docs/webway-v0.md`
 
 **Coordinatorium — Tactical Mission Lifecycle** (first vertical slice, ADR-008):
-- `.monolith/state.json` — canonical, schema-versioned project state (`schemaVersion`, `revision`, `strategic.systems` reserved, `tactical.missions`, `tactical.checkpoints`)
+- `.monolith/state.json` — canonical, schema-versioned project state (`schemaVersion: 2`, `revision`, `strategic.systems` reserved, `tactical.missions`, `tactical.checkpoints`)
 - `monolith mission start|list|show|finish` — register and close out missions; see Mission Lifecycle section below
-- `monolith mission checkpoint|checkpoints` (COORDINATORIUM-002) — durable, append-only progress checkpoints for an `in_progress` mission; no `schemaVersion` bump (additive, backward-compatible with pre-002 state.json)
+- `monolith mission checkpoint|checkpoints` (COORDINATORIUM-002) — durable, append-only progress checkpoints for an `in_progress` mission; `schemaVersion` bumped to 2 (a v1 file is migrated in-memory on read, see ADR-008's compatibility-fix addendum — a pre-002 binary refuses to touch a v2 file instead of silently dropping checkpoints)
 - Deterministic State Keeper: cross-process file lock + atomic write, no lost updates, no LLM/database/background service involved
 - Strategic Coordinatorium (product/subsystem state) is **not implemented** — schema-reserved only
 
@@ -268,12 +268,13 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 151 total tests passing, typecheck clean
 
 **COORDINATORIUM-002 — Mission Checkpoints** — implemented 2026-10-21, pending review/finalization
-- [x] `Checkpoint` domain entity, `tactical.checkpoints` sibling map (additive, no `schemaVersion` bump)
+- [x] `Checkpoint` domain entity, `tactical.checkpoints` sibling map
 - [x] `createCheckpoint`/`listCheckpoints`/`getCheckpoint` (append-only — no update/delete path)
 - [x] `monolith mission checkpoint|checkpoints` CLI
 - [x] `MissionNotActiveError`/`CheckpointNotFoundError` added to the Coordinatorium error taxonomy
-- [x] ADR-008 amended with a dated addendum (same convention as the 2026-10-21 hardening passes)
-- [x] 225 total tests passing (39 new), typecheck and build clean
+- [x] `schemaVersion` bumped to 2 with a deterministic v1→v2 migration on read (compatibility-fix addendum, same day: the first cut kept `schemaVersion` at 1, which an independent review confirmed would let a pre-002 binary silently drop checkpoints on write — fixed before integration)
+- [x] ADR-008 amended with two dated addenda (same convention as the 2026-10-21 lock.ts hardening passes)
+- [x] 234 total tests passing (48 new over COORDINATORIUM-001's 186), typecheck and build clean
 
 **Candidate next stories (not decisions):**
 - Corpus relationship density (32 edges / 481 nodes — too sparse)

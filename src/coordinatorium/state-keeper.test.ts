@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import ts from 'typescript';
 import { readState, mutateState, validateState, stateFilePath } from './state-keeper.js';
-import { createInitialState } from './types.js';
+import { createInitialState, STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1 } from './types.js';
 import { StateCorruptedError, StateSchemaError } from './errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -73,14 +73,21 @@ describe('validateState', () => {
   });
 
   // -------------------------------------------------------------------------
-  // COORDINATORIUM-002 backward compatibility: a state.json written before
-  // Mission Checkpoints existed has no `tactical.checkpoints` key at all.
-  // It must remain readable — no schemaVersion bump, no throw.
+  // COORDINATORIUM-002 compatibility fix: an independent review found that
+  // keeping schemaVersion at 1 while adding tactical.checkpoints let an
+  // OLD binary (hardcoded to schemaVersion === 1) silently drop checkpoints
+  // on its next write — this function has never passed through unknown
+  // fields, it reconstructs state field-by-field. The fix bumps
+  // STATE_SCHEMA_VERSION to 2 and migrates a v1 file in-memory on read
+  // (LEGACY_SCHEMA_VERSION_V1 === 1). A v1 file written before Mission
+  // Checkpoints existed has no `tactical.checkpoints` key at all and must
+  // remain readable (migrated, not rejected); a v2 file, by contrast,
+  // always has the key and it is required there.
   // -------------------------------------------------------------------------
 
-  it('defaults tactical.checkpoints to {} when the key is entirely absent (pre-002 state.json)', () => {
+  it('migrates a v1 file (LEGACY_SCHEMA_VERSION_V1) to the in-memory v2 shape, defaulting tactical.checkpoints to {} when absent (pre-002 state.json)', () => {
     const legacy = {
-      schemaVersion: 1,
+      schemaVersion: LEGACY_SCHEMA_VERSION_V1,
       revision: 3,
       strategic: { systems: {} },
       tactical: {
@@ -99,14 +106,16 @@ describe('validateState', () => {
       },
     };
     const state = validateState(legacy);
+    expect(state.schemaVersion).toBe(STATE_SCHEMA_VERSION); // migrated, never left at 1
     expect(state.tactical.checkpoints).toEqual({});
+    expect(state.revision).toBe(3); // preserved exactly by migration
     expect(state.tactical.missions['MIS-0001'].title).toBe('Pre-checkpoints mission');
   });
 
   it('readState parses a legacy on-disk file with no tactical.checkpoints key without throwing', async () => {
     const dir = makeTempDir();
     const legacy = {
-      schemaVersion: 1,
+      schemaVersion: LEGACY_SCHEMA_VERSION_V1,
       revision: 0,
       strategic: { systems: {} },
       tactical: { missions: {} },
@@ -151,6 +160,43 @@ describe('validateState', () => {
       tactical: { missions: {}, checkpoints: { [checkpoint.id]: checkpoint } },
     };
     expect(validateState(good).tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
+  });
+
+  it('rejects a v2 (current) file whose tactical.checkpoints key is missing — required, not defaulted, once on v2', () => {
+    const bad = {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      revision: 0,
+      strategic: { systems: {} },
+      tactical: { missions: {} }, // no checkpoints key at all
+    };
+    expect(() => validateState(bad)).toThrow(StateSchemaError);
+    expect(() => validateState(bad)).toThrow(/tactical\.checkpoints/);
+  });
+
+  it('rejects a schemaVersion this binary does not understand (neither current nor the one known legacy version)', () => {
+    const bad = { ...createInitialState(), schemaVersion: 3 };
+    expect(() => validateState(bad)).toThrow(StateSchemaError);
+    expect(() => validateState(bad)).toThrow(/schemaVersion/i);
+  });
+
+  it('tolerates a v1-tagged file that already carries a (since-fixed) transitional checkpoints key', () => {
+    const checkpoint = {
+      id: 'MIS-0001-CKPT-0001',
+      missionId: 'MIS-0001',
+      createdAt: '2026-10-21T00:00:00.000Z',
+      summary: 'written while schemaVersion was still 1',
+      remainingSteps: [],
+      context: null,
+    };
+    const transitional = {
+      schemaVersion: LEGACY_SCHEMA_VERSION_V1,
+      revision: 1,
+      strategic: { systems: {} },
+      tactical: { missions: {}, checkpoints: { [checkpoint.id]: checkpoint } },
+    };
+    const state = validateState(transitional);
+    expect(state.schemaVersion).toBe(STATE_SCHEMA_VERSION);
+    expect(state.tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
   });
 });
 

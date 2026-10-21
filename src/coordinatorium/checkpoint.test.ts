@@ -3,12 +3,12 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import ts from 'typescript';
 import { createCheckpoint, listCheckpoints, getCheckpoint } from './checkpoint.js';
 import { startMission, finishMission } from './mission.js';
 import { readState, stateFilePath } from './state-keeper.js';
-import { createInitialState } from './types.js';
+import { STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1 } from './types.js';
 import {
   MissionNotFoundError,
   MissionNotActiveError,
@@ -34,6 +34,41 @@ afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Legacy (schemaVersion: 1) fixture helpers — construct a genuine pre-
+// COORDINATORIUM-002-shaped file by hand, never via the current
+// createInitialState() (which now always stamps schemaVersion: 2).
+// ---------------------------------------------------------------------------
+
+function legacyMission(id: string, overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id,
+    title: 'Legacy mission',
+    system: 'coordinatorium',
+    status: 'in_progress',
+    startedAt: '2026-10-21T00:00:00.000Z',
+    updatedAt: '2026-10-21T00:00:00.000Z',
+    summary: null,
+    ...overrides,
+  };
+}
+
+function legacyV1Fixture(opts: {
+  revision?: number;
+  missions?: Record<string, unknown>;
+  /** Omit entirely to simulate a genuine pre-002 file with no such key. */
+  checkpoints?: Record<string, unknown>;
+}): Record<string, unknown> {
+  const tactical: Record<string, unknown> = { missions: opts.missions ?? {} };
+  if (opts.checkpoints !== undefined) tactical.checkpoints = opts.checkpoints;
+  return {
+    schemaVersion: LEGACY_SCHEMA_VERSION_V1,
+    revision: opts.revision ?? 0,
+    strategic: { systems: {} },
+    tactical,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // createCheckpoint
@@ -271,52 +306,222 @@ describe('round-trip serialization', () => {
 // Backward compatibility: old state.json without tactical.checkpoints
 // ---------------------------------------------------------------------------
 
-describe('backward compatibility with pre-COORDINATORIUM-002 state.json', () => {
-  it('readState defaults tactical.checkpoints to {} when the key is entirely absent', async () => {
+describe('schemaVersion migration (v1 → v2)', () => {
+  it('readState migrates a genuine pre-002 v1 file in-memory: schemaVersion becomes 2, checkpoints defaults to {}, nothing on disk is touched', async () => {
     const dir = makeTempDir();
-    const legacyState = createInitialState() as unknown as { tactical: { missions: unknown; checkpoints?: unknown } };
-    legacyState.tactical.missions = {
-      'MIS-0001': {
-        id: 'MIS-0001',
-        title: 'Legacy mission',
-        system: 'coordinatorium',
-        status: 'in_progress',
-        startedAt: '2026-10-21T00:00:00.000Z',
-        updatedAt: '2026-10-21T00:00:00.000Z',
-        summary: null,
-      },
-    };
-    delete legacyState.tactical.checkpoints;
-    writeFileSync(stateFilePath(dir), JSON.stringify(legacyState, null, 2), 'utf8');
+    const legacy = legacyV1Fixture({ revision: 3, missions: { 'MIS-0001': legacyMission('MIS-0001') } });
+    writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
+    const before = readFileSync(stateFilePath(dir), 'utf8');
 
     const state = await readState(dir);
+    expect(state.schemaVersion).toBe(STATE_SCHEMA_VERSION); // 2, in-memory
     expect(state.tactical.checkpoints).toEqual({});
+    expect(state.revision).toBe(3); // preserved exactly
+    expect(state.tactical.missions['MIS-0001'].title).toBe('Legacy mission');
     expect(await listCheckpoints(dir, 'MIS-0001')).toEqual([]);
+
+    // Pure read — no side effect, exactly like the existing missing-file case.
+    expect(readFileSync(stateFilePath(dir), 'utf8')).toBe(before);
+    expect(JSON.parse(before).schemaVersion).toBe(1);
   });
 
-  it('createCheckpoint works against a legacy file missing tactical.checkpoints', async () => {
+  it('tolerates (and preserves) a v1-tagged file that already has checkpoints — the since-fixed transitional shape', async () => {
     const dir = makeTempDir();
-    const legacyState = createInitialState() as unknown as { tactical: { missions: unknown; checkpoints?: unknown } };
-    legacyState.tactical.missions = {
-      'MIS-0001': {
-        id: 'MIS-0001',
-        title: 'Legacy mission',
-        system: 'coordinatorium',
-        status: 'in_progress',
-        startedAt: '2026-10-21T00:00:00.000Z',
-        updatedAt: '2026-10-21T00:00:00.000Z',
-        summary: null,
-      },
+    const existingCheckpoint = {
+      id: 'MIS-0001-CKPT-0001',
+      missionId: 'MIS-0001',
+      createdAt: '2026-10-21T00:00:00.000Z',
+      summary: 'written by the vulnerable transitional code',
+      remainingSteps: [],
+      context: null,
     };
-    delete legacyState.tactical.checkpoints;
-    writeFileSync(stateFilePath(dir), JSON.stringify(legacyState, null, 2), 'utf8');
+    const legacy = legacyV1Fixture({
+      revision: 1,
+      missions: { 'MIS-0001': legacyMission('MIS-0001') },
+      checkpoints: { [existingCheckpoint.id]: existingCheckpoint },
+    });
+    writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
+
+    const state = await readState(dir);
+    expect(state.tactical.checkpoints[existingCheckpoint.id]).toEqual(existingCheckpoint);
+    expect(await getCheckpoint(dir, existingCheckpoint.id)).toEqual(existingCheckpoint);
+  });
+
+  it('createCheckpoint against a legacy v1 file migrates and persists it as v2 on disk, preserving the existing mission', async () => {
+    const dir = makeTempDir();
+    const legacy = legacyV1Fixture({ revision: 1, missions: { 'MIS-0001': legacyMission('MIS-0001') } });
+    writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
 
     const checkpoint = await createCheckpoint(dir, 'MIS-0001', { summary: 'first ever checkpoint' });
     expect(checkpoint.id).toBe('MIS-0001-CKPT-0001');
 
+    // The on-disk file is now v2 — the migration is persisted as a side
+    // effect of the ordinary mutateState write, not a separate mechanism.
+    const onDisk = JSON.parse(readFileSync(stateFilePath(dir), 'utf8'));
+    expect(onDisk.schemaVersion).toBe(2);
+    expect(onDisk.tactical.missions['MIS-0001'].title).toBe('Legacy mission');
+    expect(onDisk.tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
+    expect(onDisk.revision).toBe(2); // 1 (legacy) + 1 (this mutation) — revision preserved, then incremented once
+
     const state = await readState(dir);
     expect(state.tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
   });
+
+  it('an ordinary mission mutation (not just createCheckpoint) also migrates a legacy v1 file to v2 on disk', async () => {
+    const dir = makeTempDir();
+    const legacy = legacyV1Fixture({ revision: 5, missions: { 'MIS-0001': legacyMission('MIS-0001') } });
+    writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
+
+    await finishMission(dir, 'MIS-0001', { result: 'completed' });
+
+    const onDisk = JSON.parse(readFileSync(stateFilePath(dir), 'utf8'));
+    expect(onDisk.schemaVersion).toBe(2);
+    expect(onDisk.tactical.checkpoints).toEqual({});
+    expect(onDisk.tactical.missions['MIS-0001'].status).toBe('completed');
+    expect(onDisk.revision).toBe(6);
+  });
+
+  it('rejects a v2-tagged file whose tactical.checkpoints key is missing (required, not defaulted, once on v2)', async () => {
+    const dir = makeTempDir();
+    const malformed = {
+      schemaVersion: STATE_SCHEMA_VERSION,
+      revision: 0,
+      strategic: { systems: {} },
+      tactical: { missions: {} }, // no checkpoints — not a legacy v1 file, so this is corruption
+    };
+    writeFileSync(stateFilePath(dir), JSON.stringify(malformed, null, 2), 'utf8');
+    await expect(readState(dir)).rejects.toThrow(/tactical\.checkpoints/);
+  });
+
+  it('rejects an unsupported schemaVersion (neither current nor the one known legacy version)', async () => {
+    const dir = makeTempDir();
+    const bad = legacyV1Fixture({ missions: {} });
+    bad.schemaVersion = 99;
+    writeFileSync(stateFilePath(dir), JSON.stringify(bad, null, 2), 'utf8');
+    await expect(readState(dir)).rejects.toThrow(/schemaVersion/i);
+  });
+
+  it(
+    'concurrent checkpoint creation against the same legacy v1 file migrates exactly once, with no lost updates and no duplicate ids',
+    async () => {
+      const dir = makeTempDir();
+      const legacy = legacyV1Fixture({ revision: 1, missions: { 'MIS-0001': legacyMission('MIS-0001') } });
+      writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
+
+      const N = 6;
+      const results = await Promise.all(
+        Array.from({ length: N }, (_, i) => createCheckpoint(dir, 'MIS-0001', { summary: `concurrent ${i}` })),
+      );
+      const ids = results.map((c) => c.id);
+      expect(new Set(ids).size).toBe(N);
+
+      const onDisk = JSON.parse(readFileSync(stateFilePath(dir), 'utf8'));
+      expect(onDisk.schemaVersion).toBe(2);
+      expect(Object.keys(onDisk.tactical.checkpoints)).toHaveLength(N);
+      expect(onDisk.revision).toBe(1 + N); // legacy revision 1, then +1 per successful mutation
+    },
+    30_000,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Pre-COORDINATORIUM-002 binary safety against a v2 file.
+//
+// This is the regression test for the exact defect an independent review
+// found in the first cut of this story: that cut kept schemaVersion at 1
+// while adding checkpoints, so an OLD binary (hardcoded to schemaVersion
+// === 1, with no concept of checkpoints) could read a checkpoint-bearing
+// file, silently reconstruct it without checkpoints, and overwrite it on
+// its next write. To prove the fix concretely (not just by code reading),
+// this test transpiles the ACTUAL pre-002 sources from git history (commit
+// 681d88d — the last commit before this story) and runs them, for real, as
+// a separate child process against a real v2 file with real checkpoints.
+// ---------------------------------------------------------------------------
+
+const PRE_002_COMMIT = '681d88d';
+const HISTORICAL_MODULES = ['types', 'errors', 'lock', 'state-keeper', 'mission'];
+
+function gitShowFile(sha: string, relPath: string): string {
+  return execFileSync('git', ['show', `${sha}:${relPath}`], { cwd: __dirname, encoding: 'utf8' });
+}
+
+/** Transpiles the historical (pre-002) coordinatorium sources at `sha` into plain ESM .mjs in destDir. */
+function transpileHistoricalCoordinatoriumTo(destDir: string, sha: string): void {
+  mkdirSync(destDir, { recursive: true });
+  for (const name of HISTORICAL_MODULES) {
+    const source = gitShowFile(sha, `src/coordinatorium/${name}.ts`);
+    const { outputText } = ts.transpileModule(source, {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      fileName: `${name}.ts`,
+    });
+    let js = outputText;
+    for (const mod of HISTORICAL_MODULES) {
+      js = js.split(`'./${mod}.js'`).join(`'./${mod}.mjs'`).split(`"./${mod}.js"`).join(`"./${mod}.mjs"`);
+    }
+    writeFileSync(join(destDir, `${name}.mjs`), js, 'utf8');
+  }
+
+  // The historical mission.ts only exports startMission/listMissions/getMission/finishMission —
+  // exercising startMission is enough to drive the full historical
+  // readState -> validateState -> mutateState -> write cycle.
+  const childScript = `
+import { startMission } from './mission.mjs';
+const [stateDir] = process.argv.slice(2);
+try {
+  const mission = await startMission(stateDir, { title: 'should never be written', system: 'old-binary-probe' });
+  process.stdout.write(JSON.stringify({ ok: true, mission }));
+} catch (err) {
+  process.stderr.write(String(err && err.message ? err.message : err));
+  process.exitCode = 1;
+}
+`;
+  writeFileSync(join(destDir, 'old-binary-probe-child.mjs'), childScript, 'utf8');
+}
+
+function runOldBinaryProbe(moduleDir: string, stateDir: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [join(moduleDir, 'old-binary-probe-child.mjs'), stateDir]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => (stdout += d));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.on('error', reject);
+    child.on('close', (code) => resolvePromise({ exitCode: code ?? -1, stdout, stderr }));
+  });
+}
+
+describe('pre-COORDINATORIUM-002 binary safety against a v2 file', () => {
+  it(
+    'a real pre-002 binary (historical code from git) refuses to touch a v2 state.json with real checkpoints — it throws before any write, so the file on disk is untouched',
+    async () => {
+      const stateDir = makeTempDir();
+      const moduleDir = makeTempDir();
+
+      // Build a REAL, current-format (v2) state.json with real checkpoint
+      // data, via the current code under test.
+      const mission = await startMission(stateDir, { title: 'A', system: 's' });
+      await createCheckpoint(stateDir, mission.id, { summary: 'must survive untouched' });
+      const before = readFileSync(stateFilePath(stateDir), 'utf8');
+      const beforeParsed = JSON.parse(before);
+      expect(beforeParsed.schemaVersion).toBe(2);
+      expect(Object.keys(beforeParsed.tactical.checkpoints)).toHaveLength(1);
+
+      transpileHistoricalCoordinatoriumTo(moduleDir, PRE_002_COMMIT);
+      const outcome = await runOldBinaryProbe(moduleDir, stateDir);
+
+      // The old binary must fail loudly, not silently succeed.
+      expect(outcome.exitCode).not.toBe(0);
+      expect(outcome.stderr).toMatch(/schemaVersion/i);
+      expect(outcome.stdout).toBe(''); // never reached the "it worked" branch
+
+      // And the file on disk — checkpoints included — must be byte-for-byte
+      // untouched: the old binary's readState threw before mutateState ever
+      // reached its write step.
+      const after = readFileSync(stateFilePath(stateDir), 'utf8');
+      expect(after).toBe(before);
+    },
+    30_000,
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 ---
 type: report
 id: graph-dogfood-v1-2
-generated: 2026-06-28
+generated: 2026-10-21
 experiment: Story 1.3.3 — Canonical Identity Aliases
 supersedes: graph-dogfood-v1-1
 ---
@@ -9,7 +9,7 @@ supersedes: graph-dogfood-v1-1
 # Graph Dogfood Report v1.2
 
 **Experiment:** Story 1.3.3 — Canonical Identity Aliases (post-fix rerun)
-**Generated:** 2026-06-28 20:21:42 UTC
+**Generated:** 2026-10-21 11:05:00 UTC
 **Pipeline:** `compileMarkdownArtifact()` → `buildGraph()`
 **Changes vs v1.1:** Scriptorium now emits `documentId` and `documentTitle` from frontmatter; graph builder registers both as aliases before relationship resolution — eliminating synthesized placeholders for documents that exist in the corpus.
 
@@ -17,20 +17,20 @@ supersedes: graph-dogfood-v1-1
 
 ## 1. Summary
 
-| Metric                                   | Value     |
-| ---------------------------------------- | --------- |
-| Markdown files discovered                | 83        |
-| Files compiled                           | 81        |
-| Files skipped (too short)                | 2         |
-| Total concept candidates                 | 600       |
-| Total relationship candidates            | 32        |
-| Graph nodes (total)                      | 481       |
-| Graph nodes (real — from concepts)       | 481       |
-| Graph nodes (synthesized — placeholders) | 0         |
-| Graph edges                              | 32        |
-| Edges with both nodes real               | 32 (100%) |
-| Graph diagnostics (info)                 | 58        |
-| Graph diagnostics (warn)                 | 0         |
+| Metric                                   | Value    |
+| ---------------------------------------- | -------- |
+| Markdown files discovered                | 76       |
+| Files compiled                           | 74       |
+| Files skipped (too short)                | 2        |
+| Total concept candidates                 | 485      |
+| Total relationship candidates            | 16       |
+| Graph nodes (total)                      | 392      |
+| Graph nodes (real — from concepts)       | 389      |
+| Graph nodes (synthesized — placeholders) | 3        |
+| Graph edges                              | 16       |
+| Edges with both nodes real               | 13 (81%) |
+| Graph diagnostics (info)                 | 49       |
+| Graph diagnostics (warn)                 | 3        |
 
 ---
 
@@ -38,8 +38,8 @@ supersedes: graph-dogfood-v1-1
 
 | Source      | Count | Share |
 | ----------- | ----- | ----- |
-| heading     | 527   | 88%   |
-| list-item   | 73    | 12%   |
+| heading     | 416   | 86%   |
+| list-item   | 69    | 14%   |
 | frontmatter | 0     | 0%    |
 | link-label  | 0     | 0%    |
 
@@ -49,10 +49,10 @@ supersedes: graph-dogfood-v1-1
 
 | Relationship type | Edge count |
 | ----------------- | ---------- |
-| related_research  | 14         |
-| related_adrs      | 9          |
-| follow_up_adrs    | 5          |
+| related_adrs      | 5          |
 | related_protocols | 4          |
+| protocols         | 4          |
+| referenced_by     | 3          |
 
 ---
 
@@ -60,29 +60,33 @@ supersedes: graph-dogfood-v1-1
 
 Ranked by total degree (in-edges + out-edges).
 
-| Node                                                   | Canonical label                                          | Degree | Sources | Synthesized? |
-| ------------------------------------------------------ | -------------------------------------------------------- | ------ | ------- | ------------ |
-| r-0001-lessons-learned-from-iai-personal-memory-engine | R-0001 — Lessons Learned from IAI Personal Memory Engine | 9      | 1       | -            |
-| r-0002-oracle-memory-systems                           | R-0002 — Oracle Memory Systems                           | 9      | 1       | -            |
-| adr-004-terra-vs-graph-memex                           | ADR-004 — Terra vs Graph Memex                           | 8      | 1       | -            |
-| r-0003-cognitive-architecture-notes                    | R-0003 — Cognitive Architecture Notes                    | 7      | 1       | -            |
-| adr-005-lexicon-mechanicus                             | ADR-005 — Lexicon Mechanicus                             | 5      | 1       | -            |
-| knowledge-pipeline                                     | Knowledge Pipeline                                       | 5      | 1       | -            |
-| adr-006-terra-persistence-strategy                     | ADR-006 — Terra Persistence Strategy                     | 4      | 1       | -            |
-| memory-architecture                                    | Memory Architecture                                      | 4      | 1       | -            |
-| memory-governance                                      | Memory Governance                                        | 4      | 2       | -            |
-| long-term-vision                                       | Long-Term Vision                                         | 3      | 1       | -            |
-| cognitive-infrastructure                               | Cognitive Infrastructure                                 | 2      | 1       | -            |
-| active-working-memory                                  | Active Working Memory                                    | 1      | 1       | -            |
-| architectural-decisions                                | Architectural Decisions                                  | 1      | 1       | -            |
-| architecture-principles                                | Architecture Principles                                  | 1      | 2       | -            |
-| story-index                                            | Story Index                                              | 1      | 1       | -            |
+| Node                                                                         | Canonical label                                                                | Degree | Sources | Synthesized? |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------ | ------- | ------------ |
+| memory-governance                                                            | Memory Governance                                                              | 6      | 1       | -            |
+| active-working-memory                                                        | Active Working Memory                                                          | 4      | 1       | -            |
+| adr-007-explicit-only-identity-resolution-in-the-explicit-relationship-graph | ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph | 4      | 1       | -            |
+| skill-finalize-story                                                         | Skill: Finalize Story                                                          | 3      | 1       | -            |
+| adr-008-coordinatorium-tactical-mission-lifecycle-first-vertical-slice       | ADR-008 — Coordinatorium: Tactical Mission Lifecycle (First Vertical Slice)    | 2      | 1       | -            |
+| skill-self-improvement                                                       | Skill: Self Improvement                                                        | 2      | 1       | -            |
+| toolkit-pipeline                                                             | Toolkit Pipeline                                                               | 2      | 1       | -            |
+| adr-004                                                                      | ADR-004                                                                        | 1      | 1       | YES          |
+| adr-005                                                                      | ADR-005                                                                        | 1      | 1       | YES          |
+| architectural-decisions                                                      | Architectural Decisions                                                        | 1      | 1       | -            |
+| architecture-principles                                                      | Architecture Principles                                                        | 1      | 2       | -            |
+| failure-memory-logging                                                       | failure-memory-logging                                                         | 1      | 1       | YES          |
+| integrity-verification                                                       | Integrity Verification                                                         | 1      | 1       | -            |
+| skill-current-status                                                         | Skill: Current Status                                                          | 1      | 1       | -            |
+| skill-global-status                                                          | Skill: Global Status                                                           | 1      | 1       | -            |
 
 ---
 
 ## 5. Unresolved Relationship Targets (Synthesized Placeholders)
 
-_No unresolved TO-side targets — all relationship targets found as real concepts._
+3 nodes were synthesized because they appeared as relationship targets (TO side) but were not found as concepts in any artifact.
+
+- `adr-004`
+- `adr-005`
+- `failure-memory-logging`
 
 ---
 
@@ -90,47 +94,46 @@ _No unresolved TO-side targets — all relationship targets found as real concep
 
 Nodes where multiple label variants (different casing, backtick formatting, etc.) were unified.
 
-| Canonical label                      | Aliases                                                           |
-| ------------------------------------ | ----------------------------------------------------------------- |
-| Active Working Memory                | memory-working-active                                             |
-| ADR-004 — Terra vs Graph Memex       | ADR-004, Terra vs Graph Memex                                     |
-| ADR-005 — Lexicon Mechanicus         | ADR-005, Lexicon Mechanicus                                       |
-| ADR-006 — Terra Persistence Strategy | ADR-006, Terra Persistence Strategy                               |
-| AI Assistant Boot Sequence           | protocol-boot-sequence                                            |
-| Architectural Decisions              | memory-long-term-decisions                                        |
-| Architecture                         | architecture-index                                                |
-| Architecture Principles              | Architecture principles, memory-long-term-architecture-principles |
-| Cognitive Dry-Run Protocol           | protocol-dry-run                                                  |
-| Cognitive Modes Protocol             | protocol-cognitive-modes                                          |
-| Command Policy                       | protocol-command-policy                                           |
-| Core Invariants                      | protocol-core-invariants                                          |
-| Current Focus                        | Current focus                                                     |
-| Current State                        | context-execution-current-state                                   |
-| Documentation Migration Report       | migration-report                                                  |
-| Error Record Schema                  | error-schema                                                      |
-| Execution History                    | memory-long-term-execution-history                                |
-| Execution Trace Format               | protocol-execution-trace-format                                   |
-| Expected Behavior                    | test-expected-behavior                                            |
-| Hybrid Execution Protocol            | protocol-hybrid-execution                                         |
+| Canonical label                                                                | Aliases                                                                       |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Active Working Memory                                                          | memory-working-active                                                         |
+| ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph | ADR-007, Explicit-Only Identity Resolution in the Explicit Relationship Graph |
+| ADR-008 — Coordinatorium: Tactical Mission Lifecycle (First Vertical Slice)    | ADR-008, Coordinatorium — Tactical Mission Lifecycle (First Vertical Slice)   |
+| AI Assistant Boot Sequence                                                     | protocol-boot-sequence                                                        |
+| Architectural Decisions                                                        | memory-long-term-decisions                                                    |
+| Architecture                                                                   | architecture-index                                                            |
+| Architecture Principles                                                        | Architecture principles, memory-long-term-architecture-principles             |
+| Cognitive Dry-Run Protocol                                                     | protocol-dry-run                                                              |
+| Cognitive Modes Protocol                                                       | protocol-cognitive-modes                                                      |
+| Command Policy                                                                 | protocol-command-policy                                                       |
+| Core Invariants                                                                | protocol-core-invariants                                                      |
+| Current Focus                                                                  | Current focus                                                                 |
+| Current State                                                                  | context-execution-current-state                                               |
+| Documentation Migration Report                                                 | migration-report                                                              |
+| Error Record Schema                                                            | error-schema                                                                  |
+| Execution History                                                              | memory-long-term-execution-history                                            |
+| Execution Trace Format                                                         | protocol-execution-trace-format                                               |
+| Expected Behavior                                                              | test-expected-behavior                                                        |
+| Hybrid Execution Protocol                                                      | protocol-hybrid-execution                                                     |
+| Learning Layer                                                                 | learning-index                                                                |
 
-… and 31 more merged nodes.
+… and 26 more merged nodes.
 
 ---
 
 ## 7. Artifacts Producing Frontmatter Relationships
 
-| File                                                 | Relationship candidates |
-| ---------------------------------------------------- | ----------------------- |
-| docs/architecture/knowledge-pipeline.md              | 5                       |
-| docs/architecture/memory-architecture.md             | 4                       |
-| docs/research/R-0001-iai-personal-memory-engine.md   | 4                       |
-| docs/research/R-0002-oracle-memory-systems.md        | 4                       |
-| docs/research/R-0003-cognitive-architecture-notes.md | 3                       |
-| docs/vision/long-term-vision.md                      | 3                       |
-| docs/architecture/cognitive-infrastructure.md        | 2                       |
-| docs/adr/ADR-004-terra-vs-graph-memex.md             | 1                       |
-| docs/adr/ADR-005-lexicon-mechanicus.md               | 1                       |
-| docs/adr/ADR-006-terra-persistence-strategy.md       | 1                       |
+| File                                                                            | Relationship candidates |
+| ------------------------------------------------------------------------------- | ----------------------- |
+| templates/default-instance/monolith/memory/working/active.md                    | 4                       |
+| docs/adr/ADR-007-explicit-identity-resolution.md                                | 2                       |
+| docs/architecture/toolkit-pipeline.md                                           | 2                       |
+| templates/default-instance/monolith/skills/finalize-story/SKILL.md              | 2                       |
+| templates/default-instance/monolith/skills/self-improvement/SKILL.md            | 2                       |
+| docs/adr/ADR-008-coordinatorium-tactical-mission-lifecycle.md                   | 1                       |
+| templates/default-instance/monolith/memory/long-term/architecture-principles.md | 1                       |
+| templates/default-instance/monolith/memory/long-term/decisions.md               | 1                       |
+| templates/default-instance/monolith/memory/working/story-index.md               | 1                       |
 
 ---
 
@@ -138,13 +141,13 @@ Nodes where multiple label variants (different casing, backtick formatting, etc.
 
 Edges where both the source and target are real (non-synthesized) nodes.
 
-| From                                 | Type              | To                                   | Source artifact                    |
-| ------------------------------------ | ----------------- | ------------------------------------ | ---------------------------------- |
-| Active Working Memory                | related_protocols | Memory Governance                    | active                             |
-| ADR-004 — Terra vs Graph Memex       | related_adrs      | ADR-006 — Terra Persistence Strategy | ADR-004-terra-vs-graph-memex       |
-| ADR-005 — Lexicon Mechanicus         | related_adrs      | ADR-004 — Terra vs Graph Memex       | ADR-005-lexicon-mechanicus         |
-| ADR-006 — Terra Persistence Strategy | related_adrs      | ADR-004 — Terra vs Graph Memex       | ADR-006-terra-persistence-strategy |
-| Architectural Decisions              | related_protocols | Memory Governance                    | decisions                          |
+| From                                                                        | Type              | To                                                                             | Source artifact                                   |
+| --------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------ | ------------------------------------------------- |
+| Active Working Memory                                                       | referenced_by     | Skill: Current Status                                                          | active                                            |
+| Active Working Memory                                                       | referenced_by     | Skill: Finalize Story                                                          | active                                            |
+| Active Working Memory                                                       | referenced_by     | Skill: Global Status                                                           | active                                            |
+| Active Working Memory                                                       | related_protocols | Memory Governance                                                              | active                                            |
+| ADR-008 — Coordinatorium: Tactical Mission Lifecycle (First Vertical Slice) | related_adrs      | ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph | ADR-008-coordinatorium-tactical-mission-lifecycle |
 
 ---
 
@@ -152,7 +155,11 @@ Edges where both the source and target are real (non-synthesized) nodes.
 
 Edges where the target node is a synthesized placeholder — the target concept was referenced but not found in the corpus.
 
-_No noisy edges found._
+| From                                                                           | Type         | To (unresolved)        | Source artifact                      |
+| ------------------------------------------------------------------------------ | ------------ | ---------------------- | ------------------------------------ |
+| ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph | related_adrs | ADR-004                | ADR-007-explicit-identity-resolution |
+| ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph | related_adrs | ADR-005                | ADR-007-explicit-identity-resolution |
+| Skill: Self Improvement                                                        | protocols    | failure-memory-logging | SKILL                                |
 
 ---
 
@@ -160,31 +167,31 @@ _No noisy edges found._
 
 ### Are headings producing useful concepts?
 
-527 heading concepts extracted across 81 files.
+416 heading concepts extracted across 74 files.
 No structurally degenerate heading concepts found. Heading extraction quality is good.
 
 Most MONOLITH docs use headings as section titles rather than concept declarations. The structural noise filter (Story 1.3.2) removes the most common offenders. However, many domain-adjacent headings (e.g., "Decision", "Rationale", "References") are still extracted as concepts. The top-connected real nodes ("Knowledge Pipeline", "Memory Architecture", "Memory Governance") are genuine domain concepts, not noise.
 
 ### Are frontmatter relationships producing meaningful edges?
 
-32 relationship candidates extracted from frontmatter.
-The richest relationship sources: docs/architecture/knowledge-pipeline.md, docs/architecture/memory-architecture.md, docs/research/R-0001-iai-personal-memory-engine.md.
+16 relationship candidates extracted from frontmatter.
+The richest relationship sources: templates/default-instance/monolith/memory/working/active.md, docs/adr/ADR-007-explicit-identity-resolution.md, docs/architecture/toolkit-pipeline.md.
 
 The Scriptorium now recognizes `related_adrs`, `related_research`, and `follow_up_adrs` in addition to the original field set. The relationship candidates extracted this run reflect the full field coverage of the MONOLITH docs/ corpus.
 
 ### Are synthesized placeholder nodes useful or noisy?
 
-0 synthesized nodes out of 481 total.
-No synthesized nodes — all targets resolved.
+3 synthesized nodes out of 392 total.
+Low synthesized node count — acceptable for this corpus size.
 
 ### Are canonical labels readable?
 
-51 nodes had multiple label variants merged.
-The `selectCanonicalLabel()` algorithm correctly prefers Title Case over lowercase variants. Examples: "Active Working Memory" (aliases: "memory-working-active"); "ADR-004 — Terra vs Graph Memex" (aliases: "ADR-004", "Terra vs Graph Memex"); "ADR-005 — Lexicon Mechanicus" (aliases: "ADR-005", "Lexicon Mechanicus").
+46 nodes had multiple label variants merged.
+The `selectCanonicalLabel()` algorithm correctly prefers Title Case over lowercase variants. Examples: "Active Working Memory" (aliases: "memory-working-active"); "ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph" (aliases: "ADR-007", "Explicit-Only Identity Resolution in the Explicit Relationship Graph"); "ADR-008 — Coordinatorium: Tactical Mission Lifecycle (First Vertical Slice)" (aliases: "ADR-008", "Coordinatorium — Tactical Mission Lifecycle (First Vertical Slice)").
 
 ### Are relationship targets resolvable enough for Terra?
 
-Resolved edge rate: **100%** (32 of 32 edges).
+Resolved edge rate: **81%** (13 of 16 edges).
 
 The graph has sufficient resolved structure for Terra.
 
@@ -215,7 +222,7 @@ The graph has sufficient resolved structure for Terra.
 
 **READY FOR TERRA**
 
-100% of edges connect two real (non-synthesized) nodes. The graph has enough resolved structure to be a useful persistence target.
+81% of edges connect two real (non-synthesized) nodes. The graph has enough resolved structure to be a useful persistence target.
 
 
 ### Skipped Files

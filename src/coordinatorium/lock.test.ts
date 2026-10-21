@@ -1,12 +1,21 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+  readFileSync,
+  readdirSync,
+  mkdirSync,
+  existsSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { fork, spawnSync, type ChildProcess } from 'child_process';
 import ts from 'typescript';
 import { acquireLock } from './lock.js';
-import { LockTimeoutError } from './errors.js';
+import { LockTimeoutError, LockCreationError } from './errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -134,6 +143,47 @@ try {
 process.exit(0);
 `;
   writeFileSync(join(destDir, 'pausable-recoverer.mjs'), pausableRecoverer, 'utf8');
+
+  // A worker whose metadata write is forced to fail with ENOSPC, and which
+  // pauses (via IPC) right after that failure is detected but before its
+  // own staging-file cleanup — used to prove a failed creator's cleanup
+  // only ever touches its own uniquely-named staging file, never a
+  // concurrently-published canonical lock.
+  //   argv: <lockPath> <timeoutMs>
+  const faultCreator = `
+import { acquireLock } from './lock.mjs';
+
+const [lockPath, timeoutMsStr] = process.argv.slice(2);
+const timeoutMs = Number(timeoutMsStr);
+
+const hooks = {
+  writeMetadata: () => {
+    const err = new Error('simulated ENOSPC');
+    err.code = 'ENOSPC';
+    throw err;
+  },
+  beforeStagingCleanupOnFailure: () => new Promise((resolve) => {
+    process.send({ type: 'paused', at: 'beforeStagingCleanupOnFailure', time: Date.now() });
+    process.on('message', (m) => { if (m === 'resume') resolve(); });
+  }),
+};
+
+try {
+  await acquireLock(lockPath, { timeoutMs, retryDelayMs: 10 }, hooks);
+  process.send({ type: 'acquired', pid: process.pid });
+} catch (err) {
+  process.send({
+    type: 'acquire-failed',
+    message: err.message,
+    code: err.code ?? null,
+    causeCode: err.causeCode ?? null,
+    phase: err.phase ?? null,
+    cleanedUp: err.cleanedUp ?? null,
+  });
+}
+process.exit(0);
+`;
+  writeFileSync(join(destDir, 'fault-creator.mjs'), faultCreator, 'utf8');
 }
 
 interface WorkerMsg {
@@ -546,4 +596,164 @@ describe('release() safety', () => {
     rmSync(lockPath);
     expect(() => release()).not.toThrow();
   });
+});
+
+// ---------------------------------------------------------------------------
+// Partial lock-metadata write safety (final hardening, 2026-10-21).
+//
+// The create path used to be: open(lockPath, 'wx') [publishes the canonical
+// file immediately] -> writeSync(fd, metadata) -> close. A write failure or
+// short write after the open left an empty/partial *canonical*
+// state.json.lock behind — unparseable, therefore "uncertain" per invariant
+// 2, therefore never auto-recoverable. Metadata is now written in full to a
+// private staging file (`<lockPath>.creating.<pid>.<nonce>`) and only
+// published via linkSync once fully written; a failure never touches the
+// canonical path at all.
+// ---------------------------------------------------------------------------
+
+describe('Partial lock-metadata write safety', () => {
+  function stagingLeftovers(dir: string): string[] {
+    return readdirSync(dir).filter((f) => f.includes('.creating.'));
+  }
+
+  it('does not publish state.json.lock when metadata write fails before the first byte', async () => {
+    const dir = makeTempDir();
+    const lockPath = join(dir, 'state.json.lock');
+
+    const writeMetadata = (): number => {
+      const err = new Error('simulated ENOSPC') as NodeJS.ErrnoException;
+      err.code = 'ENOSPC';
+      throw err;
+    };
+
+    await expect(
+      acquireLock(lockPath, { timeoutMs: 300, retryDelayMs: 20 }, { writeMetadata }),
+    ).rejects.toBeInstanceOf(LockCreationError);
+
+    expect(existsSync(lockPath)).toBe(false);
+    expect(stagingLeftovers(dir)).toEqual([]);
+
+    // A subsequent, un-faulted acquire must work normally.
+    const release = await acquireLock(lockPath, { timeoutMs: 1000, retryDelayMs: 20 });
+    expect(existsSync(lockPath)).toBe(true);
+    release();
+  });
+
+  it('handles a short metadata write followed by ENOSPC without publishing a partial lock', async () => {
+    const dir = makeTempDir();
+    const lockPath = join(dir, 'state.json.lock');
+
+    let call = 0;
+    const writeMetadata = (fd: number, buffer: Buffer, offset: number): number => {
+      call += 1;
+      if (call === 1) {
+        // A genuine short write: really write one byte, report it honestly.
+        return writeSync(fd, buffer, offset, 1);
+      }
+      const err = new Error('simulated ENOSPC after short write') as NodeJS.ErrnoException;
+      err.code = 'ENOSPC';
+      throw err;
+    };
+
+    await expect(
+      acquireLock(lockPath, { timeoutMs: 300, retryDelayMs: 20 }, { writeMetadata }),
+    ).rejects.toBeInstanceOf(LockCreationError);
+
+    expect(existsSync(lockPath)).toBe(false);
+    expect(stagingLeftovers(dir)).toEqual([]);
+    expect(call).toBeGreaterThanOrEqual(2); // the short write actually happened before the throw
+
+    const release = await acquireLock(lockPath, { timeoutMs: 1000, retryDelayMs: 20 });
+    expect(existsSync(lockPath)).toBe(true);
+    release();
+  });
+
+  it('LockCreationError reports cause code, pid, nonce, phase and timestamp', async () => {
+    const dir = makeTempDir();
+    const lockPath = join(dir, 'state.json.lock');
+
+    const writeMetadata = (): number => {
+      const err = new Error('simulated EIO') as NodeJS.ErrnoException;
+      err.code = 'EIO';
+      throw err;
+    };
+
+    let caught: unknown;
+    try {
+      await acquireLock(lockPath, { timeoutMs: 300, retryDelayMs: 20 }, { writeMetadata });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(LockCreationError);
+    const err = caught as LockCreationError;
+    expect(err.code).toBe('LOCK_CREATION_FAILED');
+    expect(err.phase).toBe('metadata-write');
+    expect(err.lockPath).toBe(lockPath);
+    expect(err.pid).toBe(process.pid);
+    expect(typeof err.nonce).toBe('string');
+    expect(err.nonce.length).toBeGreaterThan(0);
+    expect(err.causeCode).toBe('EIO');
+    expect(err.cleanedUp).toBe(true);
+    expect(new Date(err.timestamp).toISOString()).toBe(err.timestamp);
+    expect(err.message).toContain('EIO');
+    expect(err.message).toContain('metadata-write');
+  });
+
+  it(
+    "a failed creator's cleanup cannot remove a valid lock acquired concurrently",
+    async () => {
+      const stateDir = makeTempDir();
+      const moduleDir = makeTempDir();
+      transpileLockModulesTo(moduleDir);
+      const lockPath = join(stateDir, 'state.json.lock');
+
+      // A: begins creating its own lock, hits a forced metadata-write
+      // failure, and pauses (via IPC) right after that failure is detected
+      // but before cleaning up its own staging file. At this point A's
+      // staging file is genuinely on disk, and the canonical lockPath has
+      // never been touched (A never reached the publish-link step).
+      const A = new Worker(join(moduleDir, 'fault-creator.mjs'), [lockPath, '5000']);
+      await A.waitFor((m) => m.type === 'paused');
+
+      expect(existsSync(lockPath)).toBe(false);
+      const duringPause = stagingLeftovers(stateDir);
+      expect(duringPause).toHaveLength(1); // A's own staging file, nothing else
+
+      // B: a completely ordinary, real acquisition — nothing stops it,
+      // since A never published anything.
+      const B = spawnWorker(moduleDir, lockPath, 2000, 'wait-for-release');
+      const bAcquired = await B.waitFor((m) => m.type === 'acquired' || m.type === 'acquire-failed');
+      expect(bAcquired.type).toBe('acquired');
+      const bRecord = readFileSync(lockPath, 'utf8');
+
+      // Resume A. Its cleanup must touch only its own staging file.
+      A.send('resume');
+      const aResult = await A.waitFor((m) => m.type === 'acquire-failed' || m.type === 'acquired');
+      expect(aResult.type).toBe('acquire-failed');
+      expect(aResult.code).toBe('LOCK_CREATION_FAILED');
+      expect(aResult.causeCode).toBe('ENOSPC');
+      expect(aResult.phase).toBe('metadata-write');
+      expect(aResult.cleanedUp).toBe(true);
+      await A.waitForExit();
+
+      // B's lock must be completely undisturbed: same content, still present.
+      expect(existsSync(lockPath)).toBe(true);
+      expect(readFileSync(lockPath, 'utf8')).toBe(bRecord);
+
+      // No leftover staging files from A (or anyone else).
+      expect(stagingLeftovers(stateDir)).toEqual([]);
+
+      // Release B; a fresh, normal acquire must now succeed.
+      B.send('release');
+      await B.waitFor((m) => m.type === 'released');
+      await B.waitForExit();
+
+      const after = spawnWorker(moduleDir, lockPath, 2000, 'release-immediately');
+      const afterResult = await after.waitFor((m) => m.type === 'acquired' || m.type === 'acquire-failed');
+      expect(afterResult.type).toBe('acquired');
+      await after.waitForExit();
+    },
+    15_000,
+  );
 });

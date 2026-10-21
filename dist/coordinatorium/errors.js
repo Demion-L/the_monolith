@@ -32,6 +32,41 @@ export class LockTimeoutError extends CoordinatoriumError {
         this.name = 'LockTimeoutError';
     }
 }
+/**
+ * Thrown when a lock (the primary `state.json.lock` or the internal
+ * recovery mutex) could not be created — a staging-file open, metadata
+ * write/fsync, or publish-link step failed. Never thrown for ordinary lock
+ * contention (an already-existing canonical lock is not a failure, just a
+ * reason to wait). The original fs error is preserved as `cause`/`causeCode`,
+ * never masked.
+ */
+export class LockCreationError extends CoordinatoriumError {
+    lockPath;
+    phase;
+    pid;
+    nonce;
+    timestamp;
+    cleanedUp;
+    cause;
+    causeCode;
+    constructor(params) {
+        const causeCode = params.cause?.code;
+        const causeMessage = params.cause instanceof Error ? params.cause.message : String(params.cause);
+        const timestamp = new Date().toISOString();
+        super('LOCK_CREATION_FAILED', `Failed to create lock at "${params.lockPath}" (phase: ${params.phase}` +
+            `${causeCode ? `, cause: ${causeCode}` : ''}): ${causeMessage} ` +
+            `[pid=${params.pid} nonce=${params.nonce} at=${timestamp} cleanedUp=${params.cleanedUp}]`);
+        this.name = 'LockCreationError';
+        this.lockPath = params.lockPath;
+        this.phase = params.phase;
+        this.pid = params.pid;
+        this.nonce = params.nonce;
+        this.timestamp = timestamp;
+        this.cleanedUp = params.cleanedUp;
+        this.cause = params.cause;
+        this.causeCode = causeCode;
+    }
+}
 export class MissionNotFoundError extends CoordinatoriumError {
     constructor(id) {
         super('MISSION_NOT_FOUND', `No mission found with id "${id}"`);

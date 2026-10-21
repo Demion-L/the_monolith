@@ -34,12 +34,35 @@
  * open semantics. It does not claim to provide distributed coordination,
  * and its guarantees are not evaluated on network filesystems (NFS, SMB,
  * etc.) where `open(..., 'wx')` atomicity is not always dependable.
+ *
+ * A fifth invariant governs *creating* a lock (primary or recovery mutex)
+ * specifically:
+ *
+ *   5. A lock is never published in a partially-written state.
+ *      Metadata is written in full to a private staging file
+ *      (`<lockPath>.creating.<pid>.<nonce>`, a name no other acquirer can
+ *      ever guess or collide with) and only published — via `linkSync`,
+ *      which is exactly as exclusive a create-if-absent primitive as
+ *      `open(path, 'wx')` — once that write (and, if requested, an fsync)
+ *      has fully succeeded. If anything fails first, the canonical path
+ *      never existed because of this attempt; only this process's own
+ *      uniquely-named staging file is ever touched by its own cleanup. See
+ *      `createAndPublish` below and ADR-008 for the full argument.
  */
 export interface LockOptions {
     /** How long a challenger will wait to acquire the lock before giving up. */
     timeoutMs?: number;
     /** Delay between acquisition attempts while waiting. */
     retryDelayMs?: number;
+    /** Fsync the staged metadata file before publishing it as the canonical
+     * lock. A durability option, not a correctness requirement: mutual
+     * exclusion comes entirely from `linkSync`/`open(path, 'wx')` atomicity,
+     * with or without this. Default `false` — without it, metadata for a
+     * lock acquired just before a hard crash/power loss may not have reached
+     * disk yet, though the lock's atomicity and exclusivity guarantees are
+     * unaffected either way; this never claims power-loss durability when
+     * left at its default. */
+    fsyncMetadata?: boolean;
 }
 /**
  * Test-only hooks for forcing specific, otherwise-timing-dependent
@@ -54,6 +77,16 @@ export interface LockTestHooks {
     /** Invoked immediately before the confirmed-dead owner's lock file is
      * actually unlinked, while still holding the recovery mutex. */
     beforeStaleUnlink?: () => void | Promise<void>;
+    /** Replaces the low-level write call used while writing a lock's staged
+     * metadata, so tests can force a deterministic fault (e.g. throw ENOSPC
+     * before any byte is written, or write a short chunk and then throw) —
+     * never supplied by production code. */
+    writeMetadata?: (fd: number, buffer: Buffer, offset: number, length: number) => number;
+    /** Invoked after a staging-write/fsync failure is detected (and the fd
+     * closed) but before the best-effort cleanup of this process's own
+     * staging file — lets tests pause a failed creator at exactly the point
+     * where only its own staging file exists on disk. */
+    beforeStagingCleanupOnFailure?: () => void | Promise<void>;
 }
 /**
  * Acquire `lockPath` exclusively. Waits up to `timeoutMs` for the current

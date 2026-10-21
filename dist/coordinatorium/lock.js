@@ -34,13 +34,28 @@
  * open semantics. It does not claim to provide distributed coordination,
  * and its guarantees are not evaluated on network filesystems (NFS, SMB,
  * etc.) where `open(..., 'wx')` atomicity is not always dependable.
+ *
+ * A fifth invariant governs *creating* a lock (primary or recovery mutex)
+ * specifically:
+ *
+ *   5. A lock is never published in a partially-written state.
+ *      Metadata is written in full to a private staging file
+ *      (`<lockPath>.creating.<pid>.<nonce>`, a name no other acquirer can
+ *      ever guess or collide with) and only published — via `linkSync`,
+ *      which is exactly as exclusive a create-if-absent primitive as
+ *      `open(path, 'wx')` — once that write (and, if requested, an fsync)
+ *      has fully succeeded. If anything fails first, the canonical path
+ *      never existed because of this attempt; only this process's own
+ *      uniquely-named staging file is ever touched by its own cleanup. See
+ *      `createAndPublish` below and ADR-008 for the full argument.
  */
-import { openSync, writeSync, closeSync, readFileSync, unlinkSync } from 'fs';
+import { openSync, writeSync, closeSync, readFileSync, unlinkSync, linkSync, fsyncSync, } from 'fs';
 import { randomBytes } from 'crypto';
-import { LockTimeoutError } from './errors.js';
+import { LockTimeoutError, LockCreationError } from './errors.js';
 const DEFAULT_OPTIONS = {
     timeoutMs: 5000,
     retryDelayMs: 25,
+    fsyncMetadata: false,
 };
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -106,22 +121,120 @@ function readLockRecord(path) {
         return null;
     }
 }
-function tryCreate(path, record) {
+/** Write `buffer` to `fd` in full, looping on short writes (a single
+ * `writeSync` call is never guaranteed to write the whole buffer). A
+ * non-positive byte count from the writer is a hard error, not something
+ * to retry forever. `writer` defaults to the real `writeSync` and is
+ * overridable only for deterministic fault injection in tests. */
+function writeAll(fd, buffer, writer = writeSync) {
+    let offset = 0;
+    while (offset < buffer.length) {
+        const bytesWritten = writer(fd, buffer, offset, buffer.length - offset);
+        if (!(bytesWritten > 0)) {
+            throw new Error(`write returned ${bytesWritten} bytes with ${buffer.length - offset} of ${buffer.length} ` +
+                'bytes still unwritten');
+        }
+        offset += bytesWritten;
+    }
+}
+function stagingPath(lockPath, record) {
+    return `${lockPath}.creating.${record.pid}.${record.nonce}`;
+}
+/** Best-effort removal of a staging file this process created. Never
+ * throws — "already gone" and "couldn't remove it" are both acceptable
+ * outcomes here; the caller records whether it succeeded. */
+function cleanupStaging(path) {
     try {
-        const fd = openSync(path, 'wx');
-        try {
-            writeSync(fd, `${record.pid}:${record.nonce}`);
-        }
-        finally {
-            closeSync(fd);
-        }
+        unlinkSync(path);
         return true;
     }
-    catch (err) {
-        if (err.code === 'EEXIST')
-            return false;
-        throw err;
+    catch {
+        return false;
     }
+}
+/**
+ * Create `record`'s metadata as `lockPath`, safely.
+ *
+ * The metadata is written to a private staging file
+ * (`<lockPath>.creating.<pid>.<nonce>`) first, in full, and only
+ * *published* as `lockPath` — via `linkSync(staging, lockPath)` — once that
+ * write (and, if `fsyncMetadata` is set, an fsync) has completely
+ * succeeded. `linkSync` fails with `EEXIST` if `lockPath` already exists,
+ * exactly like the `open(path, 'wx')` it replaces as the publish step, so
+ * it is exactly as exclusive a primitive — the canonical path still never
+ * has two simultaneous "creators" — but unlike writing straight into
+ * `lockPath`, a failure partway through can never leave the canonical path
+ * itself in an empty/partial state, because the canonical path was never
+ * touched by this attempt in the first place.
+ *
+ * `rename()` is deliberately not used for publication: an ordinary rename
+ * silently replaces an existing destination, which is exactly the
+ * exclusivity `open(path, 'wx')` is relied on for everywhere else in this
+ * module. Only `linkSync`'s EEXIST-on-existing-destination behavior
+ * preserves that.
+ *
+ * On any failure, only this process's own uniquely-named staging file is
+ * ever removed (best-effort) — `lockPath` itself is never touched by a
+ * failed creator, so a failed/paused creator can never delete a valid lock
+ * a different, concurrently-succeeding acquirer published in the meantime.
+ */
+async function createAndPublish(lockPath, record, fsyncMetadata, testHooks) {
+    const staging = stagingPath(lockPath, record);
+    const metadata = Buffer.from(`${record.pid}:${record.nonce}`, 'utf8');
+    let fd;
+    try {
+        fd = openSync(staging, 'wx');
+    }
+    catch (err) {
+        // The staging name is unique per (pid, nonce); reaching here means we
+        // could not even create our own private file. Nothing was created.
+        throw new LockCreationError({
+            lockPath,
+            phase: 'staging-open',
+            pid: record.pid,
+            nonce: record.nonce,
+            cleanedUp: true,
+            cause: err,
+        });
+    }
+    const fail = async (phase, cause) => {
+        await testHooks.beforeStagingCleanupOnFailure?.();
+        const cleanedUp = cleanupStaging(staging);
+        throw new LockCreationError({ lockPath, phase, pid: record.pid, nonce: record.nonce, cleanedUp, cause });
+    };
+    try {
+        writeAll(fd, metadata, testHooks.writeMetadata);
+    }
+    catch (err) {
+        closeSync(fd);
+        return fail('metadata-write', err);
+    }
+    if (fsyncMetadata) {
+        try {
+            fsyncSync(fd);
+        }
+        catch (err) {
+            closeSync(fd);
+            return fail('metadata-fsync', err);
+        }
+    }
+    closeSync(fd);
+    try {
+        linkSync(staging, lockPath);
+    }
+    catch (err) {
+        if (err.code === 'EEXIST') {
+            // Lost the race to a concurrent publisher — not a failure. Only our
+            // own staging file is ever removed here.
+            cleanupStaging(staging);
+            return 'lost-race';
+        }
+        return fail('publish-link', err);
+    }
+    // Published: lockPath and staging are now two links to the same
+    // metadata. Drop our temporary name; the canonical one remains.
+    cleanupStaging(staging);
+    return 'published';
 }
 /** Delete `path` only if its current content is still, byte-for-byte, the
  * record we believe we own. Never clears a lock that has changed or is
@@ -167,11 +280,15 @@ function recoveryMutexPath(lockPath) {
  * only means automatic crash recovery for *this* lock is unavailable
  * until that's cleaned up.
  */
-async function recoverDeadOwner(lockPath, observed, hooks) {
+async function recoverDeadOwner(lockPath, observed, fsyncMetadata, hooks) {
     await hooks.beforeRecoveryAttempt?.();
     const mutexPath = recoveryMutexPath(lockPath);
     const mutexRecord = makeOwnRecord();
-    if (!tryCreate(mutexPath, mutexRecord)) {
+    // The recovery mutex is created through the same safe staging/publish
+    // primitive as the primary lock — its semantics (never recovered by
+    // liveness or age, see module doc) are unchanged; only how it is
+    // physically created is shared code now.
+    if ((await createAndPublish(mutexPath, mutexRecord, fsyncMetadata, hooks)) === 'lost-race') {
         return 'mutex-busy';
     }
     try {
@@ -211,14 +328,17 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}) {
     const deadline = Date.now() + opts.timeoutMs;
     const own = makeOwnRecord();
     for (;;) {
-        if (tryCreate(lockPath, own)) {
+        if ((await createAndPublish(lockPath, own, opts.fsyncMetadata, testHooks)) === 'published') {
             return () => releaseIfOwned(lockPath, own);
         }
+        // 'lost-race': the canonical lock already exists — fall through to the
+        // normal observe/wait/recover logic below, exactly as a plain EEXIST
+        // did before.
         const observed = readLockRecord(lockPath);
         if (observed !== null) {
             const verdict = checkLiveness(observed.pid);
             if (verdict === 'dead') {
-                const outcome = await recoverDeadOwner(lockPath, observed, testHooks);
+                const outcome = await recoverDeadOwner(lockPath, observed, opts.fsyncMetadata, testHooks);
                 if (outcome !== 'mutex-busy') {
                     continue; // we (or whoever holds the mutex) made progress; re-evaluate now
                 }

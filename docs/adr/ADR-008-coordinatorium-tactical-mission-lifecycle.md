@@ -40,6 +40,18 @@ related_adrs:
 > needed" was incorrect and has been corrected in place, not quietly
 > dropped. 3 new deterministic regression tests (forced via test-only
 > hooks, not timing luck). 182 tests total.
+>
+> **Final hardening (2026-10-21, same day):** a last follow-up closed the
+> remaining gap in lock *creation* itself: the create path was
+> `open(path, 'wx')` [publishes the canonical file immediately] →
+> `writeSync(fd, metadata)` → close, with the write's return value never
+> checked. A write failure (ENOSPC/EIO) or a short write after the open
+> left an empty/partial **canonical** `state.json.lock` behind — which,
+> being unparseable, is "uncertain" per invariant 2 and therefore never
+> auto-recoverable, a permanent manual-cleanup wedge. See "Safe lock
+> creation: staging + atomic hard-link publish" below. 4 new deterministic
+> tests, including a real forked-process interleaving test. 186 tests
+> total.
 
 ## Context
 
@@ -312,6 +324,118 @@ mutex file — this requires two crashes in a row (the original owner, then
 a recoverer) and is judged an acceptable price for never risking double
 ownership.
 
+### Safe lock creation: staging + atomic hard-link publish (final hardening, 2026-10-21)
+
+The locking protocol above closes every gap in *contending for* a lock. A
+separate, narrower gap remained in *creating* one at all: the original
+create path was a single `open(path, 'wx')` (which publishes the canonical
+file immediately, before anything is written to it) followed by one
+`writeSync(fd, metadata)` call whose return value was never checked. Two
+distinct failure modes followed from that:
+
+- A write failure (`ENOSPC`, `EIO`, or anything else) after the file was
+  already created left an **empty** canonical `state.json.lock` behind.
+- `writeSync` is not guaranteed to write an entire buffer in one call; a
+  short write followed by a later failure (or simply never being retried)
+  could leave a **partial**, truncated record.
+
+Either way, the resulting file fails `parseLockRecord` and is therefore
+"uncertain" under invariant 2 — never stealable by age, never recoverable
+by liveness, because there is no owner PID to check liveness against. The
+practical consequence was a permanent wedge: the only way forward was a
+human manually deleting `state.json.lock`.
+
+**Fix:** metadata is now written to a private staging file,
+`<lockPath>.creating.<pid>.<nonce>` (same `pid:nonce` naming scheme as the
+lock itself, so the name can never collide with another acquisition
+attempt), created via the same `open(path, 'wx')` primitive. The metadata
+is written to completion by a `writeAll` loop that honors `writeSync`'s
+actual return value and keeps writing from the correct offset until the
+whole buffer is written, rather than assuming one call suffices. Only once
+that full write has succeeded — and, if `fsyncMetadata` is enabled,
+`fsyncSync`'d — is the staging file **published** as the canonical lock,
+via `linkSync(staging, lockPath)`. A hard link is exactly as exclusive a
+primitive as `open(path, 'wx')`: it fails with `EEXIST` if `lockPath`
+already exists, atomically, with no window in which two processes could
+both believe they just published it. `rename()` was deliberately rejected
+for this step — an ordinary rename silently *replaces* an existing
+destination, which would reintroduce exactly the double-ownership hazard
+the rest of this ADR exists to close.
+
+This is used for both the primary lock and the recovery mutex (same
+`createAndPublish` function); neither the recovery mutex's semantics (never
+recovered by liveness or age, serialized, safety-over-availability) nor the
+primary lock's liveness-gated recovery semantics changed — only *how* a
+lock file's bytes get onto disk changed.
+
+**Proof sketch — why a write failure can no longer leave a partial
+canonical lock:** the canonical path is never opened, written to, or
+otherwise touched by a creation attempt until after `linkSync` succeeds,
+and `linkSync` only runs after the staging file's write (and optional
+fsync) has already fully succeeded. Every failure branch before that point
+throws a `LockCreationError` without ever calling `linkSync`, so the
+canonical path is left exactly as it was before the attempt — either
+absent, or (if another process already holds/owns it) completely
+untouched.
+
+**Proof sketch — why a failed creator's cleanup can never delete another
+process's valid lock:** the only path ever unlinked by a failed or
+abandoned creator is its own staging file, named with its own `pid` and a
+fresh random `nonce` generated once per acquisition attempt — a name no
+other process's creation attempt can ever construct or collide with. The
+cleanup code never references `lockPath` itself in any failure branch (it
+is referenced only to attempt `linkSync` *into*, and on `publish-link`
+failure the cleanup still only removes `staging`). `release()` and
+recovery's `unlinkSync(lockPath)` are both unchanged and keep their own,
+separately-argued safety properties (see "Locking protocol" above) — this
+hardening does not touch either of them.
+
+**Proof sketch — why two processes still cannot both publish the
+canonical lock:** `linkSync`'s exclusivity is the same OS-level guarantee
+relied on throughout this ADR for `open(path, 'wx')` — the destination
+either does not exist yet (link succeeds, one creator now owns it) or
+already exists (link fails `EEXIST`, atomically, to every other caller).
+No process can observe an intermediate state.
+
+**Proof sketch — why recovery-mutex semantics are unchanged:** the mutex's
+*meaning* (never recovered by liveness/age; a second challenger that loses
+the race backs off to the normal wait/retry loop rather than blocking) is
+entirely a property of how `recoverDeadOwner` uses the mutex's *outcome*
+(published vs. lost-race), not of how the mutex file's bytes are written.
+Swapping the physical creation mechanism underneath it changes nothing
+about that logic, which is untouched by this patch.
+
+**Diagnostics:** every creation failure throws `LockCreationError`
+(`error code `LOCK_CREATION_FAILED``) carrying `lockPath`, `phase`
+(`staging-open` | `metadata-write` | `metadata-fsync` | `publish-link` —
+`staging-cleanup` is reserved in the taxonomy but reported only via a
+`cleanedUp: false` flag on the failing phase, since cleanup failure is
+never itself the primary reason for a throw), `pid`, `nonce`, an ISO
+`timestamp`, `cleanedUp` (whether this process's own staging file was
+removed), and the original fs error as `cause`/`causeCode` (e.g. `ENOSPC`,
+`EIO`) — never masked or replaced.
+
+**`fsyncMetadata` (new `LockOptions` field, default `false`):** a pure
+durability knob, not a correctness requirement — every safety property
+above holds identically whether or not it is set, since mutual exclusion
+comes entirely from `linkSync`/`open(..., 'wx')` atomicity. Left at its
+default, metadata for a lock acquired immediately before a hard crash or
+power loss may not yet have reached disk; this is never claimed to provide
+power-loss durability unless explicitly enabled.
+
+**Known limitation (new):** publication now depends on hard-link support
+on the filesystem hosting `.monolith/`. This holds for ordinary local
+filesystems (ext4, APFS, NTFS, etc. — the same ones the rest of this
+module already assumes `open(..., 'wx')` atomicity on) but not on
+filesystems without hard-link support; this was not evaluated as a target
+for MONOLITH and no fallback to the unsafe single-step write is provided
+(safety over availability, consistent with the rest of this ADR). An
+orphaned staging file left behind by a process that crashed before its own
+cleanup ran is inert: it is never read, parsed, or treated as a lock by any
+code path, and its unique `pid.nonce` name means it can never collide with
+a later acquisition attempt — it is debris, not a hazard, and does not
+block future acquisitions.
+
 ### Mission ID generation
 
 IDs are `MIS-<4-digit sequence>`, derived by scanning existing mission IDs
@@ -497,9 +621,10 @@ Consequences).
 
 ## Validation
 
-- 182 total tests passing (138 before this slice — scriptorium 75, graph
+- 186 total tests passing (138 before this slice — scriptorium 75, graph
   63, unchanged — then 31 for the original slice, then 10 from the
-  2026-10-21 hardening, then 3 from the same-day corrective patch below);
+  2026-10-21 hardening, then 3 from the same-day corrective patch, then 4
+  from the same-day final hardening below);
   typecheck clean; build clean.
 - First-slice tests (31): 11 state-keeper, 17 mission lifecycle + CLI
   integration, 3 init regression.
@@ -523,6 +648,19 @@ Consequences).
   hooks (`beforeRecoveryAttempt`, `beforeStaleUnlink`) and real forked
   processes — not sleep-based timing luck. Run 5× consecutively with no
   flakes before being accepted.
+- Final-hardening tests (4, `lock.test.ts` "Partial lock-metadata write
+  safety"): a forced write failure before any byte is written never
+  publishes the canonical lock; a forced short write followed by ENOSPC
+  never publishes a partial canonical lock; `LockCreationError` reports
+  `causeCode`, `phase`, `pid`, `nonce`, `cleanedUp` and `timestamp`
+  correctly; and a real forked-process interleaving test in which a
+  creator forced to fail at `metadata-write` is paused (via the
+  `beforeStagingCleanupOnFailure` hook) with its own staging file
+  genuinely on disk while a second, real process legitimately acquires the
+  (never-touched) canonical lock — resuming the failed creator confirms it
+  only ever removes its own staging file, the second process's lock and
+  content are completely undisturbed, and a subsequent fresh acquire still
+  works. Run 5× consecutively with no flakes before being accepted.
 - Manual CLI smoke test: `init` → `mission start` ×2 → `list` → `show` →
   `finish --result completed` → `list` (active/finished split correct) →
   unknown-id and double-finish both exit 1 with a clear message.

@@ -18,6 +18,18 @@
  *      `timeoutMs` bounds how long a *challenger* will wait to acquire the
  *      lock. It says nothing about how long the current owner may hold it.
  *
+ * A fourth, narrower rule governs recovery specifically:
+ *
+ *   4. Recovering a dead owner's lock is itself serialized.
+ *      "Read the lock, confirm its owner is dead, re-read it, and delete it
+ *      if unchanged" is NOT one atomic operation — the re-read and the
+ *      delete are two separate syscalls, and another process can complete
+ *      an entire recovery (delete the stale lock, create its own) in the
+ *      gap between them. A recovery mutex (`<lockPath>.recovery`, itself
+ *      just another `open(..., 'wx')`-guarded file) makes "verify and then
+ *      delete a specific stale lock" exclusive, so at most one process is
+ *      ever in a position to delete a given dead owner's record.
+ *
  * Known limitation: this is a local-filesystem lock built on POSIX rename/
  * open semantics. It does not claim to provide distributed coordination,
  * and its guarantees are not evaluated on network filesystems (NFS, SMB,
@@ -30,9 +42,25 @@ export interface LockOptions {
     retryDelayMs?: number;
 }
 /**
- * Acquire `lockPath` exclusively. Waits up to `timeoutMs` for the current
- * owner (if any) to release it, attempting liveness-gated recovery only
- * when the owner is confirmed dead. Returns a release function.
+ * Test-only hooks for forcing specific, otherwise-timing-dependent
+ * interleavings deterministically. Every hook defaults to a no-op; no
+ * production code path (in particular, `state-keeper.ts`) ever supplies
+ * one. Do not use this outside tests.
  */
-export declare function acquireLock(lockPath: string, options?: LockOptions): Promise<() => void>;
+export interface LockTestHooks {
+    /** Invoked right after an owner is confirmed dead, before attempting to
+     * acquire the recovery mutex. */
+    beforeRecoveryAttempt?: () => void | Promise<void>;
+    /** Invoked immediately before the confirmed-dead owner's lock file is
+     * actually unlinked, while still holding the recovery mutex. */
+    beforeStaleUnlink?: () => void | Promise<void>;
+}
+/**
+ * Acquire `lockPath` exclusively. Waits up to `timeoutMs` for the current
+ * owner (if any) to release it, attempting liveness-gated, mutex-serialized
+ * recovery only when the owner is confirmed dead. Returns a release
+ * function. `testHooks` exists solely to let tests force specific
+ * interleavings deterministically — production callers must never pass it.
+ */
+export declare function acquireLock(lockPath: string, options?: LockOptions, testHooks?: LockTestHooks): Promise<() => void>;
 //# sourceMappingURL=lock.d.ts.map

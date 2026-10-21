@@ -18,6 +18,18 @@
  *      `timeoutMs` bounds how long a *challenger* will wait to acquire the
  *      lock. It says nothing about how long the current owner may hold it.
  *
+ * A fourth, narrower rule governs recovery specifically:
+ *
+ *   4. Recovering a dead owner's lock is itself serialized.
+ *      "Read the lock, confirm its owner is dead, re-read it, and delete it
+ *      if unchanged" is NOT one atomic operation — the re-read and the
+ *      delete are two separate syscalls, and another process can complete
+ *      an entire recovery (delete the stale lock, create its own) in the
+ *      gap between them. A recovery mutex (`<lockPath>.recovery`, itself
+ *      just another `open(..., 'wx')`-guarded file) makes "verify and then
+ *      delete a specific stale lock" exclusive, so at most one process is
+ *      ever in a position to delete a given dead owner's record.
+ *
  * Known limitation: this is a local-filesystem lock built on POSIX rename/
  * open semantics. It does not claim to provide distributed coordination,
  * and its guarantees are not evaluated on network filesystems (NFS, SMB,
@@ -33,6 +45,21 @@ export interface LockOptions {
   timeoutMs?: number;
   /** Delay between acquisition attempts while waiting. */
   retryDelayMs?: number;
+}
+
+/**
+ * Test-only hooks for forcing specific, otherwise-timing-dependent
+ * interleavings deterministically. Every hook defaults to a no-op; no
+ * production code path (in particular, `state-keeper.ts`) ever supplies
+ * one. Do not use this outside tests.
+ */
+export interface LockTestHooks {
+  /** Invoked right after an owner is confirmed dead, before attempting to
+   * acquire the recovery mutex. */
+  beforeRecoveryAttempt?: () => void | Promise<void>;
+  /** Invoked immediately before the confirmed-dead owner's lock file is
+   * actually unlinked, while still holding the recovery mutex. */
+  beforeStaleUnlink?: () => void | Promise<void>;
 }
 
 const DEFAULT_OPTIONS: Required<LockOptions> = {
@@ -70,6 +97,10 @@ interface LockRecord {
   nonce: string;
 }
 
+function makeOwnRecord(): LockRecord {
+  return { pid: process.pid, nonce: randomBytes(8).toString('hex') };
+}
+
 /** Content identity, not liveness. Used to detect whether a lock file has
  * changed (recovered by someone else, or released) between two reads. */
 function sameRecord(a: LockRecord | null, b: LockRecord | null): boolean {
@@ -93,21 +124,21 @@ function parseLockRecord(raw: string): LockRecord | null {
   return { pid, nonce };
 }
 
-/** Read and parse the current lock file. Returns null for "does not exist
- * or unreadable/malformed" alike — both are handled identically by callers
+/** Read and parse a lock file. Returns null for "does not exist or
+ * unreadable/malformed" alike — both are handled identically by callers
  * (uncertain, in the ENOENT case trivially resolved by the next create
  * attempt). */
-function readLockRecord(lockPath: string): LockRecord | null {
+function readLockRecord(path: string): LockRecord | null {
   try {
-    return parseLockRecord(readFileSync(lockPath, 'utf8'));
+    return parseLockRecord(readFileSync(path, 'utf8'));
   } catch {
     return null;
   }
 }
 
-function tryCreate(lockPath: string, record: LockRecord): boolean {
+function tryCreate(path: string, record: LockRecord): boolean {
   try {
-    const fd = openSync(lockPath, 'wx');
+    const fd = openSync(path, 'wx');
     try {
       writeSync(fd, `${record.pid}:${record.nonce}`);
     } finally {
@@ -120,73 +151,125 @@ function tryCreate(lockPath: string, record: LockRecord): boolean {
   }
 }
 
+/** Delete `path` only if its current content is still, byte-for-byte, the
+ * record we believe we own. Never clears a lock that has changed or is
+ * already gone. This is used both for releasing a held primary lock and
+ * for releasing the internal recovery mutex. */
+function releaseIfOwned(path: string, record: LockRecord): void {
+  const current = readLockRecord(path);
+  if (sameRecord(current, record)) {
+    try {
+      unlinkSync(path);
+    } catch {
+      // already gone — fine
+    }
+  }
+}
+
+function recoveryMutexPath(lockPath: string): string {
+  return `${lockPath}.recovery`;
+}
+
+type RecoveryOutcome = 'recovered' | 'aborted' | 'mutex-busy';
+
 /**
  * Attempt to recover a lock whose recorded owner was just confirmed dead.
- * Re-reads the file immediately before deleting it and only deletes if its
- * content is byte-identical to what we based the "dead" verdict on — if it
- * has changed (recovered by a competing challenger, or raced with a fresh
- * acquisition reusing the same path) or disappeared, we do nothing and let
- * the caller's loop re-evaluate from scratch. This is what prevents two
- * simultaneous challengers — both of whom independently observed the same
- * dead owner — from one of them deleting the *other's* freshly-created
- * lock: whichever of them wins the unlink-then-create race becomes the
- * owner; the other sees its own re-check fail and backs off without
- * touching anything. No separate recovery mutex is needed because this
- * compare-then-delete step is itself the serialization point — `unlink`
- * and the next `open(..., 'wx')` are each atomic on their own.
+ *
+ * The read-confirm-delete sequence for a *specific* stale record is made
+ * exclusive by a recovery mutex (`<lockPath>.recovery`, itself just another
+ * `wx`-guarded file): a challenger must hold it for the entire re-verify
+ * step through the actual `unlink`. Because `open(path, 'wx')` is atomic,
+ * at most one challenger ever holds the recovery mutex for a given lock at
+ * a time — so at most one challenger is ever in a position to delete a
+ * given dead owner's record. A second challenger either fails to get the
+ * mutex (returns 'mutex-busy' — it does not block, it just backs off and
+ * lets the caller's normal wait/retry loop handle it) or, if it gets the
+ * mutex only after the first challenger has already finished, finds the
+ * lock file no longer matches what it originally observed and aborts
+ * without touching anything ('aborted'). Neither case ever deletes a lock
+ * that belongs to a new owner — see ADR-008 for the full argument.
+ *
+ * The recovery mutex itself is NEVER taken from another process based on
+ * age or liveness: if its holder crashes mid-recovery, the mutex simply
+ * stays held, and every future recovery attempt for this lock reports
+ * 'mutex-busy' until a human removes it by hand. This is a deliberate
+ * safety-over-availability trade-off (no recursive stale-mutex recovery)
+ * — it never corrupts state.json and never causes double ownership; it
+ * only means automatic crash recovery for *this* lock is unavailable
+ * until that's cleaned up.
  */
-function attemptRecovery(lockPath: string, observed: LockRecord): void {
-  const current = readLockRecord(lockPath);
-  if (!sameRecord(current, observed)) {
-    return; // changed or gone under us — do not touch it
+async function recoverDeadOwner(
+  lockPath: string,
+  observed: LockRecord,
+  hooks: LockTestHooks,
+): Promise<RecoveryOutcome> {
+  await hooks.beforeRecoveryAttempt?.();
+
+  const mutexPath = recoveryMutexPath(lockPath);
+  const mutexRecord = makeOwnRecord();
+
+  if (!tryCreate(mutexPath, mutexRecord)) {
+    return 'mutex-busy';
   }
+
   try {
-    unlinkSync(lockPath);
-  } catch {
-    // already gone (e.g. removed by its own owner, or by a racing
-    // challenger that reached this point microseconds earlier) — fine,
-    // the next create attempt will tell us the truth.
+    // Re-verify from scratch now that we exclusively hold the recovery
+    // mutex — time has passed since the caller's own read, and this is
+    // the check that actually matters: nothing but the mutex holder can
+    // delete this specific stale record from here on.
+    const current = readLockRecord(lockPath);
+    if (current === null || !sameRecord(current, observed)) {
+      return 'aborted'; // changed or gone while we were acquiring the mutex
+    }
+    if (checkLiveness(current.pid) !== 'dead') {
+      return 'aborted'; // no longer safe to conclude dead — back off
+    }
+
+    await hooks.beforeStaleUnlink?.();
+
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // already gone — fine, the next create attempt will tell us the truth
+    }
+    return 'recovered';
+  } finally {
+    releaseIfOwned(mutexPath, mutexRecord);
   }
 }
 
 /**
  * Acquire `lockPath` exclusively. Waits up to `timeoutMs` for the current
- * owner (if any) to release it, attempting liveness-gated recovery only
- * when the owner is confirmed dead. Returns a release function.
+ * owner (if any) to release it, attempting liveness-gated, mutex-serialized
+ * recovery only when the owner is confirmed dead. Returns a release
+ * function. `testHooks` exists solely to let tests force specific
+ * interleavings deterministically — production callers must never pass it.
  */
 export async function acquireLock(
   lockPath: string,
   options: LockOptions = {},
+  testHooks: LockTestHooks = {},
 ): Promise<() => void> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const deadline = Date.now() + opts.timeoutMs;
-  const own: LockRecord = { pid: process.pid, nonce: randomBytes(8).toString('hex') };
+  const own = makeOwnRecord();
 
   for (;;) {
     if (tryCreate(lockPath, own)) {
-      return () => {
-        // Only release a lock that is still, byte-for-byte, the one we
-        // created. If it has changed (because our own TTL-free design
-        // never lets that happen while we're alive — but defensively,
-        // in case of an unexpected manual deletion/replacement) or is
-        // already gone, do nothing. Never clear another holder's lock.
-        const current = readLockRecord(lockPath);
-        if (sameRecord(current, own)) {
-          try {
-            unlinkSync(lockPath);
-          } catch {
-            // already gone — fine
-          }
-        }
-      };
+      return () => releaseIfOwned(lockPath, own);
     }
 
     const observed = readLockRecord(lockPath);
     if (observed !== null) {
       const verdict = checkLiveness(observed.pid);
       if (verdict === 'dead') {
-        attemptRecovery(lockPath, observed);
-        continue; // re-evaluate immediately; no need to wait out a retry delay
+        const outcome = await recoverDeadOwner(lockPath, observed, testHooks);
+        if (outcome !== 'mutex-busy') {
+          continue; // we (or whoever holds the mutex) made progress; re-evaluate now
+        }
+        // mutex-busy: someone else is already handling this exact
+        // recovery — fall through to the normal wait/retry below rather
+        // than spinning on a mutex we know is currently unavailable.
       }
       // 'alive' or 'unknown' (including EPERM): invariant 2 — do not recover.
     }

@@ -28,6 +28,18 @@ related_adrs:
 > processes for liveness/crash/concurrent-recovery scenarios; extra cases
 > in `state-keeper.test.ts` for write-failure and corrupted-state-via-
 > mutateState). 179 tests total.
+>
+> **Corrective patch (2026-10-21, same day):** a *second* independent
+> review found that the hardening update's own recovery path — "re-read,
+> compare, then unlink" — was not atomic and could itself be raced: a
+> paused challenger's later unlink could delete a *different*, faster
+> challenger's freshly-created lock. Reproduced empirically with two real
+> forked processes before fixing it. Recovery is now serialized by a
+> dedicated recovery mutex (see "Recovery is serialized by a dedicated
+> mutex" below) — the earlier claim in this ADR that "no separate mutex is
+> needed" was incorrect and has been corrected in place, not quietly
+> dropped. 3 new deterministic regression tests (forced via test-only
+> hooks, not timing luck). 182 tests total.
 
 ## Context
 
@@ -185,28 +197,105 @@ boolean (`checkLiveness()` in `lock.ts`):
 - throws anything else → **unknown** → never recover (an unrecognized
   error is not proof of death).
 
-**Recovery (dead owner only), race-safe without a dedicated mutex:** on a
-confirmed-dead verdict, the challenger re-reads the lock file immediately
-before deleting it and compares it byte-for-byte to the record it based
-the "dead" verdict on. If unchanged, it deletes it and loops back to
-retry `open(path, 'wx')`. If changed or gone — another challenger beat it
-to the same decision — it does nothing and re-evaluates from scratch. A
-separate "recovery mutex" file was considered and deliberately **not**
-added: the compare-then-delete step, combined with `open(..., 'wx')`'s own
-atomicity for both the delete-then-recreate race and the final
-acquisition, is sufficient to guarantee at most one challenger ever wins a
-given recovery — adding a second lock file to protect the first would not
-close a gap this doesn't already close, and the brief explicitly asks not
-to add infrastructure that isn't earning its keep. This was verified with
-5 concurrent challengers racing to recover a single crashed owner
-(`lock.test.ts`, "Scenario B — concurrent recovery challengers") — their
-acquired/released windows never overlap.
+#### Recovery is serialized by a dedicated mutex (corrected 2026-10-21, same day)
+
+The first version of this hardening pass claimed that "re-read immediately
+before deleting, then compare byte-for-byte" was *itself* sufficient —
+that a separate recovery mutex would not close any gap that compare-then-
+delete didn't already close. **That claim was wrong, and a second,
+independent review caught it before it shipped as the final word.**
+"Re-read, compare, then unlink" is two separate statements, not one
+syscall: `readFileSync` and `unlinkSync` do not happen atomically with
+respect to each other, and nothing stops a *different* process from
+completing its own entire recovery cycle — delete the stale record,
+create its own fresh one — in the gap between this process's compare and
+this process's unlink.
+
+This was reproduced empirically (not just reasoned about) with two real
+forked processes replaying exactly that two-statement sequence outside
+`lock.ts`, with no mutex: process **B** read the dead owner's record,
+confirmed it matched, and was paused (via a test hook) in the gap before
+its `unlinkSync` call; process **C**, running the identical sequence
+without a pause, finished first — deleted the stale record and created
+its own lock (`pid:C-nonce`). When B was then resumed, its `unlinkSync`
+deleted **C's** lock, purely by path, with no awareness its content had
+changed — and B then successfully created its own lock on top of it. Both
+B and C believed, at that point, that they owned the lock.
+
+The fix: deleting a specific stale record is now exclusive, enforced by a
+**recovery mutex** — `<lockPath>.recovery`, created with the identical
+`open(path, 'wx')` primitive as the primary lock, holding no liveness
+semantics of its own. A challenger that observes a dead owner must:
+
+1. try to create the recovery mutex; if that fails (`EEXIST`), **back off
+   immediately** — it does not wait on the mutex, it falls through to the
+   primary lock's normal wait/retry loop, so a busy mutex never blocks
+   progress on unrelated outcomes (e.g. the real owner becoming reachable
+   another way);
+2. only once holding the mutex, **re-read the primary lock from scratch**
+   and re-confirm both that its content still matches what was originally
+   observed *and* that its owner is still dead — both checks happen
+   inside the mutex-protected section, where no other process can be
+   concurrently reaching the same conclusion about the same stale record;
+3. only then unlink it, and release the mutex in a `finally`.
+
+Why this closes the gap the first version missed: at most one process can
+ever hold `<lockPath>.recovery` at a time (same atomicity argument as the
+primary lock itself), so at most one process is ever between "re-verified
+dead" and "deleted" for a given stale record — there is no window left
+for a second process to interleave its own full cycle. Claiming a stale
+primary lock is now a *two-step handshake* (hold the mutex to delete the
+old record; release it; then separately race for the primary lock itself
+via the ordinary `open(wx)` path, exactly like any other acquirer) rather
+than one unprotected compare-then-act sequence.
+
+Two cases this must handle, and does, verified by `lock.test.ts`
+("TOCTOU regression — serialized recovery"):
+
+- **A challenger paused while holding the mutex** (right before the
+  unlink) fully blocks a second challenger — the second cannot acquire
+  the mutex, cannot bypass it, and simply times out without touching
+  anything. No overlap is possible because the second challenger never
+  gets far enough to delete anything.
+- **A challenger paused *before* requesting the mutex**, while a faster
+  challenger fully recovers and claims the lock in the meantime, must
+  find — once it finally gets the mutex — that the record no longer
+  matches what it originally observed, and must abort without deleting
+  the new owner's lock.
+
+**The recovery mutex is itself never recovered by liveness or age.** If a
+process crashes while holding it, it simply stays held — every subsequent
+recovery attempt for that lock returns "mutex busy" and the caller times
+out cleanly (`LockTimeoutError`), forever, until a human removes the
+`.recovery` file by hand. This is a deliberate choice: **safety over
+availability**. Making the mutex itself recoverable would reopen exactly
+the same class of problem one level down (now two processes could both
+conclude the *mutex's* holder is dead and race to steal it), and the brief
+explicitly rules out building a recursive recovery hierarchy. The
+trade-off is explicit and tested (`lock.test.ts`, "a recovery mutex
+orphaned by a process that crashed while holding it..."): automatic crash
+recovery for that one lock becomes permanently unavailable until manual
+cleanup, but the primary lock file is never touched, nothing is
+corrupted, and no caller ever hangs — it gets a diagnosable timeout.
 
 **`release()` only ever removes a lock file that is still, byte-for-byte,
 the record it created** (`pid:nonce`, not just `pid` — a nonce closes the
 narrow theoretical gap where a PID could be reused across two unrelated
 acquisitions). It is always called from `mutateState`'s `finally` block,
-so it runs whether the mutator or the write failed.
+so it runs whether the mutator or the write failed. This same
+read-compare-then-unlink shape is, syntactically, just as non-atomic as
+the one that caused the recovery bug above — but it is not exploitable in
+practice, and the reason is not "the nonce makes it atomic" (it does not;
+nonce comparison is an identity check, not a compare-and-swap primitive).
+It is safe because the *only* process ever positioned to delete a lock
+based on a liveness verdict is one that went through the recovery-mutex
+protocol above, which can only ever conclude "dead" about an owner that
+is, in fact, dead — and a process calling its own `release()` is, by
+definition, still alive and running that very call. No process can ever
+legitimately conclude a still-running owner is dead, so no process can
+ever race to replace that owner's lock while it holds it. The gap between
+`release()`'s read and its unlink is real but has no process that can
+land in it with a conflicting intent.
 
 **Known limitation, stated plainly:** this is a local-filesystem lock
 built on `open(..., 'wx')` and `rename()` atomicity. It makes no claim
@@ -215,7 +304,13 @@ network filesystems (NFS, SMB, etc.) where that atomicity is not always
 dependable. Liveness checks are also local — `process.kill(pid, 0)` only
 makes sense when lock challengers and the owner share the same PID
 namespace (true for `monolith` processes on one machine; not evaluated
-across containers/namespaces/hosts).
+across containers/namespaces/hosts). The recovery mutex adds one more
+specific, accepted limitation: a process that crashes at exactly the
+wrong instant (while holding `<lockPath>.recovery`) permanently disables
+automatic recovery for that lock until a human deletes the orphaned
+mutex file — this requires two crashes in a row (the original owner, then
+a recoverer) and is judged an acceptable price for never risking double
+ownership.
 
 ### Mission ID generation
 
@@ -312,12 +407,12 @@ and a crashed holder blocks everyone for that whole window regardless.
 Liveness alone has neither failure mode: a crash is detected the instant
 anyone checks (`ESRCH`), and a live owner is never second-guessed no
 matter how long it legitimately runs. The PID-reuse edge case the age
-fallback was meant to catch is instead closed by the recovery protocol's
-compare-before-delete step (see "Locking protocol") and the `nonce` in
-the lock record — a new process must still go through `open(path, 'wx')`
-to claim the lock before its PID matters at all, so a reused PID
-belonging to an unrelated, brand-new process is never mistaken for the
-old dead holder.
+fallback was meant to catch is instead closed by the recovery mutex's
+mutex-protected re-verification step (see "Locking protocol") and the
+`nonce` in the lock record — a new process must still go through
+`open(path, 'wx')` to claim the lock before its PID matters at all, so a
+reused PID belonging to an unrelated, brand-new process is never mistaken
+for the old dead holder.
 
 ### Why mission IDs are derived, not a stored counter
 
@@ -402,13 +497,13 @@ Consequences).
 
 ## Validation
 
-- 179 total tests passing (138 before this slice — scriptorium 75, graph
-  63, unchanged — then 31 for the original slice, then 10 more from the
-  2026-10-21 hardening); typecheck clean; build clean.
+- 182 total tests passing (138 before this slice — scriptorium 75, graph
+  63, unchanged — then 31 for the original slice, then 10 from the
+  2026-10-21 hardening, then 3 from the same-day corrective patch below);
+  typecheck clean; build clean.
 - First-slice tests (31): 11 state-keeper, 17 mission lifecycle + CLI
   integration, 3 init regression.
-- Hardening tests (10, all in the same `lock.test.ts` / `state-keeper.test.ts`
-  files as the originals): real-process coverage for a live owner never
+- Hardening tests (10): real-process coverage for a live owner never
   being preempted regardless of hold duration, a crashed owner being
   recovered quickly, empty/malformed/unparseable lock content never being
   claimed, 5 concurrent recovery challengers never overlapping in
@@ -416,20 +511,38 @@ Consequences).
   lock file, a write failure (directory made read-only mid-mutation)
   leaving the previous valid `state.json` intact, and `mutateState` on an
   externally-corrupted file throwing without writing anything.
+- Corrective-patch tests (3, `lock.test.ts` "TOCTOU regression —
+  serialized recovery"): a challenger paused *while holding the recovery
+  mutex* fully blocks a second challenger (which times out, never
+  acquiring, never touching the stale record); a challenger paused
+  *before* requesting the mutex, once resumed, correctly aborts without
+  deleting a faster challenger's legitimately-claimed lock; a recovery
+  mutex orphaned by a crashed holder causes clean, repeatable
+  `LockTimeoutError`s (no corruption, no hang) rather than ever granting
+  false ownership. All three force their exact interleaving via test-only
+  hooks (`beforeRecoveryAttempt`, `beforeStaleUnlink`) and real forked
+  processes — not sleep-based timing luck. Run 5× consecutively with no
+  flakes before being accepted.
 - Manual CLI smoke test: `init` → `mission start` ×2 → `list` → `show` →
   `finish --result completed` → `list` (active/finished split correct) →
   unknown-id and double-finish both exit 1 with a clear message.
 - Manual concurrency smoke test: 8 real concurrent `node dist/cli/index.js
   mission start` shell processes against one scratch instance →
-  `revision === 8`, 8 unique IDs, no corruption, no lock file left behind.
-- What is proven by test vs. assumed: the "no lost updates" and "live
-  owner never preempted" properties are demonstrated for processes on one
-  machine sharing a PID namespace, within the timeouts exercised by the
-  tests (seconds, not hours). No test runs for hours or exercises clock
-  changes (NTP step, manual clock adjustment) — since the design no longer
-  reasons about elapsed time at all, clock behavior should be irrelevant,
-  but that irrelevance follows from code inspection, not from a dedicated
-  test exercising a clock jump during an active lock hold.
+  `revision === 8`, 8 unique IDs, no corruption, no lock/recovery files
+  left behind.
+- What is proven by test vs. assumed: the "no lost updates", "live owner
+  never preempted", and "recovery never double-grants ownership"
+  properties are demonstrated for processes on one machine sharing a PID
+  namespace, within the timeouts exercised by the tests (seconds, not
+  hours). No test runs for hours or exercises clock changes (NTP step,
+  manual clock adjustment) — since the design no longer reasons about
+  elapsed time at all, clock behavior should be irrelevant, but that
+  irrelevance follows from code inspection, not from a dedicated test
+  exercising a clock jump during an active lock hold. The formal argument
+  for "at most one process ever owns the lock" rests on `open(path,
+  'wx')`'s atomicity being exactly as advertised by the OS/filesystem —
+  this is assumed, not independently re-verified by these tests, for both
+  the primary lock and the recovery mutex.
 
 ---
 

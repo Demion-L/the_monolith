@@ -115,7 +115,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/scriptorium/frontmatter.ts`  | YAML frontmatter parser                                              |
 | `src/scriptorium/markdown.ts`     | Heading/content extraction                                           |
 | `src/scriptorium/index.ts`        | Module barrel export                                                 |
-| `src/scriptorium/scriptorium.test.ts` | Vitest test suite (138 tests)                                    |
+| `src/scriptorium/scriptorium.test.ts` | Vitest test suite (see integrity-result.md for count)            |
 | `src/graph/types.ts`              | GraphNode, GraphEdge, ExplicitRelationshipGraph, ...                 |
 | `src/graph/builder.ts`            | `buildGraph()` — Pass 1 (nodes) + Pass 2 (edges) + Pass 2.5 (aliases) |
 | `src/graph/normalize.ts`          | `normalizeLabel()`, `selectCanonicalLabel()`                         |
@@ -134,7 +134,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (138 tests passing, typecheck clean):
+What MONOLITH does today (252 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -258,7 +258,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] `buildGraph()` — Pass 1 + 2 + 2.5 alias system, explicit-only
 - [x] ADR-007: explicit-only identity resolution
 
-**COORDINATORIUM-001 — Tactical Mission Lifecycle (First Vertical Slice)** — implemented 2026-10-21, pending review/finalization
+**COORDINATORIUM-001 — Tactical Mission Lifecycle (First Vertical Slice)** ✅ finalized 2026-10-21
 - [x] Deterministic State Keeper (`.monolith/state.json`) — lock + atomic write, no lost updates
 - [x] `monolith mission start|list|show|finish` CLI
 - [x] ADR-008: Coordinatorium — Tactical Mission Lifecycle
@@ -267,14 +267,15 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 481 real nodes, 0 synthesized nodes on MONOLITH corpus
 - [x] 151 total tests passing, typecheck clean
 
-**COORDINATORIUM-002 — Mission Checkpoints** — implemented 2026-10-21, pending review/finalization
+**COORDINATORIUM-002 — Mission Checkpoints** ✅ finalized 2026-10-21
 - [x] `Checkpoint` domain entity, `tactical.checkpoints` sibling map
 - [x] `createCheckpoint`/`listCheckpoints`/`getCheckpoint` (append-only — no update/delete path)
 - [x] `monolith mission checkpoint|checkpoints` CLI
 - [x] `MissionNotActiveError`/`CheckpointNotFoundError` added to the Coordinatorium error taxonomy
 - [x] `schemaVersion` bumped to 2 with a deterministic v1→v2 migration on read (compatibility-fix addendum, same day: the first cut kept `schemaVersion` at 1, which an independent review confirmed would let a pre-002 binary silently drop checkpoints on write — fixed before integration)
 - [x] ADR-008 amended with two dated addenda (same convention as the 2026-10-21 lock.ts hardening passes)
-- [x] 234 total tests passing (48 new over COORDINATORIUM-001's 186), typecheck and build clean
+- [x] Init safety: `createEmptyDirs()` no longer truncates a pre-existing `.gitkeep` — the affected paths are now covered by `planScaffoldConflicts()`'s preflight, closing the gap found during this finalization's review
+- [x] 252 total tests passing (checkpoint 40, state-keeper 21, init-safety 12, mission 17, init 3, init-args 6, lock 15, scriptorium 75, graph 63), typecheck and build clean
 
 **Candidate next stories (not decisions):**
 - Corpus relationship density (32 edges / 481 nodes — too sparse)

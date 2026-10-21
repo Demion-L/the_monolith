@@ -156,6 +156,38 @@ Format:
 
 ---
 
+### Step 5.5 — Documentation Synchronization (mandatory)
+
+Finalization is not complete while project documentation contradicts the
+implementation it just closed out. Check each of the following against the
+actual code/tests/ADRs (the source of truth — never copy a claim from one
+doc into another without verifying it), and update only where it has
+drifted:
+
+- `README.md` — positioning, implemented-vs-not-yet-implemented lists, CLI
+  examples, limitations
+- `AGENTS.md` — current scope, Success Criteria status, component/CLI
+  references, no contradictions with README.md
+- `CLAUDE.md` — mission framing, instructions, no contradictions with
+  AGENTS.md
+- `package.json` — description, keywords, scripts match reality
+- Architecture docs (`docs/architecture/`) — component contracts match
+  implemented behavior; no planned feature described as implemented
+- Governance docs (tech-debt, roadmap, ADR index) — statuses current,
+  cross-references correct
+- CLI docs/usage/help text — matches actual commands and flags
+
+Do not invent unstable metrics (test/node/edge counts) not backed by an
+actual check just run. Do not rewrite a document wholesale when a targeted
+fix covers the drift. If a contradiction can't be resolved without a new
+architectural decision, stop and flag it to the user instead of guessing.
+
+Report per document: **UPDATED** (drift found and fixed) or **VERIFIED**
+(checked, already current). This step blocks Step 7 (commit) and any
+push — do not proceed while a known contradiction is unresolved.
+
+---
+
 ### Step 6 — Update HANDOFF.md
 
 Rewrite `context/boot/HANDOFF.md` with current state:
@@ -188,5 +220,6 @@ Do NOT push automatically. Ask the user if they want to push.
 - [ ] `story-index.md` updated
 - [ ] `execution-history.md` appended
 - [ ] `decisions.md` updated (if ADR was written)
+- [ ] Documentation Synchronization complete (Step 5.5) — no known contradiction between docs and implementation left unresolved
 - [ ] `HANDOFF.md` current
 - [ ] Commit created

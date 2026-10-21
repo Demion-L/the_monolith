@@ -1,7 +1,7 @@
 {
   "name": "@monolith/core",
   "version": "0.1.0-alpha.0",
-  "description": "MONOLITH — Cognitive Operating System kernel for AI assistants",
+  "description": "MONOLITH — portable project knowledge and governance toolkit for AI-assisted development",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,7 +25,7 @@
   },
   "keywords": [
     "monolith",
-    "cognitive-os",
+    "knowledge-toolkit",
     "ai-assistant",
     "enforcement",
     "protocol"

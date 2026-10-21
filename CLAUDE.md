@@ -1,6 +1,6 @@
 # MONOLITH — Claude Code Instructions
 
-This repository runs MONOLITH, a structured cognitive operating system.
+This repository runs MONOLITH, a portable project knowledge and governance toolkit for AI-assisted development.
 Before acting on any skill-triggering request, read the corresponding skill file.
 
 ---

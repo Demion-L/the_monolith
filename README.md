@@ -38,6 +38,7 @@ and which validators are active.
 - `graph/` — Explicit Relationship Graph builder (implemented)
 - `init/`, `cli/` — scaffold a new MONOLITH instance (implemented)
 - `validate/` — instance integrity checks (implemented, see below for current scope)
+- `coordinatorium/` — Tactical Coordinatorium: deterministic State Keeper (`.monolith/state.json`), mission lifecycle, and mission checkpoints (implemented, see ADR-008)
 - Enforcement gate engine, protocol drift detection, semantic memory routing (declared as types in `src/types/`; **not yet implemented** — see "Not Yet Implemented")
 
 **Instance (per-project, not part of this package's code)**
@@ -51,7 +52,7 @@ and which validators are active.
 ```bash
 npx monolith init       # scaffold a new instance from templates/ (implemented)
 npx monolith validate   # check instance integrity (implemented, see below)
-npx monolith mission    # Tactical Coordinatorium mission lifecycle (implemented, see ADR-008)
+npx monolith mission    # Tactical Coordinatorium: start|list|show|finish|checkpoint|checkpoints (implemented, see ADR-008)
 npx monolith status     # show active protocol, phase, story, drift summary (not yet implemented)
 npx monolith dry-run    # simulate finalization gate without writes (not yet implemented)
 ```
@@ -119,7 +120,9 @@ Scriptorium and ERG are tracked as Phase 1 stories in `AGENTS.md`. See
 up-to-date status of what is implemented.
 
 **Implemented today:** `monolith init`, `monolith validate` (the three
-checks above), Scriptorium, Explicit Relationship Graph (ERG).
+checks above), `monolith mission` (Tactical Coordinatorium: mission
+lifecycle and mission checkpoints, ADR-008, `state.json` schemaVersion 2),
+Scriptorium, Explicit Relationship Graph (ERG).
 
 **Not yet implemented:** `monolith status`, `monolith dry-run`, the
 enforcement gate engine and integrity validators described by

@@ -48,9 +48,10 @@ Markdown artifact (frontmatter + headings + links)
      └──→  Session handoff (.monolith/context/boot/HANDOFF.md)
 ```
 
-Separately, `monolith mission start|list|show|finish` (Coordinatorium,
-ADR-008) records tactical mission lifecycle in `.monolith/state.json`,
-independent of this document pipeline — see `AGENTS.md` → Mission Lifecycle.
+Separately, `monolith mission start|list|show|finish|checkpoint|checkpoints`
+(Coordinatorium, ADR-008) records tactical mission lifecycle and progress
+checkpoints in `.monolith/state.json`, independent of this document
+pipeline — see `AGENTS.md` → Mission Lifecycle.
 
 ---
 

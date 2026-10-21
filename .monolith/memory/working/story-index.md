@@ -62,3 +62,15 @@ Use this when you need to know:
 **Summary:** First vertical slice of Coordinatorium — a deterministic, file-based State Keeper (`.monolith/state.json`) and a `monolith mission start|list|show|finish` CLI for registering and closing development missions, independent of any single AI session's self-reported memory. Three same-day hardening passes closed, in turn: a live owner being preemptable purely by lock age, a non-atomic "re-read then delete" recovery race between two challengers, and a non-atomic lock-*creation* path that could leave an empty/partial canonical lock behind on a write failure. Strategic Coordinatorium remains schema-reserved only; mission registration is not runtime-enforced.
 
 **Key outputs:** src/coordinatorium/{types,state-keeper,lock,mission,cli,errors}.ts, docs/adr/ADR-008, 186 tests passing (48 Coordinatorium-specific: 13 state-keeper, 17 mission + CLI, 15 lock — including real multi-process concurrency and TOCTOU/partial-write regression tests — 3 init regression)
+
+---
+
+### COORDINATORIUM-002 — Mission Checkpoints
+
+**Date:** 2026-10-21
+**Status:** COMPLETED
+**Capsule:** `.monolith/memory/working/phases/phase-1/stories/story-coordinatorium-002-mission-checkpoints.md`
+
+**Summary:** Durable, append-only progress checkpoints for an `in_progress` mission (`tactical.checkpoints` sibling map, `createCheckpoint`/`listCheckpoints`/`getCheckpoint`, `monolith mission checkpoint|checkpoints` CLI), gated on mission activity and serialized through the existing State Keeper lock. A same-day compatibility review found that leaving `schemaVersion` at 1 would let a pre-002 binary silently drop checkpoints on write; fixed by bumping to schemaVersion 2 with an explicit, verified v1→v2 migration and loud old-binary rejection. This finalization pass additionally closed an Init Safety gap found during review: `createEmptyDirs()` could silently truncate a pre-existing `.gitkeep`, now covered by the same preflight-conflict contract as every other tracked file. Documentation (README/AGENTS/CLAUDE/package.json/architecture docs/instruction templates) was synchronized, removing a stale "Cognitive Operating System" framing superseded by the toolkit mission.
+
+**Key outputs:** src/coordinatorium/checkpoint.ts, src/init/scaffold.ts (GITKEEP_DIRS fix), docs/adr/ADR-008 (two addenda), 252 tests passing (checkpoint 40, state-keeper 21, init-safety 12, mission 17, init 3, init-args 6, lock 15, scriptorium 75, graph 63), LESSON-2026-0007

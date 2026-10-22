@@ -88,3 +88,4 @@ Instance/Templates.
 - `validate` and `brief` document discovery do not follow symlinks, but
   other readers of paths under the root are not behind a filesystem sandbox.
 - No general filesystem boundary abstraction (all call sites use `fs` directly).
+- Update (SEC-002, ADR-011): `validate` no longer executes `project.definition.mjs`, and root-level files are read through a bounded, contained reader in `src/root/`; this does not close the TOCTOU risk above.

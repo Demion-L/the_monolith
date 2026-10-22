@@ -1,8 +1,8 @@
 /* eslint-disable no-console */
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join, resolve, relative } from 'path';
-import { pathToFileURL } from 'url';
-import { resolveMonolithRoot, RootContainmentError } from '../root/index.js';
+import { existsSync, readdirSync } from 'fs';
+import { join, resolve, relative, sep } from 'path';
+import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, } from '../root/index.js';
+const DEFINITION_FILE_NAME = 'project.definition.mjs';
 const REQUIRED_DIRS = ['memory', 'context', 'protocols', 'skills', 'governance', 'learning', 'tests'];
 // Only flag variables that init is responsible for substituting.
 // User-facing content placeholders (e.g. {{PLAN_TITLE}}) are intentional and must not be flagged.
@@ -13,41 +13,48 @@ const INIT_VARS = new Set([
 ]);
 const INIT_PLACEHOLDER_RE = /\{\{([A-Z_]+)\}\}/g;
 const COL_WIDTH = 16;
-async function checkConfiguration(targetDir) {
-    const configPath = join(targetDir, 'monolith.config.json');
-    if (!existsSync(configPath)) {
+/**
+ * Static configuration check (SEC-002). `project.definition.mjs` is a
+ * project-controlled file: it is NEVER imported, evaluated or parsed as
+ * JavaScript here. It is only checked as a file — present, inside the
+ * project, regular, non-empty, at most 1 MiB. A PASS therefore says nothing
+ * about its syntax, its exports or what it would do if executed.
+ */
+function checkConfiguration(targetDir) {
+    const config = readConfigFile(targetDir);
+    if (config.status === 'absent') {
         return { label: 'Configuration', passed: false, error: 'missing monolith.config.json' };
     }
-    const defPath = join(targetDir, 'project.definition.mjs');
-    if (!existsSync(defPath)) {
-        return { label: 'Configuration', passed: false, error: 'missing project.definition.mjs' };
+    if (config.status === 'unreadable') {
+        return { label: 'Configuration', passed: false, error: `monolith.config.json cannot be read safely: ${config.detail}` };
+    }
+    if (config.status !== 'ok') {
+        return { label: 'Configuration', passed: false, error: 'monolith.config.json is not valid JSON' };
+    }
+    const def = checkProjectFile(targetDir, DEFINITION_FILE_NAME);
+    if (!def.ok) {
+        const error = def.code === 'FILE_MISSING'
+            ? `missing ${DEFINITION_FILE_NAME}`
+            : `${DEFINITION_FILE_NAME} rejected (${def.code}): ${def.detail}`;
+        return { label: 'Configuration', passed: false, error };
+    }
+    if (!Object.prototype.hasOwnProperty.call(config.cfg, 'monolithRoot')) {
+        return { label: 'Configuration', passed: false, error: 'monolith.config.json missing monolithRoot field' };
     }
     try {
-        const raw = readFileSync(configPath, 'utf8');
-        const cfg = JSON.parse(raw);
-        if (!Object.prototype.hasOwnProperty.call(cfg, 'monolithRoot')) {
-            return { label: 'Configuration', passed: false, error: 'monolith.config.json missing monolithRoot field' };
-        }
-        resolveMonolithRoot(targetDir, { status: 'ok', cfg });
+        resolveMonolithRoot(targetDir, config);
     }
     catch (err) {
         if (err instanceof RootContainmentError) {
             return { label: 'Configuration', passed: false, error: err.message };
         }
-        return { label: 'Configuration', passed: false, error: 'monolith.config.json is not valid JSON' };
+        throw err;
     }
-    try {
-        const fileUrl = pathToFileURL(resolve(defPath)).href;
-        const mod = await import(fileUrl);
-        if (!mod.PROJECT_DEFINITION) {
-            return { label: 'Configuration', passed: false, error: 'project.definition.mjs missing PROJECT_DEFINITION export' };
-        }
-    }
-    catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { label: 'Configuration', passed: false, error: `project.definition.mjs failed to load: ${msg}` };
-    }
-    return { label: 'Configuration', passed: true };
+    return {
+        label: 'Configuration',
+        passed: true,
+        note: `${DEFINITION_FILE_NAME} checked as a file only (present, inside project, regular, non-empty, <= 1 MiB); not parsed or executed`,
+    };
 }
 function checkInstance(targetDir, monolithRoot) {
     const instanceDir = join(targetDir, monolithRoot);
@@ -89,33 +96,43 @@ function hasUnreplacedInitVars(content) {
 }
 function checkTemplates(targetDir, monolithRoot) {
     const violations = [];
+    const unsafe = [];
     const instanceDir = join(targetDir, monolithRoot);
     for (const file of walkFiles(instanceDir)) {
         if (file.endsWith('.gitkeep'))
             continue;
-        try {
-            const content = readFileSync(file, 'utf8');
-            if (hasUnreplacedInitVars(content)) {
-                violations.push(relative(targetDir, file));
-            }
+        const rel = relative(targetDir, file);
+        // Same bounded, containment-checked reader as the root files below (SEC-002):
+        // a FIFO/socket/device is never opened, a file over 1 MiB is never read.
+        const read = readProjectFile(targetDir, rel.split(sep).join('/'), { allowEmpty: true });
+        if (!read.ok) {
+            if (read.code !== 'FILE_MISSING')
+                unsafe.push(`${rel} (${read.code})`);
+            continue;
         }
-        catch {
-            // binary or unreadable — skip
+        if (hasUnreplacedInitVars(read.content)) {
+            violations.push(rel);
         }
     }
-    for (const rootFile of ['project.definition.mjs', 'monolith.config.json', 'AGENTS.md']) {
-        const filePath = join(targetDir, rootFile);
-        if (!existsSync(filePath))
+    for (const rootFile of [DEFINITION_FILE_NAME, 'monolith.config.json', 'AGENTS.md']) {
+        // Bounded, containment-checked read (SEC-002): never blocks on a FIFO,
+        // never reads a device, never follows a link out of the project.
+        const read = readProjectFile(targetDir, rootFile, { allowEmpty: true });
+        if (!read.ok) {
+            if (read.code !== 'FILE_MISSING')
+                unsafe.push(`${rootFile} (${read.code})`);
             continue;
-        try {
-            const content = readFileSync(filePath, 'utf8');
-            if (hasUnreplacedInitVars(content)) {
-                violations.push(rootFile);
-            }
         }
-        catch {
-            // skip
+        if (hasUnreplacedInitVars(read.content)) {
+            violations.push(rootFile);
         }
+    }
+    if (unsafe.length > 0) {
+        return {
+            label: 'Templates',
+            passed: false,
+            error: `cannot safely read: ${unsafe.slice(0, 3).join(', ')}${unsafe.length > 3 ? ` (+${unsafe.length - 3} more)` : ''}`,
+        };
     }
     if (violations.length > 0) {
         return {
@@ -145,7 +162,7 @@ export async function runValidate(options) {
         if (!(err instanceof RootContainmentError))
             throw err;
     }
-    const configResult = await checkConfiguration(targetDir);
+    const configResult = checkConfiguration(targetDir);
     const instanceResult = monolithRoot === null
         ? { label: 'Instance', passed: false, error: 'skipped: monolithRoot failed validation' }
         : checkInstance(targetDir, monolithRoot);
@@ -171,6 +188,8 @@ export async function runValidate(options) {
         }
         console.log('');
         console.log(`Result: ${passed ? 'PASS' : 'FAIL'}`);
+        if (configResult.passed && configResult.note)
+            console.log(`Note: ${configResult.note}`);
         console.log('');
     }
     process.exit(passed ? 0 : 1);

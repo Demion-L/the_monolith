@@ -12,7 +12,7 @@ category: scenarios
 
 ## Expected Behavior
 
-1. Validator reads project.definition.js
+1. Validator checks project.definition.mjs as a file only (exists, inside the project, regular, non-empty, <= 1 MiB); it never imports or executes it
 2. Validator checks all required memory files exist
 3. Validator checks routing-map structure (7 tables, 14 task types)
 4. Validator checks cognitive-modes (7 modes with activation triggers)

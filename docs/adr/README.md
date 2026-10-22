@@ -28,6 +28,7 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-008 | Coordinatorium — Tactical Mission Lifecycle | accepted | — | 2026-10-21 |
 | ADR-009 | monolithRoot Containment (SEC-001A) | accepted | — | 2026-10-22 |
 | ADR-010 | Mission Control UI — Read-Only Local Interface over Core | accepted | — | 2026-10-22 |
+| ADR-011 | Static `monolith validate` — No Execution of Project Code (SEC-002); ADR-010 is reserved for UI | accepted | — | 2026-10-22 |
 
 **ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
 cognitive-architecture research program (Terra persistence, the Lexicon

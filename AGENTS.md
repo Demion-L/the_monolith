@@ -241,6 +241,24 @@ Missions, and a pointer block. Every section names its source.
   data cannot forge brief structure; the Story excerpt is the only
   multi-line field.
 
+**File read contract (SEC-001B.1):** `state.json`, the lock record,
+`active.md` and the Markdown documents `brief` scans are read through the
+shared bounded reader in `src/root/` — non-blocking open (a FIFO cannot hang
+the process), `fstat` regular-file check, size checked before and during the
+read, descriptor always closed. Limits are protective ceilings, not policy:
+
+| File | Limit | On violation |
+|---|---:|---|
+| lock record | 256 B | `LockUnsafeError` (`mission` exits non-zero); lock not acquired, file untouched |
+| `active.md` | 256 KiB | `ACTIVE_MD_MISSING` warning naming `FILE_TOO_LARGE` / `FILE_NOT_REGULAR` |
+| Markdown documents (protocols, ADRs) | 1 MiB | `DOC_FILE_UNREADABLE` error → `INCOMPLETE` |
+| `state.json` | 16 MiB | read: `StateFileError` / `STATE_UNREADABLE`; write: refused before the temp file is created |
+
+Over-limit is fail-closed — never truncated, compacted or auto-cleaned
+(growth policy: STATE-001, not started). Symlinks keep their existing policy
+(in-project allowed, escaping/dangling/looping refused). Bounded reads do not
+close check-then-use races.
+
 Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) but
 check-then-use races remain (SEC-001B, OPEN — see
 `.monolith/memory/long-term/tech-debt.md`);
@@ -353,7 +371,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) implemented on branch `fix/sec-001b1-safe-reads`, SEC-001B.2 and SEC-001B.3 OPEN
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

@@ -250,6 +250,7 @@ export type ProjectFileErrorCode =
   | 'FILE_NOT_REGULAR'
   | 'FILE_EMPTY'
   | 'FILE_TOO_LARGE'
+  | 'FILE_CHANGED'
   | 'FILE_UNREADABLE';
 
 export interface ProjectFileOptions {
@@ -292,7 +293,6 @@ function openProjectFile(
   opts: ProjectFileOptions,
   wantContent: boolean,
 ): ProjectFileRead | ProjectFileCheck {
-  const maxBytes = opts.maxBytes ?? MAX_PROJECT_FILE_BYTES;
   const root = resolve(projectRoot);
 
   let rootReal: string;
@@ -304,31 +304,47 @@ function openProjectFile(
     return fail(err.code === 'ROOT_SYMLINK_ESCAPE' ? 'FILE_OUTSIDE_PROJECT' : 'FILE_UNRESOLVABLE', err.message);
   }
 
-  const abs = join(root, relPath);
+  return readBoundedFile(join(root, relPath), relPath, opts, wantContent);
+}
+
+/**
+ * Steps 2-6 of `openProjectFile`, for a path whose containment the caller has
+ * already established (or does not need to: e.g. a lock file next to
+ * `state.json`, whose directory was resolved through `resolveMonolithRoot`).
+ * `label` is only used in diagnostics. A file replaced between `stat` and
+ * `open` is reported as FILE_CHANGED (transient, retryable), not as a fault.
+ */
+export function readBoundedFile(
+  abs: string,
+  label: string,
+  opts: ProjectFileOptions,
+  wantContent: boolean,
+): ProjectFileRead | ProjectFileCheck {
+  const maxBytes = opts.maxBytes ?? MAX_PROJECT_FILE_BYTES;
   let before;
   try {
     before = statSync(abs);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fail('FILE_MISSING', `${relPath} does not exist.`);
-    return fail('FILE_UNREADABLE', `${relPath} cannot be inspected: ${errMsg(err)}`);
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fail('FILE_MISSING', `${label} does not exist.`);
+    return fail('FILE_UNREADABLE', `${label} cannot be inspected: ${errMsg(err)}`);
   }
-  if (!before.isFile()) return fail('FILE_NOT_REGULAR', `${relPath} is not a regular file.`);
+  if (!before.isFile()) return fail('FILE_NOT_REGULAR', `${label} is not a regular file.`);
 
   let fd: number;
   try {
     fd = openSync(abs, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOCTTY);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fail('FILE_MISSING', `${relPath} does not exist.`);
-    return fail('FILE_UNREADABLE', `${relPath} cannot be opened: ${errMsg(err)}`);
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fail('FILE_MISSING', `${label} does not exist.`);
+    return fail('FILE_UNREADABLE', `${label} cannot be opened: ${errMsg(err)}`);
   }
   try {
     const st = fstatSync(fd);
-    if (!st.isFile()) return fail('FILE_NOT_REGULAR', `${relPath} is not a regular file.`);
+    if (!st.isFile()) return fail('FILE_NOT_REGULAR', `${label} is not a regular file.`);
     if (st.dev !== before.dev || st.ino !== before.ino) {
-      return fail('FILE_UNREADABLE', `${relPath} changed while it was being inspected.`);
+      return fail('FILE_CHANGED', `${label} changed while it was being inspected.`);
     }
-    if (st.size === 0 && !opts.allowEmpty) return fail('FILE_EMPTY', `${relPath} is empty.`);
-    if (st.size > maxBytes) return fail('FILE_TOO_LARGE', `${relPath} is ${st.size} bytes; the limit is ${maxBytes}.`);
+    if (st.size === 0 && !opts.allowEmpty) return fail('FILE_EMPTY', `${label} is empty.`);
+    if (st.size > maxBytes) return fail('FILE_TOO_LARGE', `${label} is ${st.size} bytes; the limit is ${maxBytes}.`);
     if (!wantContent) return { ok: true, path: abs, size: st.size };
 
     const chunks: Buffer[] = [];
@@ -338,15 +354,36 @@ function openProjectFile(
       const n = readSync(fd, buf, 0, buf.length, null);
       if (n === 0) break;
       total += n;
-      if (total > maxBytes) return fail('FILE_TOO_LARGE', `${relPath} grew beyond the limit of ${maxBytes} bytes while being read.`);
+      if (total > maxBytes) return fail('FILE_TOO_LARGE', `${label} grew beyond the limit of ${maxBytes} bytes while being read.`);
       chunks.push(buf.subarray(0, n));
     }
     return { ok: true, path: abs, size: total, content: Buffer.concat(chunks).toString('utf8') };
   } catch (err) {
-    return fail('FILE_UNREADABLE', `${relPath} cannot be read: ${errMsg(err)}`);
+    return fail('FILE_UNREADABLE', `${label} cannot be read: ${errMsg(err)}`);
   } finally {
     closeSync(fd);
   }
+}
+
+const CHANGED_RETRIES = 3;
+
+/**
+ * `readBoundedFile`, retried while the file is atomically replaced under us
+ * (FILE_CHANGED). For readers that race a rename-based writer or a lock
+ * release/re-acquire: those are normal, not faults. After the retries it
+ * still reports FILE_CHANGED rather than guessing.
+ */
+export function readBoundedFileStable(
+  abs: string,
+  label: string,
+  opts: ProjectFileOptions,
+  wantContent: boolean,
+): ProjectFileRead | ProjectFileCheck {
+  let r = readBoundedFile(abs, label, opts, wantContent);
+  for (let i = 1; i < CHANGED_RETRIES && !r.ok && r.code === 'FILE_CHANGED'; i++) {
+    r = readBoundedFile(abs, label, opts, wantContent);
+  }
+  return r;
 }
 
 /**

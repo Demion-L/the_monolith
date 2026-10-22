@@ -12,14 +12,21 @@
  * AI reports state; this module validates and persists it. It has no
  * knowledge of what a "mission" is — that belongs to mission.ts.
  */
-import { readFile, writeFile, rename, unlink } from 'fs/promises';
-import { existsSync, mkdirSync } from 'fs';
+import { writeFile, rename, unlink } from 'fs/promises';
+import { mkdirSync } from 'fs';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { acquireLock } from './lock.js';
-import { StateCorruptedError, StateSchemaError } from './errors.js';
+import { StateCorruptedError, StateSchemaError, StateFileError } from './errors.js';
+import { readBoundedFileStable } from '../root/index.js';
 import { STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1, createInitialState, } from './types.js';
 export const STATE_FILE_NAME = 'state.json';
+/**
+ * Protective ceiling for `state.json` (SEC-001B.1) — NOT a retention policy.
+ * Append-only checkpoints grow the file without bound; see STATE-001.
+ * Enforced on read (bounded reader) and before an atomic write.
+ */
+export const MAX_STATE_BYTES = 16 * 1024 * 1024;
 export function stateFilePath(stateDir) {
     return join(stateDir, STATE_FILE_NAME);
 }
@@ -188,10 +195,15 @@ export function validateState(raw) {
  */
 export async function readState(stateDir) {
     const filePath = stateFilePath(stateDir);
-    if (!existsSync(filePath)) {
-        return createInitialState();
+    // Bounded, non-blocking read (a FIFO at this path cannot hang us); the
+    // reader is synchronous and capped at MAX_STATE_BYTES.
+    const read = readBoundedFileStable(filePath, `"${filePath}"`, { maxBytes: MAX_STATE_BYTES, allowEmpty: true }, true);
+    if (!read.ok) {
+        if (read.code === 'FILE_MISSING')
+            return createInitialState();
+        throw new StateFileError(read.code, read.detail);
     }
-    const raw = await readFile(filePath, 'utf8');
+    const raw = 'content' in read ? read.content : '';
     let parsed;
     try {
         parsed = JSON.parse(raw);
@@ -204,8 +216,16 @@ export async function readState(stateDir) {
 }
 async function atomicWriteState(stateDir, state) {
     const filePath = stateFilePath(stateDir);
+    const serialized = `${JSON.stringify(state, null, 2)}\n`;
+    // Refuse BEFORE creating the temp file: an oversized state.json would be
+    // unreadable by readState, locking the project out of its own state. The
+    // existing state.json is left untouched; nothing is compacted or dropped.
+    const bytes = Buffer.byteLength(serialized, 'utf8');
+    if (bytes > MAX_STATE_BYTES) {
+        throw new StateFileError('FILE_TOO_LARGE', `refusing to write "${filePath}": ${bytes} bytes exceeds the ${MAX_STATE_BYTES}-byte limit (see STATE-001); state was not modified.`);
+    }
     const tmpPath = `${filePath}.tmp.${process.pid}.${randomBytes(4).toString('hex')}`;
-    await writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    await writeFile(tmpPath, serialized, 'utf8');
     try {
         await rename(tmpPath, filePath);
     }

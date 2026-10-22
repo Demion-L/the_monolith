@@ -49,13 +49,22 @@ const MODULES = ['errors', 'lock'];
 
 function transpileLockModulesTo(destDir: string): void {
   mkdirSync(destDir, { recursive: true });
+  // lock.ts / state-keeper.ts import the shared bounded reader from root/.
+  writeFileSync(
+    join(destDir, 'root.mjs'),
+    ts.transpileModule(readFileSync(join(__dirname, '..', 'root', 'index.ts'), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      fileName: 'index.ts',
+    }).outputText,
+    'utf8',
+  );
   for (const name of MODULES) {
     const source = readFileSync(join(__dirname, `${name}.ts`), 'utf8');
     const { outputText } = ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
       fileName: `${name}.ts`,
     });
-    let js = outputText;
+    let js = outputText.split(`'../root/index.js'`).join(`'./root.mjs'`);
     for (const mod of MODULES) {
       js = js.split(`'./${mod}.js'`).join(`'./${mod}.mjs'`).split(`"./${mod}.js"`).join(`"./${mod}.mjs"`);
     }

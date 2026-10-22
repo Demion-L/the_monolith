@@ -89,3 +89,4 @@ Instance/Templates.
   other readers of paths under the root are not behind a filesystem sandbox.
 - No general filesystem boundary abstraction (all call sites use `fs` directly).
 - Update (SEC-002, ADR-011): `validate` no longer executes `project.definition.mjs`, and root-level files are read through a bounded, contained reader in `src/root/`; this does not close the TOCTOU risk above.
+- Update (SEC-001B.1): reads of `state.json`, the lock record, `active.md` and `brief`'s Markdown documents are bounded and non-blocking (shared reader in `src/root/`; limits 16 MiB / 256 B / 256 KiB / 1 MiB), and `state.json` writes are size-checked before the temp file is created. SEC-001B.2 (safe writes) and SEC-001B.3 (scaffold, TOCTOU) remain open; TOCTOU is not closed.

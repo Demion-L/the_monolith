@@ -29,6 +29,8 @@
  * (SEC-001A); this check covers document directories only.
  */
 import type { BriefDiagnostic, DocRef } from './types.js';
+/** SEC-001B.1: protocol / ADR documents (largest in this repo is ~80 KB). */
+export declare const MAX_MARKDOWN_DOC_BYTES: number;
 export interface ParsedDoc {
     /** Relative to targetDir. */
     relPath: string;

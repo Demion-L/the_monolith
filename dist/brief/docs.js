@@ -28,10 +28,13 @@
  * active.md), are vetted separately by the shared resolver in src/root
  * (SEC-001A); this check covers document directories only.
  */
-import { readdirSync, readFileSync, existsSync, realpathSync } from 'fs';
+import { readdirSync, existsSync, realpathSync } from 'fs';
 import { join, relative, isAbsolute, resolve } from 'path';
+import { readBoundedFileStable } from '../root/index.js';
 import { parseFrontmatter } from '../scriptorium/frontmatter.js';
 import { compareStrings } from './selectors.js';
+/** SEC-001B.1: protocol / ADR documents (largest in this repo is ~80 KB). */
+export const MAX_MARKDOWN_DOC_BYTES = 1024 * 1024;
 const H1_RE = /^#\s+(.+?)\s*$/;
 function errMsg(err) {
     return err instanceof Error ? err.message : String(err);
@@ -142,18 +145,16 @@ function firstH1(bodyLines) {
     return undefined;
 }
 function parseDoc(absPath, targetDir, diagnostics) {
-    let content;
-    try {
-        content = readFileSync(absPath, 'utf8');
-    }
-    catch (err) {
+    const read = readBoundedFileStable(absPath, `"${relative(targetDir, absPath)}"`, { maxBytes: MAX_MARKDOWN_DOC_BYTES, allowEmpty: true }, true);
+    if (!read.ok) {
         diagnostics.push({
             code: 'DOC_FILE_UNREADABLE',
             severity: 'error',
-            message: `"${relative(targetDir, absPath)}" could not be read: ${errMsg(err)}`,
+            message: `"${relative(targetDir, absPath)}" could not be read: ${read.code}: ${read.detail}`,
         });
         return null;
     }
+    const content = 'content' in read ? read.content : '';
     const lines = content.split('\n');
     const fm = parseFrontmatter(lines);
     if (!fm)

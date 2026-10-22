@@ -10,17 +10,18 @@
  * selectors in selectors.ts, never by calling `listMissions()`/
  * `listCheckpoints()` (which each independently re-read the file).
  */
-import { existsSync, readFileSync } from 'fs';
-import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join, relative } from 'path';
 import { readBriefConfig } from './config.js';
-import { resolveMonolithRootValue, checkContainedFile } from '../root/index.js';
+import { resolveMonolithRootValue, checkContainedFile, readBoundedFileStable } from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import { selectActiveMissions, selectRecentFinishedMissions, selectLatestCheckpoint, hasCheckpointOrderMismatch, } from './selectors.js';
-import { stateFilePath, validateState, createInitialState } from '../coordinatorium/index.js';
+import { stateFilePath, validateState, createInitialState, MAX_STATE_BYTES } from '../coordinatorium/index.js';
 import { ACTIVE_MD_REL, STANDARD_ADR_DIR, PROTOCOLS_DIR } from './constants.js';
 const RECENT_FINISHED_MISSIONS_LIMIT = 5;
+/** SEC-001B.1: `active.md` is a short hand-written context file (~3 KB today). */
+export const MAX_ACTIVE_CONTEXT_BYTES = 256 * 1024;
 function isPlainObject(v) {
     return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -38,8 +39,11 @@ async function readStateForBrief(targetDir, monolithRoot, root, diagnostics) {
         });
         return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
     }
-    // Rule (section 4, #1): physical existence is checked before any read.
-    if (!existsSync(filePath)) {
+    // Rule (section 4, #1): existence is established by the same bounded,
+    // non-blocking open that reads the file (SEC-001B.1) — a FIFO or an
+    // over-limit file is rejected before any content is read.
+    const read = readBoundedFileStable(filePath, provenance.source, { maxBytes: MAX_STATE_BYTES, allowEmpty: true }, true);
+    if (!read.ok && read.code === 'FILE_MISSING') {
         diagnostics.push({
             code: 'STATE_NOT_INITIALIZED',
             severity: 'info',
@@ -47,19 +51,15 @@ async function readStateForBrief(targetDir, monolithRoot, root, diagnostics) {
         });
         return { summary: { status: 'absent', provenance }, state: createInitialState() };
     }
-    let raw;
-    try {
-        raw = await readFile(filePath, 'utf8');
-    }
-    catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+    if (!read.ok) {
         diagnostics.push({
             code: 'STATE_UNREADABLE',
             severity: 'error',
-            message: `${provenance.source} exists but could not be read: ${msg}`,
+            message: `${provenance.source} exists but could not be read: ${read.code}: ${read.detail}`,
         });
         return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
     }
+    const raw = 'content' in read ? read.content : '';
     // A literally empty file is distinguished from corrupted content
     // (DEC-CONTEXT-002: "corrupted state.json must not be treated as empty
     // state") precisely so the STATE_UNREADABLE path below is never reached
@@ -157,27 +157,18 @@ function collectStory(targetDir, monolithRoot, root, diagnostics) {
         });
         return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
     }
-    if (!existsSync(activeMdAbs)) {
+    const read = readBoundedFileStable(activeMdAbs, relPath, { maxBytes: MAX_ACTIVE_CONTEXT_BYTES, allowEmpty: true }, true);
+    if (!read.ok) {
         diagnostics.push({
             code: 'ACTIVE_MD_MISSING',
             severity: 'warn',
-            message: `${relPath} does not exist.`,
+            message: read.code === 'FILE_MISSING'
+                ? `${relPath} does not exist.`
+                : `${relPath} exists but could not be read: ${read.code}: ${read.detail}`,
         });
         return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
     }
-    let content;
-    try {
-        content = readFileSync(activeMdAbs, 'utf8');
-    }
-    catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        diagnostics.push({
-            code: 'ACTIVE_MD_MISSING',
-            severity: 'warn',
-            message: `${relPath} exists but could not be read: ${msg}`,
-        });
-        return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
-    }
+    const content = 'content' in read ? read.content : '';
     const extraction = extractCurrentStory(content);
     if (!extraction.hasCurrentStorySection) {
         diagnostics.push({

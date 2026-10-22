@@ -15,6 +15,12 @@
 import { type LockOptions } from './lock.js';
 import { type CoordinatoriumState } from './types.js';
 export declare const STATE_FILE_NAME = "state.json";
+/**
+ * Protective ceiling for `state.json` (SEC-001B.1) — NOT a retention policy.
+ * Append-only checkpoints grow the file without bound; see STATE-001.
+ * Enforced on read (bounded reader) and before an atomic write.
+ */
+export declare const MAX_STATE_BYTES: number;
 export declare function stateFilePath(stateDir: string): string;
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied

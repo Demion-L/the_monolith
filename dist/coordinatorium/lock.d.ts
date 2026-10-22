@@ -49,6 +49,8 @@
  *      uniquely-named staging file is ever touched by its own cleanup. See
  *      `createAndPublish` below and ADR-008 for the full argument.
  */
+/** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
+export declare const MAX_LOCK_BYTES = 256;
 export interface LockOptions {
     /** How long a challenger will wait to acquire the lock before giving up. */
     timeoutMs?: number;

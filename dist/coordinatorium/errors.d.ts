@@ -6,7 +6,8 @@
  * future caller (or a test) can distinguish failure classes without
  * string-matching messages.
  */
-export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'CHECKPOINT_NOT_FOUND';
+import type { ProjectFileErrorCode } from '../root/index.js';
+export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'LOCK_UNSAFE' | 'STATE_FILE_UNSAFE' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'CHECKPOINT_NOT_FOUND';
 export declare class CoordinatoriumError extends Error {
     readonly code: CoordinatoriumErrorCode;
     constructor(code: CoordinatoriumErrorCode, message: string);
@@ -16,6 +17,26 @@ export declare class StateCorruptedError extends CoordinatoriumError {
 }
 export declare class StateSchemaError extends CoordinatoriumError {
     constructor(message: string);
+}
+/**
+ * Thrown when `state.json` cannot be read or written within the bounded-file
+ * contract (SEC-001B.1): a FIFO or other special file, a file over its size
+ * limit (`FILE_TOO_LARGE`, also raised before a write would produce an
+ * oversized file), or an unreadable file. `fileCode` is the machine-readable
+ * reason. Nothing is modified, truncated or compacted when this is thrown.
+ */
+export declare class StateFileError extends CoordinatoriumError {
+    readonly fileCode: ProjectFileErrorCode;
+    constructor(fileCode: ProjectFileErrorCode, detail: string);
+}
+/**
+ * Thrown when the lock file exists but cannot be safely inspected (a FIFO or
+ * other special file, over the lock size limit, or unreadable). The lock is
+ * NOT acquired, and the file is never deleted: a human has to look at it.
+ */
+export declare class LockUnsafeError extends CoordinatoriumError {
+    readonly fileCode: ProjectFileErrorCode;
+    constructor(lockPath: string, fileCode: ProjectFileErrorCode, detail: string);
 }
 export declare class LockTimeoutError extends CoordinatoriumError {
     constructor(message: string);

@@ -49,9 +49,12 @@
  *      uniquely-named staging file is ever touched by its own cleanup. See
  *      `createAndPublish` below and ADR-008 for the full argument.
  */
-import { openSync, writeSync, closeSync, readFileSync, unlinkSync, linkSync, fsyncSync, } from 'fs';
+import { openSync, writeSync, closeSync, unlinkSync, linkSync, fsyncSync, } from 'fs';
 import { randomBytes } from 'crypto';
-import { LockTimeoutError, LockCreationError } from './errors.js';
+import { LockTimeoutError, LockUnsafeError, LockCreationError } from './errors.js';
+import { readBoundedFileStable } from '../root/index.js';
+/** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
+export const MAX_LOCK_BYTES = 256;
 const DEFAULT_OPTIONS = {
     timeoutMs: 5000,
     retryDelayMs: 25,
@@ -109,17 +112,25 @@ function parseLockRecord(raw) {
         return null;
     return { pid, nonce };
 }
-/** Read and parse a lock file. Returns null for "does not exist or
- * unreadable/malformed" alike — both are handled identically by callers
- * (uncertain, in the ENOENT case trivially resolved by the next create
- * attempt). */
+function inspectLock(path) {
+    const r = readBoundedFileStable(path, 'lock file', { maxBytes: MAX_LOCK_BYTES, allowEmpty: true }, true);
+    if (r.ok) {
+        const record = 'content' in r ? parseLockRecord(r.content) : null;
+        if (record)
+            return { kind: 'valid', record };
+        return { kind: 'unsafe', class: 'content', fileCode: 'FILE_UNREADABLE', detail: 'lock content is empty or malformed' };
+    }
+    // Missing, or still being released/re-acquired after the retries: not
+    // observed. The exclusive create attempt that follows is the arbiter.
+    if (r.code === 'FILE_MISSING' || r.code === 'FILE_CHANGED')
+        return { kind: 'absent' };
+    return { kind: 'unsafe', class: 'structural', fileCode: r.code, detail: r.detail };
+}
+/** Valid record or null. `unsafe` is deliberately collapsed to null here for
+ * the two callers that must merely refuse to act on it (invariant 2). */
 function readLockRecord(path) {
-    try {
-        return parseLockRecord(readFileSync(path, 'utf8'));
-    }
-    catch {
-        return null;
-    }
+    const i = inspectLock(path);
+    return i.kind === 'valid' ? i.record : null;
 }
 /** Write `buffer` to `fd` in full, looping on short writes (a single
  * `writeSync` call is never guaranteed to write the whole buffer). A
@@ -334,7 +345,14 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}) {
         // 'lost-race': the canonical lock already exists — fall through to the
         // normal observe/wait/recover logic below, exactly as a plain EEXIST
         // did before.
-        const observed = readLockRecord(lockPath);
+        const inspection = inspectLock(lockPath);
+        if (inspection.kind === 'unsafe' && inspection.class === 'structural') {
+            // A FIFO / oversize / unreadable lock can never become a valid one:
+            // refuse with a diagnostic instead of waiting out the timeout. The
+            // file is left exactly as found and the lock is not acquired.
+            throw new LockUnsafeError(lockPath, inspection.fileCode, inspection.detail);
+        }
+        const observed = inspection.kind === 'valid' ? inspection.record : null;
         if (observed !== null) {
             const verdict = checkLiveness(observed.pid);
             if (verdict === 'dead') {
@@ -353,7 +371,8 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}) {
         // it again (which also naturally resolves the "vanished" case) after
         // the same waiting/backoff discipline as a confirmed-busy lock.
         if (Date.now() >= deadline) {
-            throw new LockTimeoutError(`Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}"`);
+            const why = inspection.kind === 'unsafe' ? ` (${inspection.detail}; the file was left untouched)` : '';
+            throw new LockTimeoutError(`Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}"${why}`);
         }
         await sleep(opts.retryDelayMs);
     }

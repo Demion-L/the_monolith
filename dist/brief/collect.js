@@ -14,6 +14,7 @@ import { existsSync, readFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, relative } from 'path';
 import { readBriefConfig } from './config.js';
+import { resolveMonolithRootValue, checkContainedFile } from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import { selectActiveMissions, selectRecentFinishedMissions, selectLatestCheckpoint, hasCheckpointOrderMismatch, } from './selectors.js';
@@ -23,10 +24,20 @@ const RECENT_FINISHED_MISSIONS_LIMIT = 5;
 function isPlainObject(v) {
     return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
-async function readStateForBrief(targetDir, monolithRoot, diagnostics) {
+async function readStateForBrief(targetDir, monolithRoot, root, diagnostics) {
     const stateDir = join(targetDir, monolithRoot);
     const filePath = stateFilePath(stateDir);
     const provenance = { source: relative(targetDir, filePath) };
+    // SEC-001A: never read a state.json that resolves outside the project.
+    const escape = checkContainedFile(root, 'state.json');
+    if (escape) {
+        diagnostics.push({
+            code: 'PATH_OUTSIDE_PROJECT',
+            severity: 'error',
+            message: `${provenance.source} was not read: ${escape.message}`,
+        });
+        return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
+    }
     // Rule (section 4, #1): physical existence is checked before any read.
     if (!existsSync(filePath)) {
         diagnostics.push({
@@ -133,9 +144,19 @@ function collectCheckpoints(targetDir, monolithRoot, state, active, diagnostics)
         return { missionId: m.id, latest, provenance };
     });
 }
-function collectStory(targetDir, monolithRoot, diagnostics) {
+function collectStory(targetDir, monolithRoot, root, diagnostics) {
     const activeMdAbs = join(targetDir, monolithRoot, ACTIVE_MD_REL);
     const relPath = relative(targetDir, activeMdAbs);
+    // SEC-001A: never present a file outside the project as project context.
+    const escape = checkContainedFile(root, ACTIVE_MD_REL);
+    if (escape) {
+        diagnostics.push({
+            code: 'PATH_OUTSIDE_PROJECT',
+            severity: 'error',
+            message: `${relPath} was not read: ${escape.message}`,
+        });
+        return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
+    }
     if (!existsSync(activeMdAbs)) {
         diagnostics.push({
             code: 'ACTIVE_MD_MISSING',
@@ -176,7 +197,9 @@ function collectStory(targetDir, monolithRoot, diagnostics) {
 export async function collect(targetDir) {
     const diagnostics = [];
     const config = readBriefConfig(targetDir, diagnostics);
-    const monolithRootAbs = join(targetDir, config.monolithRoot);
+    // Re-validates (and realpath-checks) the root readBriefConfig just accepted.
+    const root = resolveMonolithRootValue(targetDir, config.monolithRoot);
+    const monolithRootAbs = root.rootAbs;
     const monolithInitialized = existsSync(monolithRootAbs);
     if (!monolithInitialized) {
         diagnostics.push({
@@ -190,10 +213,10 @@ export async function collect(targetDir) {
         monolithRoot: config.monolithRoot,
         provenance: { source: 'monolith.config.json#project.name' },
     };
-    const { summary: stateKeeper, state } = await readStateForBrief(targetDir, config.monolithRoot, diagnostics);
+    const { summary: stateKeeper, state } = await readStateForBrief(targetDir, config.monolithRoot, root, diagnostics);
     const missions = collectMissions(targetDir, config.monolithRoot, state, diagnostics);
     const checkpoints = collectCheckpoints(targetDir, config.monolithRoot, state, missions.active, diagnostics);
-    const story = collectStory(targetDir, config.monolithRoot, diagnostics);
+    const story = collectStory(targetDir, config.monolithRoot, root, diagnostics);
     const protocolsRelDir = `${config.monolithRoot}/${PROTOCOLS_DIR}`;
     const mandatoryProtocols = {
         items: discoverDocs(targetDir, [protocolsRelDir], (fields) => fields.get('enforcement') === 'mandatory', diagnostics),

@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
+import { resolveMonolithRootValue } from '../root/index.js';
 const INSTRUCTION_FILE_MAP = {
     claude: 'CLAUDE.md',
     cursor: '.cursorrules',
@@ -106,7 +107,8 @@ function createEmptyDirs(targetRoot, r) {
  * a conflict.
  */
 export function planScaffoldConflicts(targetDir, config) {
-    const r = config.monolithRoot;
+    // SEC-001A: the programmatic API enforces the same root policy as the CLI.
+    const r = resolveMonolithRootValue(targetDir, config.monolithRoot).monolithRoot;
     const conflicts = [];
     const projectrootTemplates = join(TEMPLATES_ROOT, 'projectroot');
     if (existsSync(projectrootTemplates)) {
@@ -143,8 +145,9 @@ export function planScaffoldConflicts(targetDir, config) {
     return conflicts;
 }
 export async function scaffoldInstance(targetDir, config) {
-    const vars = buildVars(config);
-    const r = config.monolithRoot;
+    // SEC-001A: validate before any write; throws RootContainmentError.
+    const r = resolveMonolithRootValue(targetDir, config.monolithRoot).monolithRoot;
+    const vars = buildVars({ ...config, monolithRoot: r });
     let filesCreated = 0;
     const dirsCreated = [];
     // --- Project root files ---

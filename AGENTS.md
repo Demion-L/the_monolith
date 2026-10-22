@@ -239,8 +239,9 @@ Missions, and a pointer block. Every section names its source.
   data cannot forge brief structure; the Story excerpt is the only
   multi-line field.
 
-Known limitations: `monolithRoot` itself is not contained within the project
-root (SEC-001, OPEN — see `.monolith/memory/long-term/tech-debt.md`);
+Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) but
+check-then-use races remain (SEC-001B, OPEN — see
+`.monolith/memory/long-term/tech-debt.md`);
 `monolith context <topic>` and JSON output do not exist.
 
 ---
@@ -336,7 +337,8 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] `contextGateway.adrDirs` config field; ADR-007/008 visible via `docs/adr`
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
-- [ ] SEC-001 (`monolithRoot` containment) — registered, OPEN
+- [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

@@ -32,7 +32,8 @@ export type BriefDiagnosticCode =
   | 'CONFIG_ADR_DIRS_INVALID'
   | 'DOC_DIR_UNREADABLE'
   | 'DOC_FILE_UNREADABLE'
-  | 'DOC_DIR_OUTSIDE_PROJECT';
+  | 'DOC_DIR_OUTSIDE_PROJECT'
+  | 'PATH_OUTSIDE_PROJECT';
 
 export interface BriefDiagnostic {
   code: BriefDiagnosticCode;

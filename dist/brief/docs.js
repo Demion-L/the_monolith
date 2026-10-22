@@ -24,11 +24,9 @@
  * is treated as sufficient — path.join()/path.relative() string comparison
  * alone does not account for symlinks on disk.
  *
- * This containment check applies only to document discovery (protocols/ADR
- * directories). It intentionally does not change how `monolithRoot` itself,
- * or paths derived from it elsewhere (state.json, active.md), are resolved
- * — that is a separate, pre-existing trust boundary and changing it is out
- * of scope here (see the final report's "Remaining limitations" section).
+ * `monolithRoot` itself, and the fixed files below it (state.json,
+ * active.md), are vetted separately by the shared resolver in src/root
+ * (SEC-001A); this check covers document directories only.
  */
 import { readdirSync, readFileSync, existsSync, realpathSync } from 'fs';
 import { join, relative, isAbsolute, resolve } from 'path';

@@ -21,11 +21,9 @@
  * a lesser problem than the field having the wrong shape entirely.
  */
 
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { readConfigFile, resolveMonolithRoot, DEFAULT_MONOLITH_ROOT } from '../root/index.js';
 import type { BriefDiagnostic } from './types.js';
 
-const DEFAULT_MONOLITH_ROOT = '.monolith';
 const DEFAULT_PROJECT_NAME = 'project';
 
 export interface BriefConfig {
@@ -43,51 +41,32 @@ function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * Throws RootContainmentError when `monolithRoot` violates the SEC-001A
+ * containment policy (see src/root) — the brief never degrades to a default
+ * root in that case.
+ */
 export function readBriefConfig(targetDir: string, diagnostics: BriefDiagnostic[] = []): BriefConfig {
   const defaults: BriefConfig = { monolithRoot: DEFAULT_MONOLITH_ROOT, projectName: DEFAULT_PROJECT_NAME, extraAdrDirs: [] };
-  const configPath = join(targetDir, 'monolith.config.json');
+  const read = readConfigFile(targetDir);
 
-  if (!existsSync(configPath)) {
+  if (read.status === 'absent') {
     // Absent config is a legitimate, unconfigured project — not an error.
     return defaults;
   }
-
-  let raw: string;
-  try {
-    raw = readFileSync(configPath, 'utf8');
-  } catch (err) {
-    diagnostics.push({
-      code: 'CONFIG_UNREADABLE',
-      severity: 'error',
-      message: `monolith.config.json exists but could not be read: ${errMsg(err)}. Proceeding with defaults.`,
-    });
+  if (read.status !== 'ok') {
+    const message =
+      read.status === 'unreadable'
+        ? `monolith.config.json exists but could not be read: ${read.detail}. Proceeding with defaults.`
+        : read.status === 'invalid-json'
+          ? `monolith.config.json is not valid JSON: ${read.detail}. Proceeding with defaults.`
+          : 'monolith.config.json does not contain a JSON object. Proceeding with defaults.';
+    diagnostics.push({ code: 'CONFIG_UNREADABLE', severity: 'error', message });
     return defaults;
   }
+  const cfg = read.cfg;
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    diagnostics.push({
-      code: 'CONFIG_UNREADABLE',
-      severity: 'error',
-      message: `monolith.config.json is not valid JSON: ${errMsg(err)}. Proceeding with defaults.`,
-    });
-    return defaults;
-  }
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    diagnostics.push({
-      code: 'CONFIG_UNREADABLE',
-      severity: 'error',
-      message: 'monolith.config.json does not contain a JSON object. Proceeding with defaults.',
-    });
-    return defaults;
-  }
-  const cfg = parsed as Record<string, unknown>;
-
-  const monolithRoot =
-    typeof cfg.monolithRoot === 'string' && cfg.monolithRoot.length > 0 ? cfg.monolithRoot : DEFAULT_MONOLITH_ROOT;
+  const monolithRoot = resolveMonolithRoot(targetDir, read).monolithRoot;
 
   let projectName = DEFAULT_PROJECT_NAME;
   const project = cfg.project;

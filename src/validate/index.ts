@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve, relative } from 'path';
 import { pathToFileURL } from 'url';
+import { resolveMonolithRoot, RootContainmentError } from '../root/index.js';
 
 export interface ValidateOptions {
   targetDir: string;
@@ -26,18 +27,6 @@ const INIT_VARS = new Set([
 const INIT_PLACEHOLDER_RE = /\{\{([A-Z_]+)\}\}/g;
 const COL_WIDTH = 16;
 
-function readMonolithRoot(targetDir: string): string {
-  const configPath = join(targetDir, 'monolith.config.json');
-  if (!existsSync(configPath)) return '.monolith';
-  try {
-    const raw = readFileSync(configPath, 'utf8');
-    const cfg = JSON.parse(raw) as Record<string, unknown>;
-    return typeof cfg.monolithRoot === 'string' ? cfg.monolithRoot : '.monolith';
-  } catch {
-    return '.monolith';
-  }
-}
-
 async function checkConfiguration(targetDir: string): Promise<CheckResult> {
   const configPath = join(targetDir, 'monolith.config.json');
   if (!existsSync(configPath)) {
@@ -52,10 +41,14 @@ async function checkConfiguration(targetDir: string): Promise<CheckResult> {
   try {
     const raw = readFileSync(configPath, 'utf8');
     const cfg = JSON.parse(raw) as Record<string, unknown>;
-    if (!cfg.monolithRoot || typeof cfg.monolithRoot !== 'string') {
+    if (!Object.prototype.hasOwnProperty.call(cfg, 'monolithRoot')) {
       return { label: 'Configuration', passed: false, error: 'monolith.config.json missing monolithRoot field' };
     }
-  } catch {
+    resolveMonolithRoot(targetDir, { status: 'ok', cfg });
+  } catch (err) {
+    if (err instanceof RootContainmentError) {
+      return { label: 'Configuration', passed: false, error: err.message };
+    }
     return { label: 'Configuration', passed: false, error: 'monolith.config.json is not valid JSON' };
   }
 
@@ -92,9 +85,10 @@ function checkInstance(targetDir: string, monolithRoot: string): CheckResult {
 function walkFiles(dir: string): string[] {
   const results: string[] = [];
   if (!existsSync(dir)) return results;
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) continue; // never follow links out of the instance (SEC-001A)
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
       results.push(...walkFiles(full));
     } else {
       results.push(full);
@@ -163,13 +157,24 @@ export async function runValidate(options: ValidateOptions): Promise<void> {
   const targetDir = resolve(options.targetDir);
   const quiet = options.quiet ?? false;
 
-  const monolithRoot = readMonolithRoot(targetDir);
+  // Containment failures are reported by checkConfiguration; the instance
+  // and template checks must not touch a root that failed resolution.
+  let monolithRoot: string | null = null;
+  try {
+    monolithRoot = resolveMonolithRoot(targetDir).monolithRoot;
+  } catch (err) {
+    if (!(err instanceof RootContainmentError)) throw err;
+  }
 
-  const [configResult, instanceResult] = await Promise.all([
-    checkConfiguration(targetDir),
-    Promise.resolve(checkInstance(targetDir, monolithRoot)),
-  ]);
-  const templateResult = checkTemplates(targetDir, monolithRoot);
+  const configResult = await checkConfiguration(targetDir);
+  const instanceResult: CheckResult =
+    monolithRoot === null
+      ? { label: 'Instance', passed: false, error: 'skipped: monolithRoot failed validation' }
+      : checkInstance(targetDir, monolithRoot);
+  const templateResult: CheckResult =
+    monolithRoot === null
+      ? { label: 'Templates', passed: false, error: 'skipped: monolithRoot failed validation' }
+      : checkTemplates(targetDir, monolithRoot);
 
   const results: CheckResult[] = [configResult, instanceResult, templateResult];
   const passed = results.every((r) => r.passed);

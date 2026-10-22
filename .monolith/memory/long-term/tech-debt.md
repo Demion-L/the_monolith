@@ -25,6 +25,8 @@ Tracks intentional technical debt to prevent accidental "fixing" of accepted tra
 | SEC-001 | Project Root Trust Boundary: `monolithRoot` from `monolith.config.json` is joined onto the project directory with no containment check, so `..` segments let it point outside the project root; the check exists only in `brief`'s document discovery (protocols/ADR). Details below. | CONTEXT-001A (found in review, 2026-10-22) | Cross-subsystem contract (`validate`, `mission`, `init`/scaffold, `brief`); changing it unilaterally in one subsystem would desynchronize them. Needs one shared decision — see "SEC-001 detail". **SEC-001A: IMPLEMENTED (2026-10-22, branch `fix/sec-001a-root-containment`, ADR-009, not merged)** — shared resolver `src/root`, lexical + realpath containment, fail closed in mission/brief/validate/scaffold API; a corrupted `monolith.config.json` makes `mission *` fail closed (review fix, ADR-009 addendum). **SEC-001B: OPEN** — TOCTOU, filesystem boundary abstraction, `.tmp` files, symlinks inside an existing instance tree. Status of SEC-001 overall: OPEN |
 | SEC-002 | `monolith validate` executed `project.definition.mjs` via dynamic `import()` (arbitrary code execution on an untrusted repository) and read root files without bounds (FIFO hang, device/huge reads, symlink escape). **IMPLEMENTED (2026-10-22, branch `fix/sec-002-static-validate`, ADR-011, not merged):** validate is static (file-only check, 1 MiB cap), bounded contained reader in `src/root/`. **Decision D-1:** the `PROJECT_DEFINITION` export check is removed (not performable without executing). The instance-tree placeholder scan (`<monolithRoot>/**`) uses the same bounded reader (review fix: a FIFO inside the instance used to hang `validate`, a huge file was read unbounded). **Remaining:** TOCTOU not closed (SEC-001B). Status: FIXED on branch; residuals tracked under SEC-001B | SEC-001A review (2026-10-22) | Cross-cutting follow-up to SEC-001A; no `--trusted` mode, no SEC-001B work |
 | TD-009 | `src/brief/` imports `../scriptorium/frontmatter.js` (runtime) and the `../coordinatorium` barrel directly instead of going through `src/index.ts`, contrary to the literal wording of AGENTS.md Architecture Principle 4; `brief` is also not re-exported from `src/index.ts`. `src/graph/builder.ts` already imports `../scriptorium/types.js` the same way, so the principle is not strictly followed today | CONTEXT-001A | Reusing the existing parser and State Keeper validation avoided duplicating them; whether to relax Principle 4 or add narrow public re-exports is an architectural decision, not made here. Status: OPEN |
+| STATE-001 | State Retention & Compaction: `state.json` accumulates checkpoint records (`tactical.checkpoints`) with no retention or compaction, so its size is potentially unbounded. The 16 MiB read limit planned under SEC-001B.1 is a safety cap, not a growth solution. Details below. | Registered 2026-10-22 (follow-up to SEC-001B.1 planning) | **PROPOSED / BACKLOG — registration only, no decision, no implementation.** Next step is an inventory (AUDIT ONLY); no storage design before it. Related: MEM-001 (separate initiative, see below). Status: OPEN |
+| MEM-001 | Memory Lifecycle: long-running development accumulates working context, history, decisions and knowledge; there is no managed lifecycle (retention, archival, consolidation, controlled forgetting) that keeps context current without losing important knowledge or evidence. Details below. | Registered 2026-10-22 | **PROPOSED / BACKLOG — registration only, no decision, no implementation.** Next step is an inventory of existing memory mechanisms (AUDIT ONLY). Related: STATE-001 (may become one technical foundation, not merged automatically). Status: OPEN |
 
 ### SEC-001 detail — Project Root Trust Boundary
 
@@ -57,6 +59,73 @@ Tracks intentional technical debt to prevent accidental "fixing" of accepted tra
 **Status:** OPEN. Not implemented; do not represent as done. Out of scope for CONTEXT-001A/B.
 
 _Update (2026-10-22): SEC-001A and SEC-002 address parts of this; see their entries above and ADR-009/ADR-011. SEC-001B remains open._
+
+### STATE-001 detail — State Retention & Compaction
+
+**Status:** PROPOSED / BACKLOG. A registration of future work, not an authorization to implement. No ADR exists and none is `accepted`: no architectural decision has been made.
+
+**Problem:** `state.json` holds an accumulating set of checkpoint records. Without retention or compaction its size can grow without bound. The 16 MiB read limit planned under SEC-001B.1 (in progress; not on `main` at registration time) is a defensive cap; it does not address long-term growth of the operational state.
+
+**Goal:** keep MONOLITH workable over the long term without unbounded growth of the operational state and without losing the engineering history that is needed.
+
+**Research directions:**
+1. Separating current state from historical checkpoint records.
+2. Retention policy.
+3. Deterministic compaction.
+4. Archiving history.
+5. State recovery.
+6. Crash safety.
+7. Preserving provenance.
+8. Compatibility with the existing state v2 schema.
+
+**Invariants:**
+- No automatic loss of confirmed data.
+- No LLM dependency for the correctness of compaction.
+- No change to history without an explicit contract.
+- Recoverability is preserved.
+- Existing projects keep working, or a separate migration decision is made.
+
+**First next step:** AUDIT ONLY — inventory the structure of `state.json`, the checkpoint lifecycle and the actual sources of growth. Do not design a new storage scheme until the inventory is complete.
+
+### MEM-001 detail — Memory Lifecycle
+
+**Status:** PROPOSED / BACKLOG. A registration of future work, not an authorization to implement. No ADR exists and none is `accepted`.
+
+**Problem:** over long development MONOLITH accumulates working context, historical records, architectural decisions and engineering knowledge. A mechanism is needed to keep context current without losing important knowledge or evidence.
+
+**Goal:** a managed lifecycle for project memory.
+
+**Preliminary logical model** (logical categories, not an approved physical architecture):
+- **Working Memory** — the current working state.
+- **Project Knowledge** — durable knowledge, architectural decisions and constraints.
+- **Historical Archive** — history of completed actions and outdated context.
+
+**Research directions:**
+1. Memory inventory.
+2. Classifying data by lifecycle.
+3. Retention.
+4. Archival.
+5. Knowledge consolidation.
+6. Controlled forgetting.
+7. Provenance and traceability.
+8. Recovering archived context.
+9. Possible integration with WEBWAY, only if that architecture is separately approved.
+
+**Principles:**
+- Archive first; deletion only possibly afterwards.
+- Architectural decisions and evidence are protected from automatic deletion.
+- Automatic forgetting is allowed only for data explicitly classified as temporary.
+- An LLM may propose knowledge consolidation but must not make irreversible deletion decisions on its own.
+- Correctness of storage and recovery is provided by deterministic mechanisms.
+
+**First next step:** AUDIT ONLY — inventory the existing memory, context and long-term-knowledge mechanisms of MONOLITH. WEBWAY design is out of scope here.
+
+### Relationship between STATE-001 and MEM-001
+
+- **STATE-001** concerns the size and lifecycle of the *operational state* (`state.json`).
+- **MEM-001** concerns the currency, preservation and controlled forgetting of *engineering context*.
+- STATE-001 may become one of the technical foundations of MEM-001, but the initiatives are not merged automatically; merging them would need its own explicit decision.
+- MONOLITH is a tool for organizing and developing software projects; it is not a runtime component of the applications built with it. Neither initiative changes that.
 
 ---
 

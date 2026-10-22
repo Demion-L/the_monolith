@@ -15,10 +15,16 @@
  *    the real project root; dangling symlinks and symlink loops fail closed.
  *  - Violations throw RootContainmentError — callers never fall back.
  *
- * This module only reads (lstat/realpath/readFile). It never creates
- * anything. Check-then-use (TOCTOU) races are NOT closed here; see ADR-009.
+ * This module only reads (lstat/realpath/open+read). It never creates
+ * anything. Check-then-use (TOCTOU) races are NOT closed here; see ADR-009
+ * and ADR-011.
+ *
+ * It also hosts the bounded project-file helpers (`checkProjectFile`,
+ * `readProjectFile`, SEC-002) used for root-level files such as
+ * `project.definition.mjs`, `monolith.config.json` and `AGENTS.md`, which
+ * live next to — not below — `monolithRoot`.
  */
-import { lstatSync, readFileSync, realpathSync } from 'fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync } from 'fs';
 import { isAbsolute, join, relative, resolve, win32 } from 'path';
 export const DEFAULT_MONOLITH_ROOT = '.monolith';
 export const CONFIG_FILE_NAME = 'monolith.config.json';
@@ -35,28 +41,19 @@ function errMsg(err) {
 }
 /** Read `monolith.config.json` without interpreting `monolithRoot`. */
 export function readConfigFile(targetDir) {
-    const configPath = join(targetDir, CONFIG_FILE_NAME);
-    // lstat, not existsSync: existsSync is false for a dangling symlink or any
-    // stat error, which would make a broken config look like an absent one.
-    try {
-        lstatSync(configPath);
-    }
-    catch (err) {
-        if (err.code === 'ENOENT')
+    // Bounded, containment-checked read (SEC-002): a FIFO/device/oversized config
+    // or a symlink leaving the project is "unreadable" (fail closed), never
+    // blocking and never read past MAX_PROJECT_FILE_BYTES. An absent file, and
+    // only an absent file, is "absent".
+    const read = readProjectFile(targetDir, CONFIG_FILE_NAME, { allowEmpty: true });
+    if (!read.ok) {
+        if (read.code === 'FILE_MISSING')
             return { status: 'absent' };
-        return { status: 'unreadable', detail: errMsg(err) };
-    }
-    let raw;
-    try {
-        raw = readFileSync(configPath, 'utf8');
-    }
-    catch (err) {
-        // Includes a dangling symlink (ENOENT here, after lstat succeeded).
-        return { status: 'unreadable', detail: errMsg(err) };
+        return { status: 'unreadable', detail: `${read.code}: ${read.detail}` };
     }
     let parsed;
     try {
-        parsed = JSON.parse(raw);
+        parsed = JSON.parse(read.content);
     }
     catch (err) {
         return { status: 'invalid-json', detail: errMsg(err) };
@@ -190,4 +187,109 @@ export function checkContainedFile(root, relFromRoot) {
             return err;
         throw err;
     }
+}
+// ---------------------------------------------------------------------------
+// Bounded project-file access (SEC-002, ADR-011)
+// ---------------------------------------------------------------------------
+/** Upper bound for any file this module inspects or reads (1 MiB). */
+export const MAX_PROJECT_FILE_BYTES = 1024 * 1024;
+const READ_CHUNK_BYTES = 64 * 1024;
+function fail(code, detail) {
+    return { ok: false, code, detail };
+}
+/**
+ * Shared implementation. Order matters:
+ *  1. containment of every existing path component (realpath) — no I/O on the file;
+ *  2. `stat` (follows links) and refusal of anything but a regular file BEFORE
+ *     `open`, so a FIFO or device is never opened;
+ *  3. `open` with O_NONBLOCK (a FIFO that slipped in after step 2 cannot block
+ *     the open) and O_NOCTTY;
+ *  4. `fstat` on the descriptor: still a regular file, same dev/ino as step 2,
+ *     size within bounds — all before any content is read;
+ *  5. optional read of at most `maxBytes + 1` bytes (the file may grow after
+ *     fstat; the cap applies to bytes actually read);
+ *  6. the descriptor is always closed.
+ * Steps 1-2 and 3 are separate syscalls, so a local attacker racing a path
+ * component swap is NOT stopped (TOCTOU, SEC-001B).
+ */
+function openProjectFile(projectRoot, relPath, opts, wantContent) {
+    const maxBytes = opts.maxBytes ?? MAX_PROJECT_FILE_BYTES;
+    const root = resolve(projectRoot);
+    let rootReal;
+    try {
+        rootReal = realProjectRoot(root);
+        assertSegmentsContained(rootReal, relPath.split('/'), relPath);
+    }
+    catch (err) {
+        if (!(err instanceof RootContainmentError))
+            throw err;
+        return fail(err.code === 'ROOT_SYMLINK_ESCAPE' ? 'FILE_OUTSIDE_PROJECT' : 'FILE_UNRESOLVABLE', err.message);
+    }
+    const abs = join(root, relPath);
+    let before;
+    try {
+        before = statSync(abs);
+    }
+    catch (err) {
+        if (err.code === 'ENOENT')
+            return fail('FILE_MISSING', `${relPath} does not exist.`);
+        return fail('FILE_UNREADABLE', `${relPath} cannot be inspected: ${errMsg(err)}`);
+    }
+    if (!before.isFile())
+        return fail('FILE_NOT_REGULAR', `${relPath} is not a regular file.`);
+    let fd;
+    try {
+        fd = openSync(abs, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOCTTY);
+    }
+    catch (err) {
+        if (err.code === 'ENOENT')
+            return fail('FILE_MISSING', `${relPath} does not exist.`);
+        return fail('FILE_UNREADABLE', `${relPath} cannot be opened: ${errMsg(err)}`);
+    }
+    try {
+        const st = fstatSync(fd);
+        if (!st.isFile())
+            return fail('FILE_NOT_REGULAR', `${relPath} is not a regular file.`);
+        if (st.dev !== before.dev || st.ino !== before.ino) {
+            return fail('FILE_UNREADABLE', `${relPath} changed while it was being inspected.`);
+        }
+        if (st.size === 0 && !opts.allowEmpty)
+            return fail('FILE_EMPTY', `${relPath} is empty.`);
+        if (st.size > maxBytes)
+            return fail('FILE_TOO_LARGE', `${relPath} is ${st.size} bytes; the limit is ${maxBytes}.`);
+        if (!wantContent)
+            return { ok: true, path: abs, size: st.size };
+        const chunks = [];
+        let total = 0;
+        for (;;) {
+            const buf = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, maxBytes + 1 - total));
+            const n = readSync(fd, buf, 0, buf.length, null);
+            if (n === 0)
+                break;
+            total += n;
+            if (total > maxBytes)
+                return fail('FILE_TOO_LARGE', `${relPath} grew beyond the limit of ${maxBytes} bytes while being read.`);
+            chunks.push(buf.subarray(0, n));
+        }
+        return { ok: true, path: abs, size: total, content: Buffer.concat(chunks).toString('utf8') };
+    }
+    catch (err) {
+        return fail('FILE_UNREADABLE', `${relPath} cannot be read: ${errMsg(err)}`);
+    }
+    finally {
+        closeSync(fd);
+    }
+}
+/**
+ * Static check of a file below the PROJECT root (not `monolithRoot`): exists,
+ * stays inside the project (symlinks that stay inside are allowed), is a
+ * regular file, is non-empty (unless `allowEmpty`) and within `maxBytes`.
+ * The content is never read. `relPath` is `/`-separated and must be trusted/fixed.
+ */
+export function checkProjectFile(projectRoot, relPath, opts = {}) {
+    return openProjectFile(projectRoot, relPath, opts, false);
+}
+/** `checkProjectFile` plus a bounded UTF-8 read of the content. */
+export function readProjectFile(projectRoot, relPath, opts = {}) {
+    return openProjectFile(projectRoot, relPath, opts, true);
 }

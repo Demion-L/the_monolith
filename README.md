@@ -86,11 +86,24 @@ checks run in sequence:
 
 | Check | What it verifies |
 |---|---|
-| Configuration | `monolith.config.json` present and valid, `project.definition.mjs` present and loadable |
+| Configuration | `monolith.config.json` present, valid JSON, a valid contained `monolithRoot`; `project.definition.mjs` present as a file (see below) |
 | Instance | All required directories exist under `monolithRoot` |
 | Templates | No unreplaced init-time placeholders (`{{VAR}}`) left in generated files |
 
 Exit codes: `0` = PASS, `1` = FAIL. Use `--quiet` for CI (prints nothing on PASS, errors only on FAIL).
+
+**`validate` never executes project code (SEC-002, ADR-011).** `project.definition.mjs`
+is checked **as a file only**: it exists, stays inside the project (a symlink
+that leaves it is a FAIL), is a regular file (a FIFO or device is a FAIL and is
+never opened for reading), is non-empty, and is at most 1 MiB. It is not
+imported, evaluated or parsed as JavaScript, so a PASS says **nothing** about
+its syntax, whether it exports `PROJECT_DEFINITION` (that check was removed),
+whether its content is safe, or whether it could be executed. A successful
+non-quiet run prints a note saying exactly this. `monolith.config.json` and
+`AGENTS.md` are read through the same bounded, containment-checked reader
+(1 MiB cap, no blocking on FIFOs). Residual risk: path checks and `open()` are
+separate syscalls, so a local attacker racing a path swap is not stopped
+(SEC-001B, open).
 
 ```
 MONOLITH validate

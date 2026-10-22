@@ -132,6 +132,8 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
+| `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + bounded project-file helpers `checkProjectFile()`/`readProjectFile()` (ADR-011) |
+| `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
 ---
@@ -243,6 +245,19 @@ Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) but
 check-then-use races remain (SEC-001B, OPEN — see
 `.monolith/memory/long-term/tech-debt.md`);
 `monolith context <topic>` and JSON output do not exist.
+
+---
+
+## Instance Validation (`monolith validate`)
+
+`monolith validate [--quiet]` is **static** (SEC-002, ADR-011): it never imports
+or executes `project.definition.mjs`. That file is checked only as a file —
+present, inside the project, regular, non-empty, at most 1 MiB. A PASS does
+not verify JS syntax, the `PROJECT_DEFINITION` export (decision D-1: that
+check was removed), content safety, or executability. `monolith.config.json`,
+`project.definition.mjs` and `AGENTS.md` are read through the bounded reader
+in `src/root/` (containment, non-blocking open, fstat type/size check, capped
+read). Check-then-use races remain open (SEC-001B).
 
 ---
 

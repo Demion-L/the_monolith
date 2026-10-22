@@ -75,6 +75,7 @@ Do not add webway logic here.
 ### `src/validate/` — Instance Validation (implemented)
 
 Kernel module. Handles `monolith validate`: checks configuration, directory structure, unreplaced placeholders.  
+Static: never imports or executes `project.definition.mjs` (checked as a file only; SEC-002, ADR-011).
 Do not add webway logic here.
 
 ### `src/cli/` — CLI Entrypoint (implemented)

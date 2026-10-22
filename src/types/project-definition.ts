@@ -1,6 +1,8 @@
 /**
- * Shape of the project.definition.js file that every MONOLITH instance must provide.
- * The Kernel reads this at runtime — it never hardcodes these values itself.
+ * Shape of the project.definition.mjs file that every MONOLITH instance must provide.
+ * This describes the intended contract only. `monolith validate` does NOT import or
+ * execute the file and does not check that it exports `PROJECT_DEFINITION` (SEC-002,
+ * ADR-011); no kernel code currently reads these values at runtime.
  */
 export interface ProjectDefinition {
   /** Directory name of the MONOLITH instance (e.g. '.monolith'). */

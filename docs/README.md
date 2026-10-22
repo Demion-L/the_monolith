@@ -35,7 +35,8 @@ docs/
 │   ├── README.md
 │   ├── ADR-007-explicit-identity-resolution.md
 │   ├── ADR-008-coordinatorium-tactical-mission-lifecycle.md
-│   └── ADR-009-mission-control-ui.md        — PROPOSED, not accepted
+│   ├── ADR-009-monolith-root-containment.md — accepted (SEC-001A)
+│   └── ADR-010-mission-control-ui.md        — PROPOSED, not accepted
 │
 └── architecture/                    — current system description
     ├── README.md

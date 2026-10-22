@@ -137,7 +137,9 @@ Boot Sequence in `AGENTS.md`.
   `contextGateway.adrDirs` (relative to the project root; this repository
   uses `["docs/adr"]`).
 - `monolithRoot` must be a relative path inside the project root (ADR-009,
-  SEC-001A; TOCTOU tracked as SEC-001B, open). `monolith context <topic>` is not implemented.
+  SEC-001A; TOCTOU tracked as SEC-001B, open). An absent `monolith.config.json`
+  means the default `.monolith`; an existing but corrupted one makes
+  `mission *` refuse (fail closed) rather than write to the default. `monolith context <topic>` is not implemented.
 
 ## Status
 

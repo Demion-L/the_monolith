@@ -26,8 +26,11 @@ One resolver, `src/root/index.ts` (`resolveMonolithRoot`), used by every
 consumer. Policy:
 
 1. `monolithRoot` is a **relative** path **inside** the project root.
-2. Key absent → default `.monolith`. Key present but not a non-empty string
-   (`""`, `null`, array, object, number) → configuration error.
+2. Config file **absent**, or key absent → default `.monolith` (documented
+   unconfigured behavior). Config file **present but unusable** (unreadable,
+   invalid JSON, not a JSON object, dangling symlink, a directory) →
+   `ROOT_CONFIG_INVALID`, never a default. Key present but not a non-empty
+   string (`""`, `null`, array, object, number) → configuration error.
 3. Rejected lexically: absolute paths (POSIX, Windows drive, UNC), NUL bytes,
    **any `..` segment**, and a root that normalizes to the project root.
    `..` is rejected even when it would stay inside: the kernel resolves
@@ -55,9 +58,25 @@ consumer. Policy:
 8. The resolver never creates, writes or locks anything.
 
 Format of `state.json`, the locking protocol, Mission Lifecycle and brief
-budget/completeness algorithms are unchanged. Corrupt or unreadable
-`monolith.config.json` still falls back to the in-project default (brief
-reports `CONFIG_UNREADABLE`), since the default cannot escape.
+budget/completeness algorithms are unchanged.
+
+### Addendum (2026-10-22): corrupted config fails closed
+
+The first cut let a corrupted `monolith.config.json` fall back to `.monolith`
+on the reasoning that the default cannot escape the project. That is wrong
+for writes: a project whose config *intended* a custom root would have
+`mission start` silently create `.monolith/state.json`, splitting state
+between two roots. `resolveMonolithRoot` now throws `ROOT_CONFIG_INVALID` for
+any config status other than absent/ok, so every `mission *` subcommand
+refuses (exit 1, nothing created or modified). `readConfigFile` uses `lstat`
+(not `existsSync`) so a dangling symlink or a stat error is "unreadable", not
+"absent".
+
+Deliberately unchanged: `brief` is read-only and keeps its CONTEXT-001A
+contract — a corrupted config is reported as `CONFIG_UNREADABLE` (error →
+`Completeness: INCOMPLETE`, exit 2 under `--strict`) and only the in-project
+default root is read. `validate` fails `Configuration` and skips
+Instance/Templates.
 
 ## Residual risks (SEC-001B, open)
 

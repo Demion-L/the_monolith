@@ -337,7 +337,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] `contextGateway.adrDirs` config field; ADR-007/008 visible via `docs/adr`
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
-- [x] SEC-001A (`monolithRoot` containment) — IMPLEMENTED on branch, ADR-009
+- [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
 - [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN
 
 **Candidate next stories (not decisions):**

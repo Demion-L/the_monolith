@@ -3,8 +3,10 @@
  *
  * Policy (ADR-009):
  *  - `monolithRoot` is a RELATIVE path strictly INSIDE the project root.
- *  - Absent key → documented default `.monolith`. Present but not a
- *    non-empty string → configuration error (never silently defaulted).
+ *  - Absent config file, or absent `monolithRoot` key → documented default
+ *    `.monolith`. A config file that EXISTS but cannot be used (unreadable,
+ *    invalid JSON, not an object) or a `monolithRoot` that is present but not
+ *    a non-empty string → configuration error (never silently defaulted).
  *  - Absolute paths, any `..` segment, and a root that normalizes to the
  *    project root itself are rejected. (`..` is rejected even when it would
  *    lexically stay inside: the kernel resolves `a/..` through `a`, so a
@@ -18,7 +20,7 @@
  */
 export declare const DEFAULT_MONOLITH_ROOT = ".monolith";
 export declare const CONFIG_FILE_NAME = "monolith.config.json";
-export type RootErrorCode = 'ROOT_INVALID_TYPE' | 'ROOT_EMPTY' | 'ROOT_ABSOLUTE' | 'ROOT_TRAVERSAL' | 'ROOT_IS_PROJECT_ROOT' | 'ROOT_SYMLINK_ESCAPE' | 'ROOT_UNRESOLVABLE';
+export type RootErrorCode = 'ROOT_INVALID_TYPE' | 'ROOT_EMPTY' | 'ROOT_ABSOLUTE' | 'ROOT_TRAVERSAL' | 'ROOT_IS_PROJECT_ROOT' | 'ROOT_SYMLINK_ESCAPE' | 'ROOT_UNRESOLVABLE' | 'ROOT_CONFIG_INVALID';
 export declare class RootContainmentError extends Error {
     readonly code: RootErrorCode;
     constructor(code: RootErrorCode, message: string);
@@ -54,8 +56,9 @@ export interface ResolvedMonolithRoot {
 export declare function resolveMonolithRootValue(targetDir: string, value: unknown): ResolvedMonolithRoot;
 /**
  * Resolve the instance root for `targetDir`. Pass an already-read config
- * (`readConfigFile`) to avoid reading twice. A missing/corrupt config file
- * yields the default root; the caller decides how to report corruption.
+ * (`readConfigFile`) to avoid reading twice. Only an ABSENT config file yields
+ * the default root; an existing but unusable one throws ROOT_CONFIG_INVALID
+ * (fail closed) so a broken config can never redirect writes to `.monolith`.
  */
 export declare function resolveMonolithRoot(targetDir: string, config?: ConfigRead): ResolvedMonolithRoot;
 /**

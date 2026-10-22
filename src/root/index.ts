@@ -3,8 +3,10 @@
  *
  * Policy (ADR-009):
  *  - `monolithRoot` is a RELATIVE path strictly INSIDE the project root.
- *  - Absent key → documented default `.monolith`. Present but not a
- *    non-empty string → configuration error (never silently defaulted).
+ *  - Absent config file, or absent `monolithRoot` key → documented default
+ *    `.monolith`. A config file that EXISTS but cannot be used (unreadable,
+ *    invalid JSON, not an object) or a `monolithRoot` that is present but not
+ *    a non-empty string → configuration error (never silently defaulted).
  *  - Absolute paths, any `..` segment, and a root that normalizes to the
  *    project root itself are rejected. (`..` is rejected even when it would
  *    lexically stay inside: the kernel resolves `a/..` through `a`, so a
@@ -17,7 +19,7 @@
  * anything. Check-then-use (TOCTOU) races are NOT closed here; see ADR-009.
  */
 
-import { existsSync, lstatSync, readFileSync, realpathSync } from 'fs';
+import { lstatSync, readFileSync, realpathSync } from 'fs';
 import { isAbsolute, join, relative, resolve, win32 } from 'path';
 
 export const DEFAULT_MONOLITH_ROOT = '.monolith';
@@ -30,7 +32,8 @@ export type RootErrorCode =
   | 'ROOT_TRAVERSAL'
   | 'ROOT_IS_PROJECT_ROOT'
   | 'ROOT_SYMLINK_ESCAPE'
-  | 'ROOT_UNRESOLVABLE';
+  | 'ROOT_UNRESOLVABLE'
+  | 'ROOT_CONFIG_INVALID';
 
 export class RootContainmentError extends Error {
   readonly code: RootErrorCode;
@@ -54,11 +57,19 @@ function errMsg(err: unknown): string {
 /** Read `monolith.config.json` without interpreting `monolithRoot`. */
 export function readConfigFile(targetDir: string): ConfigRead {
   const configPath = join(targetDir, CONFIG_FILE_NAME);
-  if (!existsSync(configPath)) return { status: 'absent' };
+  // lstat, not existsSync: existsSync is false for a dangling symlink or any
+  // stat error, which would make a broken config look like an absent one.
+  try {
+    lstatSync(configPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { status: 'absent' };
+    return { status: 'unreadable', detail: errMsg(err) };
+  }
   let raw: string;
   try {
     raw = readFileSync(configPath, 'utf8');
   } catch (err) {
+    // Includes a dangling symlink (ENOENT here, after lstat succeeded).
     return { status: 'unreadable', detail: errMsg(err) };
   }
   let parsed: unknown;
@@ -184,10 +195,17 @@ export function resolveMonolithRootValue(targetDir: string, value: unknown): Res
 
 /**
  * Resolve the instance root for `targetDir`. Pass an already-read config
- * (`readConfigFile`) to avoid reading twice. A missing/corrupt config file
- * yields the default root; the caller decides how to report corruption.
+ * (`readConfigFile`) to avoid reading twice. Only an ABSENT config file yields
+ * the default root; an existing but unusable one throws ROOT_CONFIG_INVALID
+ * (fail closed) so a broken config can never redirect writes to `.monolith`.
  */
 export function resolveMonolithRoot(targetDir: string, config: ConfigRead = readConfigFile(targetDir)): ResolvedMonolithRoot {
+  if (config.status !== 'absent' && config.status !== 'ok') {
+    throw new RootContainmentError(
+      'ROOT_CONFIG_INVALID',
+      `${CONFIG_FILE_NAME} exists but is unusable (${config.status}: ${config.detail}); refusing to fall back to "${DEFAULT_MONOLITH_ROOT}".`,
+    );
+  }
   if (config.status === 'ok' && Object.prototype.hasOwnProperty.call(config.cfg, 'monolithRoot')) {
     return { ...resolveMonolithRootValue(targetDir, config.cfg.monolithRoot), source: 'config' };
   }

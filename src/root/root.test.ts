@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync, existsSync, readFileSync, readdirSync } from 'fs';
+import { mkdtempSync, rmSync, lstatSync, writeFileSync, mkdirSync, symlinkSync, existsSync, readFileSync, readdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -10,7 +10,14 @@ import {
   RootContainmentError,
   type RootErrorCode,
 } from './index.js';
-import { runMissionStart, runMissionList } from '../coordinatorium/cli.js';
+import {
+  runMissionStart,
+  runMissionList,
+  runMissionShow,
+  runMissionFinish,
+  runMissionCheckpoint,
+  runMissionCheckpoints,
+} from '../coordinatorium/cli.js';
 import { collect } from '../brief/collect.js';
 import { runValidate } from '../validate/index.js';
 import { scaffoldInstance, planScaffoldConflicts } from '../init/scaffold.js';
@@ -190,11 +197,11 @@ describe('resolveMonolithRoot — config + realpath containment', () => {
     expect(codeOf(() => resolveMonolithRoot(project))).toBe('ROOT_SYMLINK_ESCAPE');
   });
 
-  // Threat: corrupted config must not become an escape hatch (default is inside the project).
-  it('falls back to the in-project default on unreadable config', () => {
+  // Threat: a corrupted config must not silently redirect writes to the default root.
+  it('fails closed (ROOT_CONFIG_INVALID) on an existing but unusable config', () => {
     const { project } = sandbox();
     writeFileSync(join(project, 'monolith.config.json'), '{ nope', 'utf8');
-    expect(resolveMonolithRoot(project).monolithRoot).toBe('.monolith');
+    expect(codeOf(() => resolveMonolithRoot(project))).toBe('ROOT_CONFIG_INVALID');
   });
 });
 
@@ -397,5 +404,137 @@ describe('consumers — one policy, no external side effects', () => {
       expect(existsSync(join(nested, '.custom/monolith/memory'))).toBe(true);
       expect(resolveMonolithRootValue(nested, '.custom/monolith').rootAbs).toBe(join(nested, '.custom/monolith'));
     });
+  });
+});
+
+// Threat: a config file that EXISTS but is unusable must never degrade into a
+// silent write to `.monolith` (only an ABSENT file means "use the default").
+describe('corrupted monolith.config.json — fail closed on every entry point', () => {
+  const BROKEN: Array<[string, (project: string) => void]> = [
+    ['invalid JSON', (p) => writeFileSync(join(p, 'monolith.config.json'), '{ nope', 'utf8')],
+    ['empty file', (p) => writeFileSync(join(p, 'monolith.config.json'), '', 'utf8')],
+    ['JSON array', (p) => writeFileSync(join(p, 'monolith.config.json'), '[]', 'utf8')],
+    ['JSON null', (p) => writeFileSync(join(p, 'monolith.config.json'), 'null', 'utf8')],
+    ['JSON string', (p) => writeFileSync(join(p, 'monolith.config.json'), '"x"', 'utf8')],
+    ['config is a directory', (p) => mkdirSync(join(p, 'monolith.config.json'))],
+    ['dangling symlink', (p) => symlinkSync(join(p, 'does-not-exist.json'), join(p, 'monolith.config.json'))],
+  ];
+
+  function silence(): void {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  }
+
+  it.each(BROKEN)('resolver throws ROOT_CONFIG_INVALID: %s', (_n, make) => {
+    const { project } = sandbox();
+    make(project);
+    expect(codeOf(() => resolveMonolithRoot(project))).toBe('ROOT_CONFIG_INVALID');
+  });
+
+  it.each(BROKEN)('mission start creates nothing: %s', async (_n, make) => {
+    silence();
+    const { project } = sandbox();
+    make(project);
+    const before = snapshotTree(project);
+    expect(await asyncCodeOf(() => runMissionStart(['--title', 't', '--system', 's'], project))).toBe('ROOT_CONFIG_INVALID');
+    expect(snapshotTree(project)).toEqual(before);
+    expect(existsSync(join(project, '.monolith'))).toBe(false);
+  });
+
+  it.each(BROKEN)('every mission subcommand refuses: %s', async (_n, make) => {
+    silence();
+    const { project } = sandbox();
+    make(project);
+    const before = snapshotTree(project);
+    const calls: Array<() => Promise<void>> = [
+      () => runMissionList([], project),
+      () => runMissionShow(['MIS-0001'], project),
+      () => runMissionFinish(['MIS-0001', '--result', 'completed'], project),
+      () => runMissionCheckpoint(['MIS-0001', '--summary', 's'], project),
+      () => runMissionCheckpoints(['MIS-0001'], project),
+    ];
+    for (const call of calls) expect(await asyncCodeOf(call)).toBe('ROOT_CONFIG_INVALID');
+    expect(snapshotTree(project)).toEqual(before);
+  });
+
+  it('leaves an existing .monolith/state.json byte-identical (default root is never written)', async () => {
+    silence();
+    const { project } = sandbox();
+    mkdirSync(join(project, '.monolith'));
+    const stateFile = join(project, '.monolith/state.json');
+    const original = JSON.stringify(createInitialState());
+    writeFileSync(stateFile, original);
+    const mtime = lstatSync(stateFile).mtimeMs;
+    writeFileSync(join(project, 'monolith.config.json'), '{ nope', 'utf8');
+    expect(await asyncCodeOf(() => runMissionStart(['--title', 't', '--system', 's'], project))).toBe('ROOT_CONFIG_INVALID');
+    expect(readFileSync(stateFile, 'utf8')).toBe(original);
+    expect(lstatSync(stateFile).mtimeMs).toBe(mtime);
+    expect(existsSync(join(project, '.monolith/state.json.lock'))).toBe(false);
+  });
+
+  it('a corrupted config with an intended custom root does not split state into .monolith', async () => {
+    silence();
+    const { project } = sandbox();
+    mkdirSync(join(project, 'custom/dir'), { recursive: true });
+    writeFileSync(join(project, 'monolith.config.json'), '{"monolithRoot": "custom/dir",', 'utf8');
+    expect(await asyncCodeOf(() => runMissionStart(['--title', 't', '--system', 's'], project))).toBe('ROOT_CONFIG_INVALID');
+    expect(existsSync(join(project, '.monolith'))).toBe(false);
+    expect(existsSync(join(project, 'custom/dir/state.json'))).toBe(false);
+  });
+
+  it('scenarios with wrong monolithRoot shape still fail closed (missing key defaults, others throw)', async () => {
+    silence();
+    for (const [value, code] of [
+      ['', 'ROOT_EMPTY'],
+      [5, 'ROOT_INVALID_TYPE'],
+      [null, 'ROOT_INVALID_TYPE'],
+      [['a'], 'ROOT_INVALID_TYPE'],
+      [{}, 'ROOT_INVALID_TYPE'],
+    ] as const) {
+      const { project } = sandbox();
+      writeConfig(project, { monolithRoot: value });
+      expect(await asyncCodeOf(() => runMissionStart(['--title', 't', '--system', 's'], project))).toBe(code);
+      expect(existsSync(join(project, '.monolith'))).toBe(false);
+    }
+  });
+
+  it('documented behavior preserved: absent config or absent key uses the default root', async () => {
+    silence();
+    for (const cfg of [undefined, {}, { project: { name: 'x' } }]) {
+      const { project } = sandbox();
+      if (cfg !== undefined) writeConfig(project, cfg);
+      await runMissionStart(['--title', 't', '--system', 's'], project);
+      expect(existsSync(join(project, '.monolith/state.json'))).toBe(true);
+    }
+  });
+
+  it('brief stays read-only and reports the corruption instead of masking it', async () => {
+    const { project } = sandbox();
+    writeFileSync(join(project, 'monolith.config.json'), '{ nope', 'utf8');
+    const before = snapshotTree(project);
+    const model = await collect(project);
+    expect(model.diagnostics.some((d) => d.code === 'CONFIG_UNREADABLE' && d.severity === 'error')).toBe(true);
+    expect(snapshotTree(project)).toEqual(before);
+  });
+
+  it('validate fails (exit 1) and writes nothing on a corrupted config', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+    const { project } = sandbox();
+    writeFileSync(join(project, 'monolith.config.json'), '[]', 'utf8');
+    writeFileSync(join(project, 'project.definition.mjs'), 'export const PROJECT_DEFINITION = {};\n');
+    const before = snapshotTree(project);
+    await expect(runValidate({ targetDir: project })).rejects.toThrow('exit:1');
+    expect(snapshotTree(project)).toEqual(before);
+  });
+
+  it('a config symlinked to a valid in-project file is still honored', async () => {
+    silence();
+    const { project } = sandbox();
+    writeFileSync(join(project, 'real.json'), JSON.stringify({ monolithRoot: 'ns/root' }));
+    symlinkSync(join(project, 'real.json'), join(project, 'monolith.config.json'));
+    await runMissionStart(['--title', 't', '--system', 's'], project);
+    expect(existsSync(join(project, 'ns/root/state.json'))).toBe(true);
   });
 });

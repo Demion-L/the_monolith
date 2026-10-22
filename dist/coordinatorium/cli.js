@@ -6,28 +6,19 @@
  * into mission.ts, and formats output. All lifecycle/validation logic lives
  * in mission.ts.
  */
-import { existsSync, readFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { resolveMonolithRoot, assertContainedFile } from '../root/index.js';
+import { STATE_FILE_NAME } from './state-keeper.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
-// Mirrors src/validate/index.ts's readMonolithRoot(). Duplicated rather than
-// imported to avoid coupling this subsystem's CLI layer to the validate
-// module's internals — both independently default to '.monolith'.
-function readMonolithRoot(targetDir) {
-    const configPath = join(targetDir, 'monolith.config.json');
-    if (!existsSync(configPath))
-        return '.monolith';
-    try {
-        const raw = readFileSync(configPath, 'utf8');
-        const cfg = JSON.parse(raw);
-        return typeof cfg.monolithRoot === 'string' ? cfg.monolithRoot : '.monolith';
-    }
-    catch {
-        return '.monolith';
-    }
-}
+// Resolves the instance directory through the shared containment resolver
+// (src/root) and vets the fixed state files, so a symlinked state.json,
+// state.json.lock, or intermediate directory cannot redirect reads/writes
+// outside the project. Throws RootContainmentError (fail closed).
 function stateDirFor(targetDir) {
-    return resolve(targetDir, readMonolithRoot(targetDir));
+    const root = resolveMonolithRoot(targetDir);
+    assertContainedFile(root, STATE_FILE_NAME);
+    assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
+    return root.rootAbs;
 }
 function parseFlag(args, name) {
     const i = args.indexOf(name);

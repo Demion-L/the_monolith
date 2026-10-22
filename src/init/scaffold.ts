@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join, dirname, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
 import type { ProjectConfig } from './types.js';
+import { resolveMonolithRootValue } from '../root/index.js';
 
 const INSTRUCTION_FILE_MAP: Partial<Record<ProjectConfig['aiTool'], string>> = {
   claude: 'CLAUDE.md',
@@ -130,7 +131,8 @@ export interface ScaffoldResult {
  * a conflict.
  */
 export function planScaffoldConflicts(targetDir: string, config: ProjectConfig): string[] {
-  const r = config.monolithRoot;
+  // SEC-001A: the programmatic API enforces the same root policy as the CLI.
+  const r = resolveMonolithRootValue(targetDir, config.monolithRoot).monolithRoot;
   const conflicts: string[] = [];
 
   const projectrootTemplates = join(TEMPLATES_ROOT, 'projectroot');
@@ -171,8 +173,9 @@ export async function scaffoldInstance(
   targetDir: string,
   config: ProjectConfig,
 ): Promise<ScaffoldResult> {
-  const vars = buildVars(config);
-  const r = config.monolithRoot;
+  // SEC-001A: validate before any write; throws RootContainmentError.
+  const r = resolveMonolithRootValue(targetDir, config.monolithRoot).monolithRoot;
+  const vars = buildVars({ ...config, monolithRoot: r });
   let filesCreated = 0;
   const dirsCreated: string[] = [];
 

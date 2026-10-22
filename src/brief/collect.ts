@@ -15,6 +15,7 @@ import { existsSync, readFileSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, relative } from 'path';
 import { readBriefConfig } from './config.js';
+import { resolveMonolithRootValue, checkContainedFile, type ResolvedMonolithRoot } from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import {
@@ -44,11 +45,23 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 async function readStateForBrief(
   targetDir: string,
   monolithRoot: string,
+  root: ResolvedMonolithRoot,
   diagnostics: BriefDiagnostic[],
 ): Promise<{ summary: StateKeeperSummary; state: CoordinatoriumState }> {
   const stateDir = join(targetDir, monolithRoot);
   const filePath = stateFilePath(stateDir);
   const provenance = { source: relative(targetDir, filePath) };
+
+  // SEC-001A: never read a state.json that resolves outside the project.
+  const escape = checkContainedFile(root, 'state.json');
+  if (escape) {
+    diagnostics.push({
+      code: 'PATH_OUTSIDE_PROJECT',
+      severity: 'error',
+      message: `${provenance.source} was not read: ${escape.message}`,
+    });
+    return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
+  }
 
   // Rule (section 4, #1): physical existence is checked before any read.
   if (!existsSync(filePath)) {
@@ -178,9 +191,25 @@ function collectCheckpoints(
   });
 }
 
-function collectStory(targetDir: string, monolithRoot: string, diagnostics: BriefDiagnostic[]): StorySummary {
+function collectStory(
+  targetDir: string,
+  monolithRoot: string,
+  root: ResolvedMonolithRoot,
+  diagnostics: BriefDiagnostic[],
+): StorySummary {
   const activeMdAbs = join(targetDir, monolithRoot, ACTIVE_MD_REL);
   const relPath = relative(targetDir, activeMdAbs);
+
+  // SEC-001A: never present a file outside the project as project context.
+  const escape = checkContainedFile(root, ACTIVE_MD_REL);
+  if (escape) {
+    diagnostics.push({
+      code: 'PATH_OUTSIDE_PROJECT',
+      severity: 'error',
+      message: `${relPath} was not read: ${escape.message}`,
+    });
+    return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
+  }
 
   if (!existsSync(activeMdAbs)) {
     diagnostics.push({
@@ -225,7 +254,9 @@ function collectStory(targetDir: string, monolithRoot: string, diagnostics: Brie
 export async function collect(targetDir: string): Promise<BriefModel> {
   const diagnostics: BriefDiagnostic[] = [];
   const config = readBriefConfig(targetDir, diagnostics);
-  const monolithRootAbs = join(targetDir, config.monolithRoot);
+  // Re-validates (and realpath-checks) the root readBriefConfig just accepted.
+  const root = resolveMonolithRootValue(targetDir, config.monolithRoot);
+  const monolithRootAbs = root.rootAbs;
   const monolithInitialized = existsSync(monolithRootAbs);
 
   if (!monolithInitialized) {
@@ -242,10 +273,10 @@ export async function collect(targetDir: string): Promise<BriefModel> {
     provenance: { source: 'monolith.config.json#project.name' },
   };
 
-  const { summary: stateKeeper, state } = await readStateForBrief(targetDir, config.monolithRoot, diagnostics);
+  const { summary: stateKeeper, state } = await readStateForBrief(targetDir, config.monolithRoot, root, diagnostics);
   const missions = collectMissions(targetDir, config.monolithRoot, state, diagnostics);
   const checkpoints = collectCheckpoints(targetDir, config.monolithRoot, state, missions.active, diagnostics);
-  const story = collectStory(targetDir, config.monolithRoot, diagnostics);
+  const story = collectStory(targetDir, config.monolithRoot, root, diagnostics);
 
   const protocolsRelDir = `${config.monolithRoot}/${PROTOCOLS_DIR}`;
   const mandatoryProtocols = {

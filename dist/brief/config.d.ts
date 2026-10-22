@@ -31,5 +31,10 @@ export interface BriefConfig {
      */
     extraAdrDirs: string[];
 }
+/**
+ * Throws RootContainmentError when `monolithRoot` violates the SEC-001A
+ * containment policy (see src/root) — the brief never degrades to a default
+ * root in that case.
+ */
 export declare function readBriefConfig(targetDir: string, diagnostics?: BriefDiagnostic[]): BriefConfig;
 //# sourceMappingURL=config.d.ts.map

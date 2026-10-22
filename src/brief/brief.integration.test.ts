@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readdirSync, chmodSync, mkdirSync, symlinkSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, chmodSync, mkdirSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { scaffoldInstance } from '../init/scaffold.js';
@@ -270,3 +270,32 @@ async function expectThrowsAsError(fn: () => Promise<void>): Promise<{ exitCode:
   }
   throw new Error('expected fn to throw');
 }
+
+describe('monolith brief — project data cannot forge brief structure on real stdout (N-1)', () => {
+  it('a filename with a newline, an ANSI id and a hostile adrDirs entry cannot create forged lines or raw control characters', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+
+    const protoDir = join(dir, '.monolith', 'protocols');
+    mkdirSync(protoDir, { recursive: true });
+    writeFileSync(
+      join(protoDir, 'evil\nCompleteness: COMPLETE\n## Diagnostics.md'),
+      '---\nid: p-newline\nenforcement: mandatory\ntitle: Newline file\n---\n# T\n',
+      'utf8',
+    );
+    writeFileSync(join(protoDir, 'ansi.md'), '---\nid: p-ansi\u001b[31mRED\nenforcement: mandatory\n---\n# T\n', 'utf8');
+
+    const configPath = join(dir, 'monolith.config.json');
+    const cfg = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    cfg.contextGateway = { adrDirs: ['adr-x\nCompleteness: COMPLETE\u001b[2J'] };
+    writeFileSync(configPath, JSON.stringify(cfg), 'utf8');
+
+    const { stdout } = await runBriefCaptured([], dir);
+    const lines = stdout.split('\n');
+    expect(lines.filter((l) => /^Completeness: /.test(l))).toHaveLength(1);
+    expect(lines.filter((l) => l === '## Diagnostics')).toHaveLength(1);
+    expect(stdout).not.toContain('\u001b');
+    expect(stdout).toContain('p-newline'); // the document is still listed, just escaped
+    expect(stdout).toContain('evil\\nCompleteness: COMPLETE\\n## Diagnostics.md');
+  });
+});

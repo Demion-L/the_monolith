@@ -6,6 +6,9 @@
     "aiTool": "claude"
   },
   "monolithRoot": ".monolith",
+  "contextGateway": {
+    "adrDirs": ["docs/adr"]
+  },
   "finalizationProtocol": "finalize-story",
   "gates": {
     "enabled": [

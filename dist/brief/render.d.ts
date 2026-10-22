@@ -36,6 +36,18 @@
  *   signal). Every one of these outcomes is itself measured and subtracted
  *   from the remaining budget before the next section is attempted —
  *   nothing is added "for free" after the fact.
+ *
+ * Completeness contract (N-3): `Completeness: COMPLETE` means no
+ * *substantive data* was lost, not that every section heading is present.
+ * An optional section that has nothing to show (an empty list, rendered
+ * only as "(none)") and the static P3 pointer block may be dropped under a
+ * tight budget without flipping the result to INCOMPLETE — dropping them
+ * loses no information. A section that holds data is never dropped
+ * silently: it is shown whole, shown partially with an explicit marker, or
+ * replaced by a pointer-bearing omission marker, and either of the latter
+ * two forces INCOMPLETE. P0 is never dropped. All project-controlled
+ * strings, provenance pointers included, pass through
+ * `sanitizeSingleLine` (N-1).
  */
 import type { BriefModel } from './types.js';
 export declare const DEFAULT_MAX_CHARS = 6000;

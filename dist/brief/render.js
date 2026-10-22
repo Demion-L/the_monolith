@@ -36,9 +36,25 @@
  *   signal). Every one of these outcomes is itself measured and subtracted
  *   from the remaining budget before the next section is attempted —
  *   nothing is added "for free" after the fact.
+ *
+ * Completeness contract (N-3): `Completeness: COMPLETE` means no
+ * *substantive data* was lost, not that every section heading is present.
+ * An optional section that has nothing to show (an empty list, rendered
+ * only as "(none)") and the static P3 pointer block may be dropped under a
+ * tight budget without flipping the result to INCOMPLETE — dropping them
+ * loses no information. A section that holds data is never dropped
+ * silently: it is shown whole, shown partially with an explicit marker, or
+ * replaced by a pointer-bearing omission marker, and either of the latter
+ * two forces INCOMPLETE. P0 is never dropped. All project-controlled
+ * strings, provenance pointers included, pass through
+ * `sanitizeSingleLine` (N-1).
  */
 import { ACTIVE_MD_REL } from './constants.js';
 import { sanitizeSingleLine, sanitizeMultiLine } from './sanitize.js';
+// Shorthand for the existing single-line sanitizer — applied to every string
+// that originates in project files or configuration (N-1), including
+// provenance pointers, which embed config-controlled paths.
+const san = sanitizeSingleLine;
 export const DEFAULT_MAX_CHARS = 6000;
 const RECENT_FINISHED_MISSIONS_RENDER_LIMIT = 5;
 const COMPLETE_LINE = 'Completeness: COMPLETE';
@@ -56,24 +72,24 @@ function formatDiagnosticsBlock(diagnostics, extraLine) {
 }
 function formatStateKeeperBlock(sk) {
     const versionNote = sk.schemaVersionOnDisk !== undefined ? ` schemaVersionOnDisk=${sk.schemaVersionOnDisk}` : '';
-    return `\n## State Keeper\n  status: ${sk.status}${versionNote}\n  (source: ${sk.provenance.source})\n`;
+    return `\n## State Keeper\n  status: ${sk.status}${versionNote}\n  (source: ${san(sk.provenance.source)})\n`;
 }
 function formatMission(m) {
-    return `  - ${m.id} [${m.status}] ${sanitizeSingleLine(m.title)} (${sanitizeSingleLine(m.system)}) — started ${m.startedAt}\n`;
+    return `  - ${san(m.id)} [${m.status}] ${san(m.title)} (${san(m.system)}) — started ${san(m.startedAt)}\n`;
 }
 function formatActiveMissionsBlock(missions, provenance) {
     const body = missions.length > 0 ? missions.map(formatMission).join('') : '  (none)\n';
-    return `\n## Active Missions (${missions.length})\n${body}  (source: ${provenance.source})\n`;
+    return `\n## Active Missions (${missions.length})\n${body}  (source: ${san(provenance.source)})\n`;
 }
 function formatDocRef(d) {
-    return `  - ${d.id}: ${sanitizeSingleLine(d.title)} (${d.path})\n`;
+    return `  - ${san(d.id)}: ${san(d.title)} (${san(d.path)})\n`;
 }
 function formatProtocolsBlock(items, provenance) {
     const body = items.length > 0 ? items.map(formatDocRef).join('') : '  (none)\n';
-    return `\n## Mandatory Protocols (${items.length})\n${body}  (source: ${provenance.source})\n`;
+    return `\n## Mandatory Protocols (${items.length})\n${body}  (source: ${san(provenance.source)})\n`;
 }
 function formatIdentityTitle(model) {
-    return `\n# MONOLITH Brief — ${sanitizeSingleLine(model.identity.name)}\n(monolithRoot: ${model.identity.monolithRoot}, source: ${model.identity.provenance.source})\n`;
+    return `\n# MONOLITH Brief — ${san(model.identity.name)}\n(monolithRoot: ${san(model.identity.monolithRoot)}, source: ${san(model.identity.provenance.source)})\n`;
 }
 function buildCoreP0(model, includeBudgetExceeded) {
     return (formatIdentityTitle(model) +
@@ -135,7 +151,7 @@ function truncateToBudget(text, maxBodyLen, pointer) {
 const BARE_OMIT_MARKER = '\n[omitted — budget]\n';
 function buildStorySection(model, remaining) {
     const header = '\n## Current Story\n';
-    const pointer = model.story.provenance?.source ?? ACTIVE_MD_REL;
+    const pointer = san(model.story.provenance?.source ?? ACTIVE_MD_REL);
     const minimalFallback = `\n[Story omitted — budget; see ${pointer}]\n`;
     let body;
     if (!model.story.fileExists) {
@@ -150,7 +166,7 @@ function buildStorySection(model, remaining) {
     else {
         body = `${sanitizeMultiLine(model.story.excerpt ?? '')}\n`;
     }
-    const provenanceLine = model.story.provenance ? `  (source: ${model.story.provenance.source})\n` : '';
+    const provenanceLine = model.story.provenance ? `  (source: ${san(model.story.provenance.source)})\n` : '';
     const full = header + body + provenanceLine;
     if (full.length <= remaining) {
         return { text: full, consumed: full.length, lossFlag: false };
@@ -180,23 +196,23 @@ function buildStorySection(model, remaining) {
     return { text: '', consumed: 0, lossFlag: true };
 }
 function formatCheckpointItem(cp) {
-    const lines = [`  - Mission ${cp.missionId}:`];
+    const lines = [`  - Mission ${san(cp.missionId)}:`];
     if (!cp.latest) {
         lines.push('    Next steps: UNKNOWN (no checkpoints)');
     }
     else {
-        lines.push(`    checkpoint: ${cp.latest.id} (createdAt ${cp.latest.createdAt})`);
-        lines.push(`    summary: ${sanitizeSingleLine(cp.latest.summary)}`);
+        lines.push(`    checkpoint: ${san(cp.latest.id)} (createdAt ${san(cp.latest.createdAt)})`);
+        lines.push(`    summary: ${san(cp.latest.summary)}`);
         if (cp.latest.remainingSteps.length === 0) {
             lines.push('    Next steps: none recorded');
         }
         else {
             lines.push('    Next steps:');
             for (const step of cp.latest.remainingSteps)
-                lines.push(`      - ${sanitizeSingleLine(step)}`);
+                lines.push(`      - ${san(step)}`);
         }
     }
-    lines.push(`    (source: ${cp.provenance.source})`);
+    lines.push(`    (source: ${san(cp.provenance.source)})`);
     return lines.join('\n') + '\n';
 }
 function buildCheckpointsSection(model, remaining) {
@@ -333,14 +349,16 @@ export function render(model, maxChars = DEFAULT_MAX_CHARS) {
         p1 += story.text;
         remaining -= story.consumed;
         budgetLoss = budgetLoss || story.lossFlag;
+        const adrSource = san(model.adrs.provenance.source);
+        const missionsSource = san(model.missions.provenance.source);
         const adrItems = model.adrs.items.map((a) => formatDocRef(a));
-        const adrSection = fitItemList(`\n## Accepted ADR Index (${model.adrs.items.length})\n`, adrItems, `  (source: ${model.adrs.provenance.source})\n`, remaining, (n) => `  ...and ${n} more ADR(s) omitted (budget) — see ${model.adrs.provenance.source}.\n`, `\n[Accepted ADR Index omitted — budget; see ${model.adrs.provenance.source}]\n`);
+        const adrSection = fitItemList(`\n## Accepted ADR Index (${model.adrs.items.length})\n`, adrItems, `  (source: ${adrSource})\n`, remaining, (n) => `  ...and ${n} more ADR(s) omitted (budget) — see ${adrSource}.\n`, `\n[Accepted ADR Index omitted — budget; see ${adrSource}]\n`);
         p2 += adrSection.text;
         remaining -= adrSection.consumed;
         budgetLoss = budgetLoss || adrSection.lossFlag;
         const recentFinished = model.missions.recentFinished.slice(0, RECENT_FINISHED_MISSIONS_RENDER_LIMIT);
         const finishedItems = recentFinished.map(formatMission);
-        const finishedSection = fitItemList(`\n## Recently Finished Missions (${recentFinished.length})\n`, finishedItems, `  (source: ${model.missions.provenance.source})\n`, remaining, (n) => `  ...and ${n} more omitted (budget) — see ${model.missions.provenance.source}.\n`, `\n[Recently Finished Missions omitted — budget; see ${model.missions.provenance.source}]\n`);
+        const finishedSection = fitItemList(`\n## Recently Finished Missions (${recentFinished.length})\n`, finishedItems, `  (source: ${missionsSource})\n`, remaining, (n) => `  ...and ${n} more omitted (budget) — see ${missionsSource}.\n`, `\n[Recently Finished Missions omitted — budget; see ${missionsSource}]\n`);
         p2 += finishedSection.text;
         remaining -= finishedSection.consumed;
         budgetLoss = budgetLoss || finishedSection.lossFlag;

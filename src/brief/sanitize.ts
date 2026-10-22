@@ -22,8 +22,10 @@
  * other control characters are escaped.
  */
 
-// C0 controls other than \t (0x09), \n (0x0A), \r (0x0D), plus DEL (0x7F).
-const OTHER_CONTROL_CHARS_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g;
+// C0 controls other than \t (0x09), \n (0x0A), \r (0x0D), plus DEL (0x7F) and
+// the C1 range (0x80-0x9F — includes 0x9B, a single-byte CSI that some
+// terminals honor as an escape-sequence introducer, and 0x85, NEL).
+const OTHER_CONTROL_CHARS_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g;
 
 function escapeChar(ch: string): string {
   return `\\x${ch.charCodeAt(0).toString(16).padStart(2, '0')}`;

@@ -2,7 +2,7 @@
 type: adr
 id: ADR-010
 title: Mission Control UI — Read-Only Local Interface over Core
-status: proposed
+status: accepted
 date: 2026-10-22
 related_adrs:
   - ADR-007
@@ -12,11 +12,12 @@ related_adrs:
 
 # ADR-010 — Mission Control UI: Read-Only Local Interface over Core
 
-> **Status: PROPOSED.** Ни принято, ни реализовано. Команда `monolith ui`,
-> HTTP API, Application Layer и Vue-приложение, описанные ниже, **не
-> существуют**. Часть технических решений уже утверждена владельцем проекта
-> (раздел «Approved by project owner»), но сам ADR остаётся `proposed` до
-> независимого ревью. Он не меняет приоритеты и не назначает сроков.
+> **Status: ACCEPTED** (UI-000E, 2026-10-22). Архитектурное направление принято;
+> **реализации нет**. Команда `monolith ui`, HTTP API, Application Layer и
+> Vue-приложение, описанные ниже, **не существуют**. Принятие не меняет
+> приоритеты, не назначает сроков и **не снимает security-gate G2**: до его
+> успешной проверки в UI-001 подключение реальных проектных данных через HTTP
+> запрещено.
 >
 > Редакция UI-000A (2026-10-22): выровнена с утверждёнными решениями и
 > security-аудитом от 2026-10-22.
@@ -31,6 +32,10 @@ related_adrs:
 > через `git merge`; security-статусы актуализированы; gate разделён на G1 и
 > G2; зафиксировано требование containment для каждого читаемого файла.
 > Статус ADR остаётся `proposed`.
+>
+> Редакция UI-000E (2026-10-22): независимое ревью пройдено (BLOCKER = 0,
+> HIGH = 0; условия UI-000C выполнены); статус `proposed` → `accepted`.
+> Содержание архитектуры не менялось.
 
 Подробная архитектура, инвентаризация, backlog UI-000…UI-005 и открытые вопросы:
 [`.monolith/context/templates/plan-ui-mission-control.md`](../../.monolith/context/templates/plan-ui-mission-control.md)
@@ -50,7 +55,7 @@ Scriptorium, ERG) не дублируется; UI не расширяет воз
 ## Approved by project owner
 
 Эти пункты — решения владельца, зафиксированные здесь для трассируемости; сам
-ADR всё ещё `proposed`.
+ADR принят (`accepted`, UI-000E).
 
 - **Frontend:** Vue 3, TypeScript, Vite, Composition API. Без библиотеки
   управления состоянием и без библиотеки роутинга в MVP, пока нет реальной

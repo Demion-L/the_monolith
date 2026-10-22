@@ -34,7 +34,8 @@ docs/
 ├── adr/                             — architectural decision records
 │   ├── README.md
 │   ├── ADR-007-explicit-identity-resolution.md
-│   └── ADR-008-coordinatorium-tactical-mission-lifecycle.md
+│   ├── ADR-008-coordinatorium-tactical-mission-lifecycle.md
+│   └── ADR-009-mission-control-ui.md        — PROPOSED, not accepted
 │
 └── architecture/                    — current system description
     ├── README.md

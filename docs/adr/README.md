@@ -26,6 +26,7 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-006 | Terra Persistence Strategy — **moved to [Webway](https://github.com/Demion-L/webway)** | proposed | R-0001, R-0002 | 2026-06-28 |
 | ADR-007 | Explicit-Only Identity Resolution | accepted | —            | 2026-06-28 |
 | ADR-008 | Coordinatorium — Tactical Mission Lifecycle | accepted | — | 2026-10-21 |
+| ADR-009 | Mission Control UI — Read-Only Local Interface over Core | **proposed** | — | 2026-10-22 |
 
 **ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
 cognitive-architecture research program (Terra persistence, the Lexicon
@@ -101,9 +102,9 @@ use by `.monolith/adr/ADR-001-cognitive-loop-architecture.md`,
 this `docs/adr/` index existed). The ADR index above now reflects that.
 
 The three candidate decisions originally meant for this slot are still
-undocumented and still worth writing up, but **must use new IDs (ADR-009 or
-later)** — ADR-008 is now taken by Coordinatorium's Tactical Mission
-Lifecycle (2026-10-21) — to avoid colliding with the existing ADR-001/002/003:
+undocumented and still worth writing up, but **must use new IDs (ADR-010 or
+later)** — ADR-008 is taken by Coordinatorium's Tactical Mission
+Lifecycle (2026-10-21) and ADR-009 by the proposed Mission Control UI (2026-10-22) — to avoid colliding with the existing ADR-001/002/003:
 - Kernel-Instance split (`templates/` vs operational instance)
 - File-based, human-readable memory model
 - Deterministic protocol enforcement (no LLM in the governance gate)

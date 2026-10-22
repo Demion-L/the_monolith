@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join, resolve, relative } from 'path';
+import { existsSync, readdirSync } from 'fs';
+import { join, resolve, relative, sep } from 'path';
 import {
   checkProjectFile,
   readConfigFile,
@@ -124,21 +124,24 @@ function hasUnreplacedInitVars(content: string): boolean {
 
 function checkTemplates(targetDir: string, monolithRoot: string): CheckResult {
   const violations: string[] = [];
+  const unsafe: string[] = [];
 
   const instanceDir = join(targetDir, monolithRoot);
   for (const file of walkFiles(instanceDir)) {
     if (file.endsWith('.gitkeep')) continue;
-    try {
-      const content = readFileSync(file, 'utf8');
-      if (hasUnreplacedInitVars(content)) {
-        violations.push(relative(targetDir, file));
-      }
-    } catch {
-      // binary or unreadable — skip
+    const rel = relative(targetDir, file);
+    // Same bounded, containment-checked reader as the root files below (SEC-002):
+    // a FIFO/socket/device is never opened, a file over 1 MiB is never read.
+    const read = readProjectFile(targetDir, rel.split(sep).join('/'), { allowEmpty: true });
+    if (!read.ok) {
+      if (read.code !== 'FILE_MISSING') unsafe.push(`${rel} (${read.code})`);
+      continue;
+    }
+    if (hasUnreplacedInitVars(read.content)) {
+      violations.push(rel);
     }
   }
 
-  const unsafe: string[] = [];
   for (const rootFile of [DEFINITION_FILE_NAME, 'monolith.config.json', 'AGENTS.md']) {
     // Bounded, containment-checked read (SEC-002): never blocks on a FIFO,
     // never reads a device, never follows a link out of the project.
@@ -153,7 +156,11 @@ function checkTemplates(targetDir: string, monolithRoot: string): CheckResult {
   }
 
   if (unsafe.length > 0) {
-    return { label: 'Templates', passed: false, error: `cannot safely read: ${unsafe.join(', ')}` };
+    return {
+      label: 'Templates',
+      passed: false,
+      error: `cannot safely read: ${unsafe.slice(0, 3).join(', ')}${unsafe.length > 3 ? ` (+${unsafe.length - 3} more)` : ''}`,
+    };
   }
 
   if (violations.length > 0) {

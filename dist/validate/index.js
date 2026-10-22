@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join, resolve, relative } from 'path';
+import { existsSync, readdirSync } from 'fs';
+import { join, resolve, relative, sep } from 'path';
 import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, } from '../root/index.js';
 const DEFINITION_FILE_NAME = 'project.definition.mjs';
 const REQUIRED_DIRS = ['memory', 'context', 'protocols', 'skills', 'governance', 'learning', 'tests'];
@@ -96,21 +96,24 @@ function hasUnreplacedInitVars(content) {
 }
 function checkTemplates(targetDir, monolithRoot) {
     const violations = [];
+    const unsafe = [];
     const instanceDir = join(targetDir, monolithRoot);
     for (const file of walkFiles(instanceDir)) {
         if (file.endsWith('.gitkeep'))
             continue;
-        try {
-            const content = readFileSync(file, 'utf8');
-            if (hasUnreplacedInitVars(content)) {
-                violations.push(relative(targetDir, file));
-            }
+        const rel = relative(targetDir, file);
+        // Same bounded, containment-checked reader as the root files below (SEC-002):
+        // a FIFO/socket/device is never opened, a file over 1 MiB is never read.
+        const read = readProjectFile(targetDir, rel.split(sep).join('/'), { allowEmpty: true });
+        if (!read.ok) {
+            if (read.code !== 'FILE_MISSING')
+                unsafe.push(`${rel} (${read.code})`);
+            continue;
         }
-        catch {
-            // binary or unreadable — skip
+        if (hasUnreplacedInitVars(read.content)) {
+            violations.push(rel);
         }
     }
-    const unsafe = [];
     for (const rootFile of [DEFINITION_FILE_NAME, 'monolith.config.json', 'AGENTS.md']) {
         // Bounded, containment-checked read (SEC-002): never blocks on a FIFO,
         // never reads a device, never follows a link out of the project.
@@ -125,7 +128,11 @@ function checkTemplates(targetDir, monolithRoot) {
         }
     }
     if (unsafe.length > 0) {
-        return { label: 'Templates', passed: false, error: `cannot safely read: ${unsafe.join(', ')}` };
+        return {
+            label: 'Templates',
+            passed: false,
+            error: `cannot safely read: ${unsafe.slice(0, 3).join(', ')}${unsafe.length > 3 ? ` (+${unsafe.length - 3} more)` : ''}`,
+        };
     }
     if (violations.length > 0) {
         return {

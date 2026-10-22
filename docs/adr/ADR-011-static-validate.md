@@ -56,7 +56,12 @@ without limit, and a symlink could point outside the project.
    - the descriptor is always closed.
    `readConfigFile` now uses it, so `mission`/`brief` also fail closed on a
    FIFO, oversized or escaping config (`unreadable`).
-6. Root files that cannot be read safely make **Templates** FAIL
+6. **The instance-tree placeholder scan (`<monolithRoot>/**`) uses the same
+   reader** (independent review of SEC-002). Symlinks are skipped by the walk
+   (never followed); every other entry goes through `readProjectFile`, so a
+   FIFO/socket/device is never opened and a file over 1 MiB is never read.
+   Such entries make Templates FAIL (`cannot safely read: <path> (<code>)`).
+7. Root files that cannot be read safely make **Templates** FAIL
    (`cannot safely read: AGENTS.md (FILE_NOT_REGULAR)`) instead of being
    silently skipped; only an absent file is skipped.
 
@@ -66,7 +71,7 @@ without limit, and a symlink could point outside the project.
   that is intended (D-1), and documented in README/AGENTS.md.
 - `validate` is no longer a loadability check. A future, explicitly
   sandboxed or `--trusted` verifier would need its own ADR.
-- A root file larger than 1 MiB (including `AGENTS.md`) now fails Templates.
+- A root file or an instance-tree file larger than 1 MiB now fails Templates.
 
 ## Residual risks (not closed)
 
@@ -74,8 +79,8 @@ without limit, and a symlink could point outside the project.
   syscalls. A local attacker who can swap a path component or the file
   between them is not stopped; the dev/ino comparison only narrows the window.
   `O_NOFOLLOW` is not used because internal symlinks are allowed (ADR-009).
-- The instance-tree placeholder scan (`<monolithRoot>/**`) still uses
-  unbounded `readFileSync` per file; a FIFO placed inside the instance tree
-  can block it. Out of scope for SEC-002; tracked in tech-debt (SEC-002 note).
+- An unreadable directory inside the instance tree still makes the placeholder
+  walk (`readdirSync`) throw; this is a robustness gap, not a hang or a read
+  outside the project.
 - Content of `project.definition.mjs` is still *untrusted*; any other tool or
   human that later imports it executes it.

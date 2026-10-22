@@ -322,4 +322,41 @@ describe('SEC-002: validate is static', () => {
     await validateInProcess(ok.project);
     expect(readdirSync(ok.project).sort()).toEqual(before);
   });
+
+  // T16-T18 — the instance-tree placeholder scan (<monolithRoot>/**) uses the same bounded reader.
+  it('T16: a FIFO inside the instance tree does not block validate; Templates FAIL, exit 1', () => {
+    const { project } = validProject();
+    mkfifo(join(project, '.monolith', 'memory', 'trap'));
+    const run = runCli(project);
+    expect(run.timedOut).toBe(false);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain('.monolith/memory/trap (FILE_NOT_REGULAR)');
+  });
+
+  it('T17: an oversized file inside the instance tree is rejected before its content is read', async () => {
+    const { project } = validProject();
+    // 2 GiB sparse: reading it would cost memory and time (or throw ERR_STRING_TOO_LONG).
+    const huge = join(project, '.monolith', 'memory', 'huge.bin');
+    writeFileSync(huge, '');
+    truncateSync(huge, 2 * 1024 * 1024 * 1024);
+    const t0 = Date.now();
+    const r = await validateInProcess(project);
+    expect(Date.now() - t0).toBeLessThan(CHILD_TIMEOUT_MS);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('.monolith/memory/huge.bin (FILE_TOO_LARGE)');
+  });
+
+  it('T18: instance scan still finds placeholders in regular files and never reads symlinks out of the project', async () => {
+    const hit = validProject();
+    writeFileSync(join(hit.project, '.monolith', 'memory', 'tpl.md'), '# {{PROJECT_NAME}}\n');
+    const h = await validateInProcess(hit.project);
+    expect(h.code).toBe(1);
+    expect(h.out).toContain('unreplaced placeholders');
+    expect(h.out).toContain('.monolith/memory/tpl.md');
+
+    const link = validProject();
+    writeFileSync(join(link.outside, 'ext.md'), '# {{PROJECT_NAME}}\n');
+    symlinkSync(join(link.outside, 'ext.md'), join(link.project, '.monolith', 'memory', 'ext.md'));
+    expect((await validateInProcess(link.project)).code).toBe(0);
+  });
 });

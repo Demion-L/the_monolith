@@ -27,10 +27,12 @@ Keep in sync with `memory/working/active.md` and `memory/working/story-index.md`
 | 1.3 | Scriptorium, ERG, and Canonical Identity Resolution | COMPLETED | 2026-06-28 |
 | COORDINATORIUM-001 | Tactical Coordinatorium: Mission Lifecycle MVP | COMPLETED | 2026-10-21 |
 | COORDINATORIUM-002 | Mission Checkpoints (incl. Schema v2 migration, Init Safety `.gitkeep` closure) | COMPLETED | 2026-10-21 |
+| CONTEXT-001A | MONOLITH Context Gateway: `monolith brief` | COMPLETED | 2026-10-22 |
 | 1.? | *(next story — not yet defined)* | PLANNED | — |
 
 **Candidate next stories** (not decisions — require user definition):
-- MONOLITH Context Gateway (`monolith brief`) — preparation handoff only, not started; see HANDOFF.md
+- CONTEXT-001B — `monolith context <topic>` (Context Gateway, second deliverable) — not started; see HANDOFF.md
+- SEC-001 — Project Root Trust Boundary (`monolithRoot` containment) — registered OPEN in tech-debt.md, not started
 - Corpus relationship density — 32 edges on 481 nodes is too sparse for useful graph traversal
 - Engineering Gate implementation — formalized in ADR-003, no runtime yet
 - TD-007b — CLI usage text lists `status`/`dry-run` as implemented; both exit 1

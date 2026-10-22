@@ -39,6 +39,7 @@ and which validators are active.
 - `init/`, `cli/` — scaffold a new MONOLITH instance (implemented)
 - `validate/` — instance integrity checks (implemented, see below for current scope)
 - `coordinatorium/` — Tactical Coordinatorium: deterministic State Keeper (`.monolith/state.json`), mission lifecycle, and mission checkpoints (implemented, see ADR-008)
+- `brief/` — `monolith brief`: deterministic, read-only, bounded project-state summary for AI sessions (implemented)
 - Enforcement gate engine, protocol drift detection, semantic memory routing (declared as types in `src/types/`; **not yet implemented** — see "Not Yet Implemented")
 
 **Instance (per-project, not part of this package's code)**
@@ -53,6 +54,7 @@ and which validators are active.
 npx monolith init       # scaffold a new instance from templates/ (implemented)
 npx monolith validate   # check instance integrity (implemented, see below)
 npx monolith mission    # Tactical Coordinatorium: start|list|show|finish|checkpoint|checkpoints (implemented, see ADR-008)
+npx monolith brief      # deterministic, read-only project-state summary [--max-chars N] [--strict] (implemented)
 npx monolith status     # show active protocol, phase, story, drift summary (not yet implemented)
 npx monolith dry-run    # simulate finalization gate without writes (not yet implemented)
 ```
@@ -109,6 +111,34 @@ artifact IDs, a drift log). None of these are currently read or enforced by
 for a future enforcement engine. See `project.definition.mjs` for inline
 notes on which of its own fields are currently unenforced.
 
+### `monolith brief`
+
+```bash
+monolith brief [--max-chars N] [--strict]
+```
+
+Prints a compact, deterministic summary of current project state: State
+Keeper status, active missions and their latest checkpoints (with next
+steps), mandatory protocols, the current story excerpt from
+`.monolith/memory/working/active.md`, and accepted ADRs. Each section names
+its source. It is strictly read-only (no files created, `state.json` read
+once, no LLM or network), and it supplements — does not replace — the
+Boot Sequence in `AGENTS.md`.
+
+- The first line is `Completeness: COMPLETE` or `INCOMPLETE`. INCOMPLETE
+  means information was lost or could not be read (corrupted/empty
+  `state.json`, corrupted `monolith.config.json`, an unreadable or
+  out-of-project document directory, or content that did not fit the
+  budget); the Diagnostics section says why.
+- `--max-chars N` sets the budget (default 6000). Mandatory content is never
+  truncated; if it alone exceeds the budget it is shown in full and flagged.
+- Exit codes: `0` brief formed, `1` usage error, `2` `--strict` and INCOMPLETE.
+- Extra ADR directories can be listed in `monolith.config.json` under
+  `contextGateway.adrDirs` (relative to the project root; this repository
+  uses `["docs/adr"]`).
+- Limitation: `monolithRoot` is not contained within the project root
+  (tracked as SEC-001, open). `monolith context <topic>` is not implemented.
+
 ## Status
 
 MONOLITH's CLI (`init`, `validate`) and its cognitive-core library modules
@@ -122,9 +152,10 @@ up-to-date status of what is implemented.
 **Implemented today:** `monolith init`, `monolith validate` (the three
 checks above), `monolith mission` (Tactical Coordinatorium: mission
 lifecycle and mission checkpoints, ADR-008, `state.json` schemaVersion 2),
+`monolith brief` (bounded, read-only project-state summary),
 Scriptorium, Explicit Relationship Graph (ERG).
 
-**Not yet implemented:** `monolith status`, `monolith dry-run`, the
+**Not yet implemented:** `monolith context <topic>`, `monolith status`, `monolith dry-run`, the
 enforcement gate engine and integrity validators described by
 `src/types/enforcement.ts` / `src/types/integrity.ts` (these are type
 declarations with zero runtime implementation today), protocol drift

@@ -74,6 +74,22 @@ runtime-enforced in v0.1:** nothing prevents an AI session from editing
 code without ever calling `mission start`/`finish`. It is a recommended
 discipline, not a gate.
 
+---
+
+## Project Brief
+
+```
+monolith brief [--max-chars N] [--strict]
+```
+
+Prints a deterministic, read-only, bounded summary of current project
+state (State Keeper status, active missions and latest checkpoints,
+mandatory protocols, current story, accepted ADRs), with the source of
+each section. It supplements the Boot Sequence; it does not replace it.
+The first line is `Completeness: COMPLETE` or `INCOMPLETE`; exit code 2
+under `--strict` means INCOMPLETE. Additional ADR directories can be listed
+in `monolith.config.json` under `contextGateway.adrDirs`.
+
 **Mission Checkpoints (COORDINATORIUM-002):** an `in_progress` mission can
 accumulate durable, append-only checkpoints (`summary` required,
 `remainingSteps` via repeated `--remaining`, optional `context`) —

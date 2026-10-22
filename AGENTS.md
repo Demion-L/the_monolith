@@ -127,14 +127,18 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/coordinatorium/mission.ts`   | `startMission()`, `listMissions()`, `getMission()`, `finishMission()` |
 | `src/coordinatorium/checkpoint.ts` | `createCheckpoint()`, `listCheckpoints()`, `getCheckpoint()` — append-only |
 | `src/coordinatorium/cli.ts`       | `monolith mission` command handlers (incl. `checkpoint`/`checkpoints`) |
-| `src/coordinatorium/*.test.ts`    | Vitest test suite (234 tests, incl. real multi-process concurrency and a real-historical-code compat test) |
+| `src/coordinatorium/*.test.ts`    | Vitest test suite (93 tests, incl. real multi-process concurrency and a real-historical-code compat test) |
+| `src/brief/collect.ts`            | `collect()` — read-only gathering for `monolith brief` (state.json read once) |
+| `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
+| `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
+| `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
 ---
 
 ## Current Scope
 
-What MONOLITH does today (252 tests passing, typecheck clean):
+What MONOLITH does today (374 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -160,6 +164,11 @@ What MONOLITH does today (252 tests passing, typecheck clean):
 - `monolith mission checkpoint|checkpoints` (COORDINATORIUM-002) — durable, append-only progress checkpoints for an `in_progress` mission; `schemaVersion` bumped to 2 (a v1 file is migrated in-memory on read, see ADR-008's compatibility-fix addendum — a pre-002 binary refuses to touch a v2 file instead of silently dropping checkpoints)
 - Deterministic State Keeper: cross-process file lock + atomic write, no lost updates, no LLM/database/background service involved
 - Strategic Coordinatorium (product/subsystem state) is **not implemented** — schema-reserved only
+
+**Context Gateway — `monolith brief`** (CONTEXT-001A):
+- `monolith brief [--max-chars N] [--strict]` — deterministic, read-only, character-budgeted summary of project state; see Project Brief section below
+- Reads `.monolith/state.json` once and never writes; no LLM, network, or ERG involved
+- `monolith context <topic>` (CONTEXT-001B) is **not implemented**
 
 ---
 
@@ -191,6 +200,48 @@ history regardless. IDs are `<missionId>-CKPT-NNNN` (e.g.
 `MIS-0002-CKPT-0001`), per-mission, derived the same way mission IDs are —
 no separate counter. Same non-enforcement caveat as mission start/finish:
 nothing requires an AI session to call this.
+
+---
+
+## Project Brief (CONTEXT-001A)
+
+```
+monolith brief [--max-chars N] [--strict]
+```
+
+Prints a compact summary of current project state so a session need not
+read many governance files to orient itself. It **supplements** the Boot
+Sequence above; it does not replace it. Sections, in priority order:
+identity, State Keeper status, Diagnostics, Active Missions, Mandatory
+Protocols (frontmatter `enforcement: mandatory` under `<monolithRoot>/protocols`),
+Active Mission Checkpoints (latest per active mission, with "Next steps"),
+Current Story (verbatim excerpt of `## Current Story` in `active.md`),
+Accepted ADR Index (frontmatter `status: accepted`), Recently Finished
+Missions, and a pointer block. Every section names its source.
+
+- **Budget:** `--max-chars` (default 6000). Mandatory content is never
+  truncated; if it alone exceeds the budget it is shown in full and the
+  result is flagged `BUDGET_EXCEEDED_BY_REQUIRED`. Truncation and omission are
+  always explicit markers.
+- **`Completeness: COMPLETE | INCOMPLETE`** is the first line. COMPLETE means
+  no substantive data was lost; empty optional sections may be omitted for
+  budget. Any error diagnostic (unreadable/empty `state.json`, corrupted
+  `monolith.config.json`, unreadable or out-of-project document directory) or
+  any dropped data-bearing section makes it INCOMPLETE.
+- **Exit codes:** 0 brief formed (COMPLETE or INCOMPLETE), 1 usage error,
+  2 `--strict` and INCOMPLETE.
+- **Absent `state.json`** is reported as `status: absent` (no missions ever
+  recorded); it is never read as an active mission.
+- **ADR directories:** `<monolithRoot>/adr` plus any `contextGateway.adrDirs`
+  entries in `monolith.config.json` (this repository sets `["docs/adr"]`).
+  Configured directories must stay inside the project root.
+- **Sanitization:** all project-controlled strings are escaped so project
+  data cannot forge brief structure; the Story excerpt is the only
+  multi-line field.
+
+Known limitations: `monolithRoot` itself is not contained within the project
+root (SEC-001, OPEN — see `.monolith/memory/long-term/tech-debt.md`);
+`monolith context <topic>` and JSON output do not exist.
 
 ---
 
@@ -277,7 +328,19 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] Init safety: `createEmptyDirs()` no longer truncates a pre-existing `.gitkeep` — the affected paths are now covered by `planScaffoldConflicts()`'s preflight, closing the gap found during this finalization's review
 - [x] 252 total tests passing (checkpoint 40, state-keeper 21, init-safety 12, mission 17, init 3, init-args 6, lock 15, scriptorium 75, graph 63), typecheck and build clean
 
+**CONTEXT-001A — Context Gateway: `monolith brief`** ✅ finalized 2026-10-22
+- [x] `monolith brief [--max-chars N] [--strict]` — deterministic, read-only, budgeted, provenance per section
+- [x] Explicit `Completeness: COMPLETE|INCOMPLETE`, explicit truncation/omission markers, exit codes 0/1/2
+- [x] Resilient document discovery (unreadable dirs/files, dangling symlinks, symlink cycles), protocol/ADR directory containment
+- [x] Sanitization of all project-controlled strings; corrupted config reported, not masked
+- [x] `contextGateway.adrDirs` config field; ADR-007/008 visible via `docs/adr`
+- [x] 374 total tests passing (brief 122), typecheck and build clean
+- [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
+- [ ] SEC-001 (`monolithRoot` containment) — registered, OPEN
+
 **Candidate next stories (not decisions):**
+- CONTEXT-001B — `monolith context <topic>`
+- SEC-001 — Project Root Trust Boundary
 - Corpus relationship density (32 edges / 481 nodes — too sparse)
 - Engineering Gate runtime (ADR-003 formalized, not implemented)
 - Webway v1 (embedding-based concept extraction, semantic similarity)

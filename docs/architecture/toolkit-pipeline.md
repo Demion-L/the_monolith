@@ -53,6 +53,12 @@ Separately, `monolith mission start|list|show|finish|checkpoint|checkpoints`
 checkpoints in `.monolith/state.json`, independent of this document
 pipeline — see `AGENTS.md` → Mission Lifecycle.
 
+Also separate from the Scriptorium/ERG pipeline: `monolith brief` (CONTEXT-001A)
+is a read-only summary command over `state.json`, `active.md`, and
+frontmatter-discovered protocols/ADRs. It does not use Scriptorium's
+`compileMarkdownArtifact()` or the ERG; it reuses only Scriptorium's
+frontmatter parser. See `AGENTS.md` → Project Brief.
+
 ---
 
 ## Stage 1 — Scriptorium (ingestion)

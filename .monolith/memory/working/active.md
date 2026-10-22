@@ -25,23 +25,25 @@ No active phase.
 
 No active story.
 
-Previous: **COORDINATORIUM-002 — Mission Checkpoints** (COMPLETED 2026-10-21)
+Previous: **CONTEXT-001A — MONOLITH Context Gateway: `monolith brief`** (COMPLETED 2026-10-22)
 
 ---
 
 ## Last Finalization
 
-**Story:** COORDINATORIUM-002 — Mission Checkpoints (incl. Schema v2 migration and Init Safety `.gitkeep` closure)
-**Date:** 2026-10-21
-**Capsule:** `.monolith/memory/working/phases/phase-1/stories/story-coordinatorium-002-mission-checkpoints.md`
+**Story:** CONTEXT-001A — MONOLITH Context Gateway: `monolith brief`
+**Date:** 2026-10-22
+**Capsule:** `.monolith/memory/working/phases/phase-1/stories/story-context-001a-monolith-brief.md`
 
 ---
 
 ## Current Operational Focus
 
-COORDINATORIUM-002 finalized: durable, append-only Mission Checkpoints (`tactical.checkpoints`, `createCheckpoint`/`listCheckpoints`/`getCheckpoint`, `monolith mission checkpoint|checkpoints` CLI), `state.json` schemaVersion bumped to 2 with a verified v1→v2 migration and old-binary safety, and — closed in this same finalization pass — an Init Safety gap where `createEmptyDirs()` could silently truncate a pre-existing `.gitkeep` (now covered by the shared `planScaffoldConflicts()` preflight, same contract as every other tracked file). ADR-008 carries two dated addenda. 252 tests passing, typecheck and build clean. Documentation synchronized across README.md/AGENTS.md/CLAUDE.md/package.json/architecture docs/instruction templates (stale "Cognitive Operating System" framing removed, superseded by the toolkit mission). `finalize-story` skill now has a mandatory Documentation Synchronization step (5.5).
+CONTEXT-001A finalized (IMPLEMENTED / VERIFIED within the scope below): `monolith brief [--max-chars N] [--strict]` — a deterministic, read-only, character-budgeted summary of project state (State Keeper status, active missions and latest checkpoints, mandatory protocols, current story, accepted ADRs) with per-section provenance, an explicit `Completeness: COMPLETE|INCOMPLETE` line, explicit truncation markers, exit codes 0/1/2, and sanitization of every project-controlled string. Reads `state.json` once, never writes; State Keeper v2 native, v1 via in-memory migration. New optional config field `contextGateway.adrDirs` (this repository sets `["docs/adr"]`). 374 tests passing (brief 122), typecheck and build clean. `brief` supplements the Boot Sequence; it does not replace it.
 
-Scope cut, still deferred (not implemented): Strategic Coordinatorium (product/subsystem state) remains schema-reserved only. Mission registration is not runtime-enforced. Checkpoint resume / session-to-mission linkage is explicitly out of scope (ADR-008).
+Scope cut, still deferred (not implemented): `monolith context <topic>` (CONTEXT-001B), JSON output, ERG/graph-derived relevance, Strategic Coordinatorium. Mission registration and checkpointing remain not runtime-enforced.
+
+Open registered items (not started): **SEC-001** — Project Root Trust Boundary (`monolithRoot` is not contained in the project root; `brief` reads and `mission` writes outside it — see tech-debt.md). **TD-009** — `src/brief/` cross-module imports vs Architecture Principle 4. **TD-007b** — CLI usage text lists `status`/`dry-run`.
 
 ---
 
@@ -50,9 +52,10 @@ Scope cut, still deferred (not implemented): Strategic Coordinatorium (product/s
 **COORDINATORIUM-001:** COMPLETE
 **COORDINATORIUM-002:** COMPLETE
 **Init Safety:** COMPLETE (positional-arg/preflight rejection + `.gitkeep` protection)
+**CONTEXT-001A:** COMPLETE (`monolith brief`)
 
-Not implemented — do not represent as done: Strategic Coordinatorium, MONOLITH Context Gateway, `monolith brief`, `monolith context <topic>`.
+Not implemented — do not represent as done: Strategic Coordinatorium, `monolith context <topic>` (CONTEXT-001B), SEC-001.
 
-Next phase (not started, preparation only): **MONOLITH Context Gateway** — see HANDOFF.md for the architectural handoff.
+Next (not started, not a decision): **CONTEXT-001B** — `monolith context <topic>`; see HANDOFF.md.
 
-Other candidate directions (not decisions): corpus relationship density improvement, Engineering Gate runtime (ADR-003, no runtime yet), TD-007b (CLI usage text lists `status`/`dry-run` as implemented). (Terra persistence / ADR-006 is no longer a MONOLITH candidate direction — it moved to Webway's research program on 2026-10-21.)
+Other candidate directions (not decisions): SEC-001 (root trust boundary), corpus relationship density improvement, Engineering Gate runtime (ADR-003, no runtime yet), TD-007b. (Terra persistence / ADR-006 is no longer a MONOLITH candidate direction — it moved to Webway's research program on 2026-10-21.)

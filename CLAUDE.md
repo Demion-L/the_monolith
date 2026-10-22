@@ -35,6 +35,15 @@ Routing map: `.monolith/context/maps/routing-map.md`
 
 ---
 
+## Project State Summary
+
+`monolith brief [--max-chars N] [--strict]` prints a deterministic, read-only summary of
+project state (missions, checkpoints, mandatory protocols, current story, accepted ADRs).
+It supplements the Session Start reading list above; it does not replace it.
+Details: `AGENTS.md` → Project Brief.
+
+---
+
 ## Key Protocols
 
 - Memory governance: `.monolith/protocols/governance/memory-governance.md`

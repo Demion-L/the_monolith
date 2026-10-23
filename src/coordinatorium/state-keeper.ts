@@ -67,8 +67,9 @@ function lockFilePath(stateDir: string): string {
  *    `stateDir` is. A missing `stateDir` is created.
  *
  * `onWarning` receives non-fatal findings reported after a successful publish
- * (durability downgrade, platform note, ...). Without it they are only
- * returned by `mutateState`.
+ * (durability downgrade, platform note, ...). It is called once per warning,
+ * after the state lock has been released; an exception it throws is ignored and
+ * never affects the result. Without it they are only returned by `mutateState`.
  */
 export type StateWriteTarget =
   | { scope: 'project'; projectRoot: string; stateDir: string; onWarning?: (warning: WriteWarning) => void }
@@ -377,15 +378,20 @@ export async function mutateState<T>(
   // never touches a state.json that already exists.
   const parent = openParent(boundary, stateDir, { create: true });
   const release = await acquireLock(lockFilePath(stateDir), lockOptions, {}, parent);
+  let draft: CoordinatoriumState;
+  let result: T;
   try {
     const current = await readState(stateDir);
-    const draft: CoordinatoriumState = structuredClone(current);
-    const result = mutator(draft);
+    draft = structuredClone(current);
+    result = mutator(draft);
     draft.revision = current.revision + 1;
     warnings.push(...atomicWriteState(parent, stateFilePath(stateDir), draft));
-    reportWarnings(warnings, onWarning);
-    return { state: draft, result, warnings };
   } finally {
     release();
   }
+  // The write is published and the lock is released: caller code runs outside
+  // the critical section, so a slow or re-entrant callback cannot hold up (or
+  // deadlock against) other writers.
+  reportWarnings(warnings, onWarning);
+  return { state: draft, result, warnings };
 }

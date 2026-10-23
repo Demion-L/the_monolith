@@ -161,3 +161,75 @@ describe('trusted-directory scope', () => {
     expect(Array.isArray(seen)).toBe(true);
   });
 });
+
+describe('onWarning runs outside the critical section (review F-04)', () => {
+  // Spoof a non-POSIX platform for the duration of a call so the primitive
+  // returns a PLATFORM_BEST_EFFORT warning; restored in `finally`.
+  async function onWindows<T>(run: () => Promise<T>): Promise<T> {
+    const real = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    try {
+      return await run();
+    } finally {
+      Object.defineProperty(process, 'platform', real);
+    }
+  }
+
+  it('is not called while the state lock is held, and receives every returned warning', async () => {
+    const dir = join(project, 'state');
+    const lock = `${stateFilePath(dir)}.lock`;
+    const lockHeldInCallback: boolean[] = [];
+    const seen: string[] = [];
+    const out = await onWindows(() =>
+      mutateState(
+        trustedDirectoryTarget(dir, (w) => {
+          lockHeldInCallback.push(existsSync(lock));
+          seen.push(w.code);
+        }),
+        () => 1,
+      ),
+    );
+    expect(out.warnings.map((w) => w.code)).toContain('PLATFORM_BEST_EFFORT');
+    expect(seen).toEqual(out.warnings.map((w) => w.code));
+    expect(lockHeldInCallback.length).toBeGreaterThan(0);
+    expect(lockHeldInCallback.every((held) => held === false)).toBe(true);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it('a throwing callback neither fails the write nor keeps the lock', async () => {
+    const dir = join(project, 'state');
+    const out = await onWindows(() =>
+      mutateState(
+        trustedDirectoryTarget(dir, () => {
+          throw new Error('boom');
+        }),
+        (d) => d.revision,
+      ),
+    );
+    expect(out.state.revision).toBe(1);
+    expect(out.result).toBe(0);
+    expect(existsSync(`${stateFilePath(dir)}.lock`)).toBe(false);
+    expect((await readState(dir)).revision).toBe(1);
+    // the next writer is not blocked
+    expect((await mutateState(trustedDirectoryTarget(dir), () => 2, { timeoutMs: 500 })).result).toBe(2);
+  });
+
+  it('a failing mutation releases the lock and never calls the callback', async () => {
+    const dir = join(project, 'state');
+    let called = false;
+    await expect(
+      onWindows(() =>
+        mutateState(
+          trustedDirectoryTarget(dir, () => {
+            called = true;
+          }),
+          () => {
+            throw new Error('mutator failed');
+          },
+        ),
+      ),
+    ).rejects.toThrow('mutator failed');
+    expect(called).toBe(false);
+    expect(existsSync(`${stateFilePath(dir)}.lock`)).toBe(false);
+  });
+});

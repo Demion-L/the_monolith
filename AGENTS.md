@@ -371,7 +371,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) implemented on branch `fix/sec-001b1-safe-reads`, SEC-001B.2 and SEC-001B.3 OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 and SEC-001B.3 OPEN
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

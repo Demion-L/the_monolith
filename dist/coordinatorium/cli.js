@@ -6,19 +6,75 @@
  * into mission.ts, and formats output. All lifecycle/validation logic lives
  * in mission.ts.
  */
-import { resolveMonolithRoot, assertContainedFile } from '../root/index.js';
-import { STATE_FILE_NAME } from './state-keeper.js';
+import { resolveMonolithRoot, assertContainedFile, reportWriteWarning, SafeWriteError } from '../root/index.js';
+import { LockCreationError } from './errors.js';
+import { STATE_FILE_NAME, projectTarget } from './state-keeper.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
-// Resolves the instance directory through the shared containment resolver
-// (src/root) and vets the fixed state files, so a symlinked state.json,
-// state.json.lock, or intermediate directory cannot redirect reads/writes
-// outside the project. Throws RootContainmentError (fail closed).
-function stateDirFor(targetDir) {
+// Reads use the same PROJECT scope as writes (SEC-001B.1-R): the project root is
+// the explicit boundary, so a symlink anywhere below it is refused.
+function readTargetFor(targetDir) {
+    const root = resolveMonolithRoot(targetDir);
+    assertContainedFile(root, STATE_FILE_NAME);
+    return projectTarget(root.projectRoot, root.rootAbs);
+}
+// Writes always use PROJECT scope (ADR-012): the project root is the boundary,
+// so a symlinked `monolithRoot` or intermediate directory is refused even when
+// it stays inside the project.
+function writeTargetFor(targetDir) {
     const root = resolveMonolithRoot(targetDir);
     assertContainedFile(root, STATE_FILE_NAME);
     assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
-    return root.rootAbs;
+    return projectTarget(root.projectRoot, root.rootAbs, (w) => reportWriteWarning(w));
+}
+/**
+ * A write whose outcome is UNKNOWN (SEC-001B.2) was NOT retried and nothing was
+ * cleaned up. The wrapper keeps the machine-readable fields of the original
+ * error (`code`, `publication`, `phase`, `path`) and the error itself as
+ * `cause`; only the message gains guidance, which depends on WHAT is unknown:
+ *
+ *  - `state`: `state.json` may or may not have been replaced. Look at the
+ *    missions before repeating a command that is not idempotent (a second
+ *    `start` would register a second mission).
+ *  - `lock`: it is the creation of the lock file that is unknown; no state was
+ *    written. The mission list says nothing about it — inspect the lock and its
+ *    staging files, and remove nothing while another command may be running.
+ */
+export class UnknownWriteOutcomeError extends Error {
+    code;
+    publication = 'UNKNOWN';
+    phase;
+    path;
+    subject;
+    cause;
+    constructor(original) {
+        const lock = original instanceof LockCreationError;
+        const guidance = lock
+            ? `The outcome of creating the lock is UNKNOWN. It was not retried and nothing was removed; no state was written. ` +
+                `Inspect, read-only, "${original.lockPath}" and any "${original.lockPath}.creating.*" or "${original.lockPath}.recovery" ` +
+                'next to it. MONOLITH never deletes these automatically (FS-CLEAN-001); remove nothing while another monolith ' +
+                'command may be running.'
+            : 'The outcome of this write is UNKNOWN. It was not retried. Check the current state with ' +
+                '`monolith mission list` (and `monolith mission show <id>`) before running this command again.';
+        super(`${original.message}\n${guidance}`);
+        this.name = 'UnknownWriteOutcomeError';
+        this.code = original.code;
+        this.phase = original.phase;
+        this.path = lock ? original.lockPath : original.path;
+        this.subject = lock ? 'lock' : 'state';
+        this.cause = original;
+    }
+}
+export async function withWriteGuidance(run) {
+    try {
+        return await run();
+    }
+    catch (err) {
+        if ((err instanceof SafeWriteError || err instanceof LockCreationError) && err.publication === 'UNKNOWN') {
+            throw new UnknownWriteOutcomeError(err);
+        }
+        throw err;
+    }
 }
 function parseFlag(args, name) {
     const i = args.indexOf(name);
@@ -53,12 +109,12 @@ export async function runMissionStart(args, targetDir = process.cwd()) {
     if (!title || !system) {
         throw new Error('Usage: monolith mission start --title "..." --system "..."');
     }
-    const mission = await startMission(stateDirFor(targetDir), { title, system });
+    const mission = await withWriteGuidance(() => startMission(writeTargetFor(targetDir), { title, system }));
     console.log(`Started mission ${mission.id} (${mission.status})`);
     console.log(formatMission(mission));
 }
 export async function runMissionList(_args, targetDir = process.cwd()) {
-    const missions = await listMissions(stateDirFor(targetDir));
+    const missions = await listMissions(readTargetFor(targetDir));
     if (missions.length === 0) {
         console.log('No missions.');
         return;
@@ -84,7 +140,7 @@ export async function runMissionShow(args, targetDir = process.cwd()) {
     if (!id) {
         throw new Error('Usage: monolith mission show <id>');
     }
-    const mission = await getMission(stateDirFor(targetDir), id);
+    const mission = await getMission(readTargetFor(targetDir), id);
     console.log(formatMission(mission));
 }
 function formatCheckpoint(c) {
@@ -107,11 +163,11 @@ export async function runMissionCheckpoint(args, targetDir = process.cwd()) {
     }
     const remainingSteps = parseRepeatedFlag(args, '--remaining');
     const context = parseFlag(args, '--context');
-    const checkpoint = await createCheckpoint(stateDirFor(targetDir), missionId, {
+    const checkpoint = await withWriteGuidance(() => createCheckpoint(writeTargetFor(targetDir), missionId, {
         summary,
         remainingSteps,
         context: context ?? null,
-    });
+    }));
     console.log(`Created checkpoint ${checkpoint.id} for mission ${checkpoint.missionId}`);
     console.log(formatCheckpoint(checkpoint));
 }
@@ -120,7 +176,7 @@ export async function runMissionCheckpoints(args, targetDir = process.cwd()) {
     if (!missionId) {
         throw new Error('Usage: monolith mission checkpoints <missionId>');
     }
-    const checkpoints = await listCheckpoints(stateDirFor(targetDir), missionId);
+    const checkpoints = await listCheckpoints(readTargetFor(targetDir), missionId);
     if (checkpoints.length === 0) {
         console.log(`No checkpoints for mission ${missionId}.`);
         return;
@@ -138,10 +194,10 @@ export async function runMissionFinish(args, targetDir = process.cwd()) {
     if (!id || !result) {
         throw new Error('Usage: monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]');
     }
-    const mission = await finishMission(stateDirFor(targetDir), id, {
+    const mission = await withWriteGuidance(() => finishMission(writeTargetFor(targetDir), id, {
         result: result,
         summary: summary ?? undefined,
-    });
+    }));
     console.log(`Mission ${mission.id} finished as ${mission.status}`);
     console.log(formatMission(mission));
 }

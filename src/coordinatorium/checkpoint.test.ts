@@ -7,7 +7,7 @@ import { spawn, execFileSync } from 'child_process';
 import ts from 'typescript';
 import { createCheckpoint, listCheckpoints, getCheckpoint } from './checkpoint.js';
 import { startMission, finishMission } from './mission.js';
-import { readState, stateFilePath } from './state-keeper.js';
+import { readState, stateFilePath, trustedDirectoryTarget } from './state-keeper.js';
 import { STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1 } from './types.js';
 import {
   MissionNotFoundError,
@@ -77,8 +77,8 @@ function legacyV1Fixture(opts: {
 describe('createCheckpoint', () => {
   it('appends a well-formed checkpoint for an active mission', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const checkpoint = await createCheckpoint(dir, mission.id, {
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const checkpoint = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, {
       summary: 'Did the thing',
       remainingSteps: ['step one', 'step two'],
       context: 'extra context',
@@ -94,18 +94,18 @@ describe('createCheckpoint', () => {
 
   it('defaults remainingSteps to [] and context to null when omitted', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const checkpoint = await createCheckpoint(dir, mission.id, { summary: 'minimal' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const checkpoint = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'minimal' });
     expect(checkpoint.remainingSteps).toEqual([]);
     expect(checkpoint.context).toBeNull();
   });
 
   it('creates multiple checkpoints for one mission with sequential per-mission ordinals', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const c1 = await createCheckpoint(dir, mission.id, { summary: 'first' });
-    const c2 = await createCheckpoint(dir, mission.id, { summary: 'second' });
-    const c3 = await createCheckpoint(dir, mission.id, { summary: 'third' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const c1 = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'first' });
+    const c2 = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'second' });
+    const c3 = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'third' });
     expect([c1.id, c2.id, c3.id]).toEqual([
       `${mission.id}-CKPT-0001`,
       `${mission.id}-CKPT-0002`,
@@ -115,12 +115,12 @@ describe('createCheckpoint', () => {
 
   it('numbers checkpoints independently per mission', async () => {
     const dir = makeTempDir();
-    const a = await startMission(dir, { title: 'A', system: 's' });
-    const b = await startMission(dir, { title: 'B', system: 's' });
+    const a = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const b = await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's' });
 
-    await createCheckpoint(dir, a.id, { summary: 'a1' });
-    const aC2 = await createCheckpoint(dir, a.id, { summary: 'a2' });
-    const bC1 = await createCheckpoint(dir, b.id, { summary: 'b1' });
+    await createCheckpoint(trustedDirectoryTarget(dir), a.id, { summary: 'a1' });
+    const aC2 = await createCheckpoint(trustedDirectoryTarget(dir), a.id, { summary: 'a2' });
+    const bC1 = await createCheckpoint(trustedDirectoryTarget(dir), b.id, { summary: 'b1' });
 
     expect(aC2.id).toBe(`${a.id}-CKPT-0002`);
     expect(bC1.id).toBe(`${b.id}-CKPT-0001`); // independent numbering, not a global counter
@@ -128,26 +128,26 @@ describe('createCheckpoint', () => {
 
   it('increments revision by exactly 1 per successful checkpoint creation', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' }); // revision 1
-    await createCheckpoint(dir, mission.id, { summary: 'c1' }); // revision 2
-    const state = await readState(dir);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' }); // revision 1
+    await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'c1' }); // revision 2
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.revision).toBe(2);
-    await createCheckpoint(dir, mission.id, { summary: 'c2' }); // revision 3
-    expect((await readState(dir)).revision).toBe(3);
+    await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'c2' }); // revision 3
+    expect((await readState(trustedDirectoryTarget(dir))).revision).toBe(3);
   });
 
   it('rejects an unknown missionId with MissionNotFoundError', async () => {
     const dir = makeTempDir();
-    await expect(createCheckpoint(dir, 'MIS-9999', { summary: 'x' })).rejects.toBeInstanceOf(MissionNotFoundError);
+    await expect(createCheckpoint(trustedDirectoryTarget(dir), 'MIS-9999', { summary: 'x' })).rejects.toBeInstanceOf(MissionNotFoundError);
   });
 
   it.each(['completed', 'failed', 'cancelled'] as const)(
     'rejects checkpoint creation against a %s mission with MissionNotActiveError',
     async (resultStatus) => {
       const dir = makeTempDir();
-      const mission = await startMission(dir, { title: 'A', system: 's' });
-      await finishMission(dir, mission.id, { result: resultStatus });
-      await expect(createCheckpoint(dir, mission.id, { summary: 'x' })).rejects.toBeInstanceOf(
+      const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+      await finishMission(trustedDirectoryTarget(dir), mission.id, { result: resultStatus });
+      await expect(createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x' })).rejects.toBeInstanceOf(
         MissionNotActiveError,
       );
     },
@@ -155,49 +155,49 @@ describe('createCheckpoint', () => {
 
   it('rejects an empty or whitespace-only summary', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    await expect(createCheckpoint(dir, mission.id, { summary: '' })).rejects.toBeInstanceOf(ValidationError);
-    await expect(createCheckpoint(dir, mission.id, { summary: '   ' })).rejects.toBeInstanceOf(ValidationError);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    await expect(createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: '' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: '   ' })).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('rejects a remainingSteps element that is empty/whitespace-only', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
     await expect(
-      createCheckpoint(dir, mission.id, { summary: 'x', remainingSteps: ['ok', '   '] }),
+      createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x', remainingSteps: ['ok', '   '] }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('rejects remainingSteps that is not an array', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
     // @ts-expect-error — deliberately invalid at the runtime boundary
-    await expect(createCheckpoint(dir, mission.id, { summary: 'x', remainingSteps: 'nope' })).rejects.toBeInstanceOf(
+    await expect(createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x', remainingSteps: 'nope' })).rejects.toBeInstanceOf(
       ValidationError,
     );
   });
 
   it('rejects a summary exceeding the max length', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    await expect(createCheckpoint(dir, mission.id, { summary: 'x'.repeat(5000) })).rejects.toBeInstanceOf(
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    await expect(createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x'.repeat(5000) })).rejects.toBeInstanceOf(
       ValidationError,
     );
   });
 
   it('rejects a context exceeding the max length', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
     await expect(
-      createCheckpoint(dir, mission.id, { summary: 'x', context: 'y'.repeat(5000) }),
+      createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x', context: 'y'.repeat(5000) }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('rejects more than the maximum number of remainingSteps', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
     await expect(
-      createCheckpoint(dir, mission.id, { summary: 'x', remainingSteps: Array.from({ length: 51 }, (_, i) => `s${i}`) }),
+      createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x', remainingSteps: Array.from({ length: 51 }, (_, i) => `s${i}`) }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
 });
@@ -209,28 +209,28 @@ describe('createCheckpoint', () => {
 describe('listCheckpoints', () => {
   it('returns [] for a mission with no checkpoints yet, without throwing', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    expect(await listCheckpoints(dir, mission.id)).toEqual([]);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    expect(await listCheckpoints(trustedDirectoryTarget(dir), mission.id)).toEqual([]);
   });
 
   it('returns only the requested mission checkpoints, chronologically', async () => {
     const dir = makeTempDir();
-    const a = await startMission(dir, { title: 'A', system: 's' });
-    const b = await startMission(dir, { title: 'B', system: 's' });
-    const a1 = await createCheckpoint(dir, a.id, { summary: 'a1' });
-    await createCheckpoint(dir, b.id, { summary: 'b1' });
-    const a2 = await createCheckpoint(dir, a.id, { summary: 'a2' });
+    const a = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const b = await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's' });
+    const a1 = await createCheckpoint(trustedDirectoryTarget(dir), a.id, { summary: 'a1' });
+    await createCheckpoint(trustedDirectoryTarget(dir), b.id, { summary: 'b1' });
+    const a2 = await createCheckpoint(trustedDirectoryTarget(dir), a.id, { summary: 'a2' });
 
-    const listed = await listCheckpoints(dir, a.id);
+    const listed = await listCheckpoints(trustedDirectoryTarget(dir), a.id);
     expect(listed.map((c) => c.id)).toEqual([a1.id, a2.id]);
   });
 
   it('remains available for a completed mission', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    await createCheckpoint(dir, mission.id, { summary: 'before finish' });
-    await finishMission(dir, mission.id, { result: 'completed' });
-    const listed = await listCheckpoints(dir, mission.id);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'before finish' });
+    await finishMission(trustedDirectoryTarget(dir), mission.id, { result: 'completed' });
+    const listed = await listCheckpoints(trustedDirectoryTarget(dir), mission.id);
     expect(listed).toHaveLength(1);
   });
 });
@@ -238,23 +238,23 @@ describe('listCheckpoints', () => {
 describe('getCheckpoint', () => {
   it('reads a checkpoint by id', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const created = await createCheckpoint(dir, mission.id, { summary: 'x' });
-    const fetched = await getCheckpoint(dir, created.id);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const created = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x' });
+    const fetched = await getCheckpoint(trustedDirectoryTarget(dir), created.id);
     expect(fetched).toEqual(created);
   });
 
   it('throws CheckpointNotFoundError for an unknown id', async () => {
     const dir = makeTempDir();
-    await expect(getCheckpoint(dir, 'MIS-0001-CKPT-0001')).rejects.toBeInstanceOf(CheckpointNotFoundError);
+    await expect(getCheckpoint(trustedDirectoryTarget(dir), 'MIS-0001-CKPT-0001')).rejects.toBeInstanceOf(CheckpointNotFoundError);
   });
 
   it('remains readable for a checkpoint belonging to a completed mission', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const created = await createCheckpoint(dir, mission.id, { summary: 'x' });
-    await finishMission(dir, mission.id, { result: 'completed' });
-    const fetched = await getCheckpoint(dir, created.id);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const created = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x' });
+    await finishMission(trustedDirectoryTarget(dir), mission.id, { result: 'completed' });
+    const fetched = await getCheckpoint(trustedDirectoryTarget(dir), created.id);
     expect(fetched).toEqual(created);
   });
 });
@@ -271,10 +271,10 @@ describe('append-only semantics', () => {
 
   it('a checkpoint is byte-identical on repeated reads — nothing mutates it in place', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const created = await createCheckpoint(dir, mission.id, { summary: 'x', remainingSteps: ['a'] });
-    const read1 = await getCheckpoint(dir, created.id);
-    const read2 = await getCheckpoint(dir, created.id);
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const created = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, { summary: 'x', remainingSteps: ['a'] });
+    const read1 = await getCheckpoint(trustedDirectoryTarget(dir), created.id);
+    const read2 = await getCheckpoint(trustedDirectoryTarget(dir), created.id);
     expect(read1).toEqual(created);
     expect(read2).toEqual(created);
   });
@@ -287,8 +287,8 @@ describe('append-only semantics', () => {
 describe('round-trip serialization', () => {
   it('persists the exact checkpoint shape to state.json and reads it back identically', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'A', system: 's' });
-    const created = await createCheckpoint(dir, mission.id, {
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const created = await createCheckpoint(trustedDirectoryTarget(dir), mission.id, {
       summary: 'roundtrip',
       remainingSteps: ['x', 'y'],
       context: 'ctx',
@@ -297,7 +297,7 @@ describe('round-trip serialization', () => {
     const onDisk = JSON.parse(readFileSync(stateFilePath(dir), 'utf8'));
     expect(onDisk.tactical.checkpoints[created.id]).toEqual(created);
 
-    const reRead = await getCheckpoint(dir, created.id);
+    const reRead = await getCheckpoint(trustedDirectoryTarget(dir), created.id);
     expect(reRead).toEqual(created);
   });
 });
@@ -313,12 +313,12 @@ describe('schemaVersion migration (v1 → v2)', () => {
     writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
     const before = readFileSync(stateFilePath(dir), 'utf8');
 
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.schemaVersion).toBe(STATE_SCHEMA_VERSION); // 2, in-memory
     expect(state.tactical.checkpoints).toEqual({});
     expect(state.revision).toBe(3); // preserved exactly
     expect(state.tactical.missions['MIS-0001'].title).toBe('Legacy mission');
-    expect(await listCheckpoints(dir, 'MIS-0001')).toEqual([]);
+    expect(await listCheckpoints(trustedDirectoryTarget(dir), 'MIS-0001')).toEqual([]);
 
     // Pure read — no side effect, exactly like the existing missing-file case.
     expect(readFileSync(stateFilePath(dir), 'utf8')).toBe(before);
@@ -342,9 +342,9 @@ describe('schemaVersion migration (v1 → v2)', () => {
     });
     writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
 
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.tactical.checkpoints[existingCheckpoint.id]).toEqual(existingCheckpoint);
-    expect(await getCheckpoint(dir, existingCheckpoint.id)).toEqual(existingCheckpoint);
+    expect(await getCheckpoint(trustedDirectoryTarget(dir), existingCheckpoint.id)).toEqual(existingCheckpoint);
   });
 
   it('createCheckpoint against a legacy v1 file migrates and persists it as v2 on disk, preserving the existing mission', async () => {
@@ -352,7 +352,7 @@ describe('schemaVersion migration (v1 → v2)', () => {
     const legacy = legacyV1Fixture({ revision: 1, missions: { 'MIS-0001': legacyMission('MIS-0001') } });
     writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
 
-    const checkpoint = await createCheckpoint(dir, 'MIS-0001', { summary: 'first ever checkpoint' });
+    const checkpoint = await createCheckpoint(trustedDirectoryTarget(dir), 'MIS-0001', { summary: 'first ever checkpoint' });
     expect(checkpoint.id).toBe('MIS-0001-CKPT-0001');
 
     // The on-disk file is now v2 — the migration is persisted as a side
@@ -363,7 +363,7 @@ describe('schemaVersion migration (v1 → v2)', () => {
     expect(onDisk.tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
     expect(onDisk.revision).toBe(2); // 1 (legacy) + 1 (this mutation) — revision preserved, then incremented once
 
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.tactical.checkpoints[checkpoint.id]).toEqual(checkpoint);
   });
 
@@ -372,7 +372,7 @@ describe('schemaVersion migration (v1 → v2)', () => {
     const legacy = legacyV1Fixture({ revision: 5, missions: { 'MIS-0001': legacyMission('MIS-0001') } });
     writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
 
-    await finishMission(dir, 'MIS-0001', { result: 'completed' });
+    await finishMission(trustedDirectoryTarget(dir), 'MIS-0001', { result: 'completed' });
 
     const onDisk = JSON.parse(readFileSync(stateFilePath(dir), 'utf8'));
     expect(onDisk.schemaVersion).toBe(2);
@@ -390,7 +390,7 @@ describe('schemaVersion migration (v1 → v2)', () => {
       tactical: { missions: {} }, // no checkpoints — not a legacy v1 file, so this is corruption
     };
     writeFileSync(stateFilePath(dir), JSON.stringify(malformed, null, 2), 'utf8');
-    await expect(readState(dir)).rejects.toThrow(/tactical\.checkpoints/);
+    await expect(readState(trustedDirectoryTarget(dir))).rejects.toThrow(/tactical\.checkpoints/);
   });
 
   it('rejects an unsupported schemaVersion (neither current nor the one known legacy version)', async () => {
@@ -398,7 +398,7 @@ describe('schemaVersion migration (v1 → v2)', () => {
     const bad = legacyV1Fixture({ missions: {} });
     bad.schemaVersion = 99;
     writeFileSync(stateFilePath(dir), JSON.stringify(bad, null, 2), 'utf8');
-    await expect(readState(dir)).rejects.toThrow(/schemaVersion/i);
+    await expect(readState(trustedDirectoryTarget(dir))).rejects.toThrow(/schemaVersion/i);
   });
 
   it(
@@ -410,7 +410,7 @@ describe('schemaVersion migration (v1 → v2)', () => {
 
       const N = 6;
       const results = await Promise.all(
-        Array.from({ length: N }, (_, i) => createCheckpoint(dir, 'MIS-0001', { summary: `concurrent ${i}` })),
+        Array.from({ length: N }, (_, i) => createCheckpoint(trustedDirectoryTarget(dir), 'MIS-0001', { summary: `concurrent ${i}` })),
       );
       const ids = results.map((c) => c.id);
       expect(new Set(ids).size).toBe(N);
@@ -499,8 +499,8 @@ describe('pre-COORDINATORIUM-002 binary safety against a v2 file', () => {
 
       // Build a REAL, current-format (v2) state.json with real checkpoint
       // data, via the current code under test.
-      const mission = await startMission(stateDir, { title: 'A', system: 's' });
-      await createCheckpoint(stateDir, mission.id, { summary: 'must survive untouched' });
+      const mission = await startMission(trustedDirectoryTarget(stateDir), { title: 'A', system: 's' });
+      await createCheckpoint(trustedDirectoryTarget(stateDir), mission.id, { summary: 'must survive untouched' });
       const before = readFileSync(stateFilePath(stateDir), 'utf8');
       const beforeParsed = JSON.parse(before);
       expect(beforeParsed.schemaVersion).toBe(2);
@@ -663,6 +663,23 @@ function transpileCoordinatoriumTo(destDir: string): void {
     ts.transpileModule(readFileSync(join(__dirname, '..', 'root', 'index.ts'), 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
       fileName: 'index.ts',
+    }).outputText.split(`'./safe-write.js'`).join(`'./safe-write.mjs'`).split(`'./write-artifacts.js'`).join(`'./write-artifacts.mjs'`),
+    'utf8',
+  );
+  // root/index.ts re-exports the safe-write primitive (SEC-001B.2).
+  writeFileSync(
+    join(destDir, 'safe-write.mjs'),
+    ts.transpileModule(readFileSync(join(__dirname, '..', 'root', 'safe-write.ts'), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      fileName: 'safe-write.ts',
+    }).outputText,
+    'utf8',
+  );
+  writeFileSync(
+    join(destDir, 'write-artifacts.mjs'),
+    ts.transpileModule(readFileSync(join(__dirname, '..', 'root', 'write-artifacts.ts'), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      fileName: 'write-artifacts.ts',
     }).outputText,
     'utf8',
   );
@@ -681,8 +698,9 @@ function transpileCoordinatoriumTo(destDir: string): void {
 
   const childScript = `
 import { createCheckpoint } from './checkpoint.mjs';
+import { trustedDirectoryTarget } from './state-keeper.mjs';
 const [stateDir, missionId, idx] = process.argv.slice(2);
-const checkpoint = await createCheckpoint(stateDir, missionId, { summary: 'Concurrent checkpoint ' + idx });
+const checkpoint = await createCheckpoint(trustedDirectoryTarget(stateDir), missionId, { summary: 'Concurrent checkpoint ' + idx });
 process.stdout.write(JSON.stringify(checkpoint));
 `;
   writeFileSync(join(destDir, 'create-checkpoint-child.mjs'), childScript, 'utf8');
@@ -722,7 +740,7 @@ describe('concurrency (independent processes)', () => {
       const moduleDir = makeTempDir();
       transpileCoordinatoriumTo(moduleDir);
 
-      const mission = await startMission(stateDir, { title: 'Concurrency target', system: 'concurrency-test' });
+      const mission = await startMission(trustedDirectoryTarget(stateDir), { title: 'Concurrency target', system: 'concurrency-test' });
 
       const N = 8;
       const checkpoints = await Promise.all(
@@ -732,7 +750,7 @@ describe('concurrency (independent processes)', () => {
       const ids = checkpoints.map((c) => c.id);
       expect(new Set(ids).size).toBe(N); // all unique — no collisions, no lost updates
 
-      const state = await readState(stateDir);
+      const state = await readState(trustedDirectoryTarget(stateDir));
       const persisted = Object.values(state.tactical.checkpoints).filter((c) => c.missionId === mission.id);
       expect(persisted).toHaveLength(N);
       // revision: 1 for startMission + N for each successful createCheckpoint

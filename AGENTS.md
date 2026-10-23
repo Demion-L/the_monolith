@@ -132,7 +132,9 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
-| `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + bounded project-file helpers `checkProjectFile()`/`readProjectFile()` (ADR-011) |
+| `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + the unified safe reader `readBoundedFile()` and its wrappers `checkProjectFile()`/`readProjectFile()` (ADR-011, ADR-014) |
+| `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
+| `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
@@ -140,7 +142,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (374 tests passing, typecheck clean):
+What MONOLITH does today (865 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -250,17 +252,93 @@ read, descriptor always closed. Limits are protective ceilings, not policy:
 | File | Limit | On violation |
 |---|---:|---|
 | lock record | 256 B | `LockUnsafeError` (`mission` exits non-zero); lock not acquired, file untouched |
-| `active.md` | 256 KiB | `ACTIVE_MD_MISSING` warning naming `FILE_TOO_LARGE` / `FILE_NOT_REGULAR` |
+| `active.md` | 256 KiB | `ACTIVE_MD_UNREADABLE` error naming `FILE_TOO_LARGE` → `INCOMPLETE`; a policy refusal (`FILE_NOT_REGULAR`, symlink, …) is `ACTIVE_MD_REJECTED` |
 | Markdown documents (protocols, ADRs) | 1 MiB | `DOC_FILE_UNREADABLE` error → `INCOMPLETE` |
 | `state.json` | 16 MiB | read: `StateFileError` / `STATE_UNREADABLE`; write: refused before the temp file is created |
 
 Over-limit is fail-closed — never truncated, compacted or auto-cleaned
-(growth policy: STATE-001, not started). Symlinks keep their existing policy
-(in-project allowed, escaping/dangling/looping refused). Bounded reads do not
-close check-then-use races.
+(growth policy: STATE-001, not started).
 
-Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) but
-check-then-use races remain (SEC-001B, OPEN — see
+**Unified safe read contract (SEC-001B.1-R, ADR-014).** One strict policy for
+every MONOLITH-managed file (`monolith.config.json`, `state.json`, `active.md`,
+the lock record, brief's protocol/ADR documents and everything `validate`
+reads); no permissive mode. It is the one `readBoundedFile` in `src/root/`: an
+explicit absolute boundary (never the cwd; `''`/relative refused —
+`READ_BOUNDARY_INVALID`); no symlink in any component below the boundary, inside
+the project or not, dangling or not (`FILE_SYMLINK`); regular file only, refused
+before `open` (`FILE_NOT_REGULAR`); `nlink == 1` (`FILE_HARDLINKED`);
+`O_NOFOLLOW|O_NONBLOCK`; `dev/ino` of the descriptor equals the checked one
+(`FILE_CHANGED`); fail closed without those flags (`READ_UNSUPPORTED_PLATFORM`).
+`readState` and the mission/checkpoint readers take a `StateReadTarget`
+(`project` | `trusted-directory`); a plain path is refused. Symlinks elsewhere in
+the user's project are not inspected. The check is a path walk followed by an
+`open`: a concurrent directory swap is NOT defended against (SEC-001B.3).
+
+*Missing, refused and unreadable are three different things* (corrective pass
+SEC-001B.1-R, M-1). `brief` diagnostics that come from a read carry the typed
+`readCode` of the reader and are never told apart by message text. `active.md`:
+`ACTIVE_MD_MISSING` (warn, `FILE_MISSING` only — the brief stays `COMPLETE`),
+`ACTIVE_MD_REJECTED` (error, a `READ_SECURITY_CODES` refusal — the file exists
+and was not shown) and `ACTIVE_MD_UNREADABLE` (error, any other read failure);
+the last two make the brief `INCOMPLETE` and `--strict` exit 2. A refused file's
+content never appears in a diagnostic (label and code only). `state.json`
+(`STATE_NOT_INITIALIZED` info vs `STATE_UNREADABLE` error) and documents
+(`DOC_FILE_UNREADABLE` error) keep the same separation; a configured document
+directory that is a dangling symlink is `DOC_DIR_UNREADABLE`, not "not created
+yet". `StateReadTarget` paths are validated before any filesystem call: a
+relative or empty `stateDir`/`projectRoot` is `READ_BOUNDARY_INVALID`; in
+`trusted-directory` scope only `ENOENT` on the path itself means "no state yet"
+(a dangling link, a loop or a non-directory is refused). Ancestors of a
+trusted directory are, by that scope's definition, not inspected.
+
+**Threat models (ADR-013, PROPOSED; TM-C is not supported).** TM-A, a trusted local
+project: **supported with limitations**. TM-B, a static adversarial project
+(hostile content at rest): **partially supported** — the unified safe read contract
+above closes the in-project symlink and hardlink read gap for managed files, but
+TM-B is not re-stated as supported until a separate, recorded re-evaluation
+(ADR-013 §6); merging the contract does not do that. TM-C, concurrent adversarial
+mutation: **UNSUPPORTED** — no document, comment or review may claim it. The native
+filesystem layer is deferred (ADR-013 §5); ADR-010's blocker for a write-enabled UI
+is preserved. Not covered: dynamic TOCTOU, directory swap, NFS/SMB, the same-UID
+adversary (an actor that can rewrite MONOLITH's own files is outside every
+filesystem guarantee), lock release and stale recovery (LOCK-RELEASE-001), and
+the brief document-directory walk (BRIEF-DOCDIR-001). See `tech-debt.md`.
+
+`brief` adds a `WRITE_ARTIFACTS_PRESENT` **warning** when leftover write files
+are present in the instance directory (and `validate` prints a `Warning:` line);
+neither changes `Completeness` or an exit code, and nothing is deleted — a
+matching name does not prove a file is an orphan (FS-CLEAN-001).
+
+**File write contract (SEC-001B.2, ADR-012).** Every *publication* (creation or
+replacement) of `state.json`, the lock files and the `init` scaffold goes through
+`src/root/safe-write.ts`. Not everything that touches a file does: lock release
+and stale-lock recovery `unlink` the lock path directly, `trusted-directory`
+scope creates its directory with `mkdirSync`, and `src/scripts/dogfood-*.ts`
+write reports on their own:
+
+| Property | Contract |
+|---|---|
+| Scope | Explicit, no default: `project` (CLI, `init`; the project root is the boundary) or `trusted-directory` (the caller asserts the directory **and its ancestors** are trusted; they are not inspected). `mutateState` / `startMission` / `finishMission` take a `StateWriteTarget`; a plain string throws `WRITE_SCOPE_REQUIRED` |
+| Symlinks (W-SYM) | Refused for writes anywhere below the boundary — in the target or in a parent, dangling or not, **including links that stay inside the project**. Reads keep the ADR-009 policy |
+| Destination | Replaced only if absent or a regular file with one link; FIFO/special file, directory, symlink and `nlink > 1` (`WRITE_TARGET_HARDLINKED`) are refused |
+| Temp file | `O_CREAT\|O_EXCL\|O_NOFOLLOW`; `rename()` over the state file, `link()` for create-only files |
+| Modes | New `state.json` / lock: `0600`; an existing `state.json` keeps its mode; scaffold documents follow the umask |
+| Durability | create → write → `fchmod` → `fstat` verify → `fsync(file)` → `close` → publish → `fsync(directory)`; state uses all of it, scaffold fsyncs files only, lock fsync stays opt-in |
+| Publication | `NOT_PUBLISHED` / `PUBLISHED` / `UNKNOWN`, decided from the identity (`dev/ino`) of the destination and of the temp name after a failed `rename`/`link` — never from the error code, and for `link`+`EEXIST` never from a link count. `UNKNOWN` is never retried, never downgraded and nothing is deleted; the CLI asks the user to check the missions (state) or to inspect the lock and its staging files (lock). Failures after publication are warnings; `onWarning` runs after the lock is released |
+| Cleanup | The primitive removes only a temp file created by the current call, and only while its `dev/ino` still matches. Lock release removes only a lock holding this process's own record; stale recovery removes a confirmed-dead owner's lock under the recovery mutex. No cleanup by age, PID or name; leftovers are not deleted (FS-CLEAN-001) |
+| Lock | Ownership, backoff, liveness, stale recovery and record format unchanged; only staging creation uses the primitive |
+| Platform | Guarantees: POSIX. Windows best-effort and **unverified** (warning `PLATFORM_BEST_EFFORT`); macOS/BSD unverified; NFS/SMB outside |
+
+This does **not** defend against a local actor changing directories or
+symlinks concurrently with a command (SEC-001B.3; threat model TM-C is
+**unsupported**, native filesystem layer deferred — ADR-013): the parent-directory
+re-check is a tripwire, not protection, and removing the owned temp file is not
+conditional on the identity check. `init` is neither atomic nor coordinated
+between processes.
+
+Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) and
+file reads/writes are bounded and checked (SEC-001B.1 / .1-R / .2), but
+check-then-use races remain (SEC-001B.3, OPEN — see
 `.monolith/memory/long-term/tech-debt.md`);
 `monolith context <topic>` and JSON output do not exist.
 
@@ -273,9 +351,10 @@ or executes `project.definition.mjs`. That file is checked only as a file —
 present, inside the project, regular, non-empty, at most 1 MiB. A PASS does
 not verify JS syntax, the `PROJECT_DEFINITION` export (decision D-1: that
 check was removed), content safety, or executability. `monolith.config.json`,
-`project.definition.mjs` and `AGENTS.md` are read through the bounded reader
-in `src/root/` (containment, non-blocking open, fstat type/size check, capped
-read). Check-then-use races remain open (SEC-001B).
+`project.definition.mjs` and `AGENTS.md` are read through the unified safe reader
+in `src/root/` (ADR-014: no symlink, single link, regular file, non-blocking open,
+fstat identity/size check, capped read); a symlinked one is `FILE_SYMLINK`.
+Check-then-use races remain open (SEC-001B.3).
 
 ---
 
@@ -371,7 +450,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 and SEC-001B.3 OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED / MERGED (`4bc7b9d`), SEC-001B.1-R (unified safe read, ADR-014) IMPLEMENTED / MERGED (`c3a428b`); SEC-001B.3 DOCUMENTED, not implemented (ADR-013, PROPOSED pending independent architectural review: TM-C unsupported, native layer deferred; ADR-010's blocker for a write-enabled UI is preserved, not lifted)
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

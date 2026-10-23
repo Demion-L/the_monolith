@@ -6,6 +6,8 @@ status: accepted
 date: 2026-10-22
 related_adrs:
   - ADR-008
+  - ADR-013
+  - ADR-014
 ---
 
 # ADR-009 — `monolithRoot` Containment (SEC-001A)
@@ -89,4 +91,5 @@ Instance/Templates.
   other readers of paths under the root are not behind a filesystem sandbox.
 - No general filesystem boundary abstraction (all call sites use `fs` directly).
 - Update (SEC-002, ADR-011): `validate` no longer executes `project.definition.mjs`, and root-level files are read through a bounded, contained reader in `src/root/`; this does not close the TOCTOU risk above.
+- Update (ADR-014, 2026-10-23): points 4 and 5 above — "symlinks that stay inside the project are allowed" for reads — are **superseded for MONOLITH-managed files** by the Unified Safe Read Contract (SEC-001B.1-R, ADR-014; policy DEC-READ-UNIFIED-001 of ADR-013): no symlink in any component below an explicit boundary, regular file, `nlink == 1`, fail-closed, no permissive mode. **Merged.** The containment of `monolithRoot` (this ADR's points 1-3) is unchanged, and a symlinked `monolithRoot` still passes containment while every managed read below it is refused. Does not close TOCTOU (SEC-001B.3, ADR-013: TM-C unsupported).
 - Update (SEC-001B.1): reads of `state.json`, the lock record, `active.md` and `brief`'s Markdown documents are bounded and non-blocking (shared reader in `src/root/`; limits 16 MiB / 256 B / 256 KiB / 1 MiB), and `state.json` writes are size-checked before the temp file is created. SEC-001B.2 (safe writes) and SEC-001B.3 (scaffold, TOCTOU) remain open; TOCTOU is not closed.

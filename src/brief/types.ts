@@ -10,6 +10,7 @@
  */
 
 import type { Mission, Checkpoint } from '../coordinatorium/types.js';
+import type { ProjectFileErrorCode } from '../root/index.js';
 
 export type DiagnosticSeverity = 'info' | 'warn' | 'error';
 
@@ -27,18 +28,26 @@ export type BriefDiagnosticCode =
   | 'MULTIPLE_ACTIVE_MISSIONS'
   | 'CHECKPOINT_ORDER_MISMATCH'
   | 'ACTIVE_MD_MISSING'
+  | 'ACTIVE_MD_REJECTED'
+  | 'ACTIVE_MD_UNREADABLE'
   | 'ACTIVE_MD_NO_CURRENT_STORY'
   | 'CONFIG_UNREADABLE'
   | 'CONFIG_ADR_DIRS_INVALID'
   | 'DOC_DIR_UNREADABLE'
   | 'DOC_FILE_UNREADABLE'
   | 'DOC_DIR_OUTSIDE_PROJECT'
-  | 'PATH_OUTSIDE_PROJECT';
+  | 'PATH_OUTSIDE_PROJECT'
+  | 'WRITE_ARTIFACTS_PRESENT';
 
 export interface BriefDiagnostic {
   code: BriefDiagnosticCode;
   severity: DiagnosticSeverity;
   message: string;
+  /**
+   * SEC-001B.1-R: the typed reason of the safe reader, when the diagnostic is about
+   * reading a managed file. Callers must branch on this, never on `message`.
+   */
+  readCode?: ProjectFileErrorCode;
 }
 
 /** A pointer to the on-disk artifact a section's content was read from. */

@@ -41,7 +41,9 @@
  *   5. A lock is never published in a partially-written state.
  *      Metadata is written in full to a private staging file
  *      (`<lockPath>.creating.<pid>.<nonce>`, a name no other acquirer can
- *      ever guess or collide with) and only published — via `linkSync`,
+ *      ever guess or collide with; created `O_EXCL|O_NOFOLLOW` at mode `0600`
+ *      through the shared safe-write primitive, SEC-001B.2) and only
+ *      published — via `link()`,
  *      which is exactly as exclusive a create-if-absent primitive as
  *      `open(path, 'wx')` — once that write (and, if requested, an fsync)
  *      has fully succeeded. If anything fails first, the canonical path
@@ -49,10 +51,11 @@
  *      uniquely-named staging file is ever touched by its own cleanup. See
  *      `createAndPublish` below and ADR-008 for the full argument.
  */
-import { openSync, writeSync, closeSync, unlinkSync, linkSync, fsyncSync, } from 'fs';
+import { writeSync, closeSync, unlinkSync, fchmodSync, fsyncSync, } from 'fs';
+import { basename, dirname } from 'path';
 import { randomBytes } from 'crypto';
 import { LockTimeoutError, LockUnsafeError, LockCreationError } from './errors.js';
-import { readBoundedFileStable } from '../root/index.js';
+import { SafeWriteError, createExclusive, disposeOwned, openParent, publishLink, readBoundedFileStable, boundaryPathOf, trustedDirectoryBoundary, } from '../root/index.js';
 /** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
 export const MAX_LOCK_BYTES = 256;
 const DEFAULT_OPTIONS = {
@@ -112,8 +115,10 @@ function parseLockRecord(raw) {
         return null;
     return { pid, nonce };
 }
-function inspectLock(path) {
-    const r = readBoundedFileStable(path, 'lock file', { maxBytes: MAX_LOCK_BYTES, allowEmpty: true }, true);
+function inspectLock(boundary, path) {
+    // Unified safe read (SEC-001B.1-R): the lock is read under the boundary its
+    // staging files are written under; a symlink or hardlinked lock is `structural`.
+    const r = readBoundedFileStable(path, 'lock file', { boundary, maxBytes: MAX_LOCK_BYTES, allowEmpty: true }, true);
     if (r.ok) {
         const record = 'content' in r ? parseLockRecord(r.content) : null;
         if (record)
@@ -128,8 +133,8 @@ function inspectLock(path) {
 }
 /** Valid record or null. `unsafe` is deliberately collapsed to null here for
  * the two callers that must merely refuse to act on it (invariant 2). */
-function readLockRecord(path) {
-    const i = inspectLock(path);
+function readLockRecord(boundary, path) {
+    const i = inspectLock(boundary, path);
     return i.kind === 'valid' ? i.record : null;
 }
 /** Write `buffer` to `fd` in full, looping on short writes (a single
@@ -151,69 +156,69 @@ function writeAll(fd, buffer, writer = writeSync) {
 function stagingPath(lockPath, record) {
     return `${lockPath}.creating.${record.pid}.${record.nonce}`;
 }
-/** Best-effort removal of a staging file this process created. Never
- * throws — "already gone" and "couldn't remove it" are both acceptable
- * outcomes here; the caller records whether it succeeded. */
-function cleanupStaging(path) {
-    try {
-        unlinkSync(path);
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
 /**
  * Create `record`'s metadata as `lockPath`, safely.
  *
  * The metadata is written to a private staging file
  * (`<lockPath>.creating.<pid>.<nonce>`) first, in full, and only
- * *published* as `lockPath` — via `linkSync(staging, lockPath)` — once that
- * write (and, if `fsyncMetadata` is set, an fsync) has completely
- * succeeded. `linkSync` fails with `EEXIST` if `lockPath` already exists,
- * exactly like the `open(path, 'wx')` it replaces as the publish step, so
- * it is exactly as exclusive a primitive — the canonical path still never
- * has two simultaneous "creators" — but unlike writing straight into
- * `lockPath`, a failure partway through can never leave the canonical path
- * itself in an empty/partial state, because the canonical path was never
- * touched by this attempt in the first place.
+ * *published* as `lockPath` — via `link()` — once that write (and, if
+ * `fsyncMetadata` is set, an fsync) has completely succeeded. `link()` fails
+ * with `EEXIST` if `lockPath` already exists, exactly like the
+ * `open(path, 'wx')` it replaces as the publish step, so it is exactly as
+ * exclusive a primitive — the canonical path still never has two
+ * simultaneous "creators" — but unlike writing straight into `lockPath`, a
+ * failure partway through can never leave the canonical path itself in an
+ * empty/partial state, because the canonical path was never touched by this
+ * attempt in the first place.
  *
  * `rename()` is deliberately not used for publication: an ordinary rename
  * silently replaces an existing destination, which is exactly the
  * exclusivity `open(path, 'wx')` is relied on for everywhere else in this
- * module. Only `linkSync`'s EEXIST-on-existing-destination behavior
+ * module. Only `link()`'s EEXIST-on-existing-destination behavior
  * preserves that.
  *
- * On any failure, only this process's own uniquely-named staging file is
- * ever removed (best-effort) — `lockPath` itself is never touched by a
- * failed creator, so a failed/paused creator can never delete a valid lock
- * a different, concurrently-succeeding acquirer published in the meantime.
+ * On any failure, only this process's own staging file is ever removed — and
+ * only while its recorded identity (`dev/ino`) still matches. `lockPath`
+ * itself is never touched by a failed creator, so a failed/paused creator can
+ * never delete a valid lock a different, concurrently-succeeding acquirer
+ * published in the meantime.
+ *
+ * If the publish step ends in a state that cannot be classified (`UNKNOWN`:
+ * the link may or may not have happened), the lock is confirmed ONLY by its
+ * ownership record — `lockPath` holding exactly this attempt's `pid:nonce`.
+ * Otherwise the attempt fails with `publication: 'UNKNOWN'`; nothing is
+ * retried and the staging file is left in place.
  */
-async function createAndPublish(lockPath, record, fsyncMetadata, testHooks) {
-    const staging = stagingPath(lockPath, record);
+async function createAndPublish(parent, lockPath, record, fsyncMetadata, testHooks) {
+    const stagingName = basename(stagingPath(lockPath, record));
+    const lockName = basename(lockPath);
     const metadata = Buffer.from(`${record.pid}:${record.nonce}`, 'utf8');
-    let fd;
+    const base = { lockPath, pid: record.pid, nonce: record.nonce };
+    let owned;
     try {
-        fd = openSync(staging, 'wx');
+        owned = createExclusive(parent, stagingName, 0o600, { ops: testHooks.fsOps });
     }
     catch (err) {
         // The staging name is unique per (pid, nonce); reaching here means we
-        // could not even create our own private file. Nothing was created.
+        // could not even create our own private file. Normally nothing was
+        // created; `cleanedUp` is false only if a file exists whose identity we
+        // could not confirm.
+        const created = err instanceof SafeWriteError && err.tmp !== undefined;
         throw new LockCreationError({
-            lockPath,
+            ...base,
             phase: 'staging-open',
-            pid: record.pid,
-            nonce: record.nonce,
-            cleanedUp: true,
-            cause: err,
+            cleanedUp: !created,
+            cause: err instanceof SafeWriteError ? (err.cause ?? err) : err,
         });
     }
+    const { fd, token } = owned;
     const fail = async (phase, cause) => {
         await testHooks.beforeStagingCleanupOnFailure?.();
-        const cleanedUp = cleanupStaging(staging);
-        throw new LockCreationError({ lockPath, phase, pid: record.pid, nonce: record.nonce, cleanedUp, cause });
+        const res = disposeOwned(parent, token, { ops: testHooks.fsOps });
+        throw new LockCreationError({ ...base, phase, cleanedUp: res === 'removed' || res === 'absent', cause });
     };
     try {
+        fchmodSync(fd, 0o600); // independent of the umask
         writeAll(fd, metadata, testHooks.writeMetadata);
     }
     catch (err) {
@@ -230,29 +235,50 @@ async function createAndPublish(lockPath, record, fsyncMetadata, testHooks) {
         }
     }
     closeSync(fd);
+    let result;
     try {
-        linkSync(staging, lockPath);
+        result = publishLink(parent, token, lockName, { ops: testHooks.fsOps });
     }
     catch (err) {
-        if (err.code === 'EEXIST') {
-            // Lost the race to a concurrent publisher — not a failure. Only our
-            // own staging file is ever removed here.
-            cleanupStaging(staging);
-            return 'lost-race';
+        if (!(err instanceof SafeWriteError))
+            throw err;
+        if (err.publication === 'UNKNOWN') {
+            const seen = readLockRecord(boundaryPathOf(parent), lockPath);
+            if (seen !== null && sameRecord(seen, record)) {
+                // The record at the lock path is exactly ours: the link did happen.
+                disposeOwned(parent, token, { ops: testHooks.fsOps });
+                return 'published';
+            }
+            throw new LockCreationError({
+                ...base,
+                phase: 'publish-link',
+                cleanedUp: false,
+                publication: 'UNKNOWN',
+                cause: err.cause ?? err,
+            });
         }
-        return fail('publish-link', err);
+        // NOT_PUBLISHED: the staging file was removed if the publish step failed
+        // (`err.tmp.removed`); an error raised before it (e.g. the parent changed)
+        // leaves it in place and is reported as `cleanedUp: false`.
+        throw new LockCreationError({
+            ...base,
+            phase: 'publish-link',
+            cleanedUp: err.tmp?.removed ?? false,
+            cause: err.cause ?? err,
+        });
     }
-    // Published: lockPath and staging are now two links to the same
-    // metadata. Drop our temporary name; the canonical one remains.
-    cleanupStaging(staging);
-    return 'published';
+    // Lost race: only our own staging file is ever removed. Published:
+    // lockPath and staging are now two links to the same metadata; drop our
+    // temporary name, the canonical one remains. A failed removal is harmless.
+    disposeOwned(parent, token, { ops: testHooks.fsOps });
+    return result.outcome;
 }
 /** Delete `path` only if its current content is still, byte-for-byte, the
  * record we believe we own. Never clears a lock that has changed or is
  * already gone. This is used both for releasing a held primary lock and
  * for releasing the internal recovery mutex. */
-function releaseIfOwned(path, record) {
-    const current = readLockRecord(path);
+function releaseIfOwned(boundary, path, record) {
+    const current = readLockRecord(boundary, path);
     if (sameRecord(current, record)) {
         try {
             unlinkSync(path);
@@ -291,7 +317,7 @@ function recoveryMutexPath(lockPath) {
  * only means automatic crash recovery for *this* lock is unavailable
  * until that's cleaned up.
  */
-async function recoverDeadOwner(lockPath, observed, fsyncMetadata, hooks) {
+async function recoverDeadOwner(parent, lockPath, observed, fsyncMetadata, hooks) {
     await hooks.beforeRecoveryAttempt?.();
     const mutexPath = recoveryMutexPath(lockPath);
     const mutexRecord = makeOwnRecord();
@@ -299,7 +325,7 @@ async function recoverDeadOwner(lockPath, observed, fsyncMetadata, hooks) {
     // primitive as the primary lock — its semantics (never recovered by
     // liveness or age, see module doc) are unchanged; only how it is
     // physically created is shared code now.
-    if ((await createAndPublish(mutexPath, mutexRecord, fsyncMetadata, hooks)) === 'lost-race') {
+    if ((await createAndPublish(parent, mutexPath, mutexRecord, fsyncMetadata, hooks)) === 'lost-race') {
         return 'mutex-busy';
     }
     try {
@@ -307,7 +333,7 @@ async function recoverDeadOwner(lockPath, observed, fsyncMetadata, hooks) {
         // mutex — time has passed since the caller's own read, and this is
         // the check that actually matters: nothing but the mutex holder can
         // delete this specific stale record from here on.
-        const current = readLockRecord(lockPath);
+        const current = readLockRecord(boundaryPathOf(parent), lockPath);
         if (current === null || !sameRecord(current, observed)) {
             return 'aborted'; // changed or gone while we were acquiring the mutex
         }
@@ -324,7 +350,7 @@ async function recoverDeadOwner(lockPath, observed, fsyncMetadata, hooks) {
         return 'recovered';
     }
     finally {
-        releaseIfOwned(mutexPath, mutexRecord);
+        releaseIfOwned(boundaryPathOf(parent), mutexPath, mutexRecord);
     }
 }
 /**
@@ -334,18 +360,22 @@ async function recoverDeadOwner(lockPath, observed, fsyncMetadata, hooks) {
  * function. `testHooks` exists solely to let tests force specific
  * interleavings deterministically — production callers must never pass it.
  */
-export async function acquireLock(lockPath, options = {}, testHooks = {}) {
+export async function acquireLock(lockPath, options = {}, testHooks = {}, parent = openParent(trustedDirectoryBoundary(dirname(lockPath)), dirname(lockPath))) {
+    // `parent` is the already-verified directory that holds the lock. State
+    // keeper passes the one it opened under the caller's write scope. When it
+    // is omitted (internal/test callers) the lock's directory itself is the
+    // trust boundary (trusted-directory semantics, ADR-012).
     const opts = { ...DEFAULT_OPTIONS, ...options };
     const deadline = Date.now() + opts.timeoutMs;
     const own = makeOwnRecord();
     for (;;) {
-        if ((await createAndPublish(lockPath, own, opts.fsyncMetadata, testHooks)) === 'published') {
-            return () => releaseIfOwned(lockPath, own);
+        if ((await createAndPublish(parent, lockPath, own, opts.fsyncMetadata, testHooks)) === 'published') {
+            return () => releaseIfOwned(boundaryPathOf(parent), lockPath, own);
         }
         // 'lost-race': the canonical lock already exists — fall through to the
         // normal observe/wait/recover logic below, exactly as a plain EEXIST
         // did before.
-        const inspection = inspectLock(lockPath);
+        const inspection = inspectLock(boundaryPathOf(parent), lockPath);
         if (inspection.kind === 'unsafe' && inspection.class === 'structural') {
             // A FIFO / oversize / unreadable lock can never become a valid one:
             // refuse with a diagnostic instead of waiting out the timeout. The
@@ -356,7 +386,7 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}) {
         if (observed !== null) {
             const verdict = checkLiveness(observed.pid);
             if (verdict === 'dead') {
-                const outcome = await recoverDeadOwner(lockPath, observed, opts.fsyncMetadata, testHooks);
+                const outcome = await recoverDeadOwner(parent, lockPath, observed, opts.fsyncMetadata, testHooks);
                 if (outcome !== 'mutex-busy') {
                     continue; // we (or whoever holds the mutex) made progress; re-evaluate now
                 }

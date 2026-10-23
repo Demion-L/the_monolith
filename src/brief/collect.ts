@@ -14,7 +14,15 @@
 import { existsSync } from 'fs';
 import { join, relative } from 'path';
 import { readBriefConfig } from './config.js';
-import { resolveMonolithRootValue, checkContainedFile, readBoundedFileStable, type ResolvedMonolithRoot } from '../root/index.js';
+import {
+  resolveMonolithRootValue,
+  checkContainedFile,
+  readBoundedFileStable,
+  isReadSecurityViolation,
+  findWriteArtifacts,
+  describeWriteArtifacts,
+  type ResolvedMonolithRoot,
+} from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import {
@@ -68,12 +76,18 @@ async function readStateForBrief(
   // Rule (section 4, #1): existence is established by the same bounded,
   // non-blocking open that reads the file (SEC-001B.1) — a FIFO or an
   // over-limit file is rejected before any content is read.
-  const read = readBoundedFileStable(filePath, provenance.source, { maxBytes: MAX_STATE_BYTES, allowEmpty: true }, true);
+  const read = readBoundedFileStable(
+    filePath,
+    provenance.source,
+    { boundary: targetDir, maxBytes: MAX_STATE_BYTES, allowEmpty: true },
+    true,
+  );
   if (!read.ok && read.code === 'FILE_MISSING') {
     diagnostics.push({
       code: 'STATE_NOT_INITIALIZED',
       severity: 'info',
       message: `${provenance.source} does not exist — no missions have ever been recorded.`,
+      readCode: 'FILE_MISSING',
     });
     return { summary: { status: 'absent', provenance }, state: createInitialState() };
   }
@@ -82,6 +96,7 @@ async function readStateForBrief(
       code: 'STATE_UNREADABLE',
       severity: 'error',
       message: `${provenance.source} exists but could not be read: ${read.code}: ${read.detail}`,
+      readCode: read.code,
     });
     return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
   }
@@ -212,16 +227,40 @@ function collectStory(
     return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
   }
 
-  const read = readBoundedFileStable(activeMdAbs, relPath, { maxBytes: MAX_ACTIVE_CONTEXT_BYTES, allowEmpty: true }, true);
+  const read = readBoundedFileStable(
+    activeMdAbs,
+    relPath,
+    { boundary: targetDir, maxBytes: MAX_ACTIVE_CONTEXT_BYTES, allowEmpty: true },
+    true,
+  );
   if (!read.ok) {
-    diagnostics.push({
-      code: 'ACTIVE_MD_MISSING',
-      severity: 'warn',
-      message:
-        read.code === 'FILE_MISSING'
-          ? `${relPath} does not exist.`
-          : `${relPath} exists but could not be read: ${read.code}: ${read.detail}`,
-    });
+    // SEC-001B.1-R (M-1): three different situations, three different diagnostics.
+    // Only a really absent file is "missing" (a warning: a project may have no story
+    // yet). A file the safe-read policy refuses, or one that cannot be read, is an
+    // error: the story exists but was not shown, so the brief is INCOMPLETE. The
+    // detail never carries file content — only the label and the typed code.
+    if (read.code === 'FILE_MISSING') {
+      diagnostics.push({
+        code: 'ACTIVE_MD_MISSING',
+        severity: 'warn',
+        message: `${relPath} does not exist.`,
+        readCode: read.code,
+      });
+    } else if (isReadSecurityViolation(read.code)) {
+      diagnostics.push({
+        code: 'ACTIVE_MD_REJECTED',
+        severity: 'error',
+        message: `${relPath} exists but was refused by the safe-read policy and not read: ${read.code}: ${read.detail}`,
+        readCode: read.code,
+      });
+    } else {
+      diagnostics.push({
+        code: 'ACTIVE_MD_UNREADABLE',
+        severity: 'error',
+        message: `${relPath} exists but could not be read: ${read.code}: ${read.detail}`,
+        readCode: read.code,
+      });
+    }
     return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
   }
   const content = 'content' in read ? read.content : '';
@@ -258,6 +297,19 @@ export async function collect(targetDir: string): Promise<BriefModel> {
       severity: 'warn',
       message: `No MONOLITH instance found at "${config.monolithRoot}" — nothing to summarize.`,
     });
+  }
+
+  if (monolithInitialized) {
+    // Read-only (SEC-001B.2): names only. A warning, never an error — it does
+    // not make the brief INCOMPLETE — and nothing is deleted or repaired.
+    const artifacts = findWriteArtifacts(monolithRootAbs);
+    if (artifacts.length > 0) {
+      diagnostics.push({
+        code: 'WRITE_ARTIFACTS_PRESENT',
+        severity: 'warn',
+        message: describeWriteArtifacts(artifacts, config.monolithRoot),
+      });
+    }
   }
 
   const identity = {

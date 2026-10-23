@@ -79,6 +79,61 @@ is refused rather than treated as an upgrade. The one exception is
 `.monolith/state.json` (Coordinatorium runtime data, ADR-008), which is
 never written to if it already exists and is not treated as a conflict.
 
+Writes are safe against pre-existing links (SEC-001B.2, ADR-012): `init`
+refuses a symlink — including a dangling one — at a target or in any parent
+directory (even one that stays inside the project), a FIFO or other special
+file, and a file that appears after the preflight; files are created without
+overwriting and each becomes visible only once completely written. `init` as a
+whole is **not** atomic and does not coordinate two concurrent runs: files
+published before a failure stay.
+
+### Platform, permissions and shared directories
+
+The write guarantees (ADR-012) are stated for **POSIX** (verified on Linux).
+macOS/BSD are expected to behave the same but are not verified; **Windows is
+best-effort and unverified** — dangerous objects the checks can still see are
+refused, but no guarantee is made, and a `PLATFORM_BEST_EFFORT` warning is
+printed once. Network filesystems (NFS/SMB) are outside the guarantees.
+Nothing defends against another local process that swaps directories or
+symlinks while a command runs (SEC-001B.3, open): concurrent adversarial
+mutation is **not supported** (TM-C, ADR-013). A trusted local project is
+supported with limitations; a static adversarial project is only **partially**
+supported (TM-B, ADR-013 — proposed). Since SEC-001B.1-R (ADR-014) managed files
+are read through one strict contract: a symlink anywhere below an explicit
+boundary, a non-regular file and a file with other hard links are refused, so a
+hostile repository can no longer make a managed path expose another file through
+a link. TM-B is **not** re-stated as supported by that merge: it awaits a recorded
+re-evaluation. Known gaps: LOCK-RELEASE-001 and BRIEF-DOCDIR-001
+(`.monolith/memory/long-term/tech-debt.md`). Not covered: a write-enabled UI
+(ADR-010's blocker is preserved) and any TM-C adversary.
+
+A new `state.json` and the lock file are created `0600`; replacing an existing
+`state.json` keeps its mode. In a directory **shared between users or
+containers with different uids**, others can then no longer read `state.json`
+or inspect the lock: use one uid, or `chmod` the file deliberately.
+`mission start|finish|checkpoint` also refuse a symlinked `.monolith` (or any
+symlinked component) and a `state.json` that has other hard links; replace the
+link with a real directory/file first. A crash can leave `state.json.tmp.*`,
+`state.json.lock.creating.*` or `state.json.lock.recovery` files; MONOLITH
+never deletes them automatically (FS-CLEAN-001).
+
+### Programmatic API: explicit write scope
+
+`mutateState`, `startMission` and `finishMission` no longer accept a plain
+directory string; pass a scope (ADR-012):
+
+```ts
+// before
+await startMission(dir, { title, system });
+// after — the directory and ALL its ancestors are trusted by the caller
+await startMission(trustedDirectoryTarget(dir), { title, system });
+// after — acting on a project; nothing below projectRoot may be a symlink
+await startMission(projectTarget(projectRoot, join(projectRoot, '.monolith')), { title, system });
+```
+
+Calling without a scope throws `SafeWriteError` (`WRITE_SCOPE_REQUIRED`).
+Read functions (`readState`, `listMissions`, `getMission`) are unchanged.
+
 ### `monolith validate`
 
 Checks that the current directory contains a valid MONOLITH instance. Three
@@ -93,15 +148,15 @@ checks run in sequence:
 Exit codes: `0` = PASS, `1` = FAIL. Use `--quiet` for CI (prints nothing on PASS, errors only on FAIL).
 
 **`validate` never executes project code (SEC-002, ADR-011).** `project.definition.mjs`
-is checked **as a file only**: it exists, stays inside the project (a symlink
-that leaves it is a FAIL), is a regular file (a FIFO or device is a FAIL and is
+is checked **as a file only**: it exists, stays inside the project (any symlink in
+its path is a FAIL, ADR-014), is a regular file (a FIFO or device is a FAIL and is
 never opened for reading), is non-empty, and is at most 1 MiB. It is not
 imported, evaluated or parsed as JavaScript, so a PASS says **nothing** about
 its syntax, whether it exports `PROJECT_DEFINITION` (that check was removed),
 whether its content is safe, or whether it could be executed. A successful
 non-quiet run prints a note saying exactly this. `monolith.config.json` and
-`AGENTS.md` are read through the same bounded, containment-checked reader
-(1 MiB cap, no blocking on FIFOs). Residual risk: path checks and `open()` are
+`AGENTS.md` are read through the same bounded, strict reader
+(1 MiB cap, no blocking on FIFOs, no symlinks — ADR-014). Residual risk: path checks and `open()` are
 separate syscalls, so a local attacker racing a path swap is not stopped
 (SEC-001B, open).
 

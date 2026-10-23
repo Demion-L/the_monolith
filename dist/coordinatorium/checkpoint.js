@@ -63,7 +63,7 @@ function nextCheckpointId(checkpoints, missionId) {
  * lose an update — a direct consequence of reusing mutateState, not new
  * concurrency design.
  */
-export async function createCheckpoint(stateDir, missionId, input) {
+export async function createCheckpoint(target, missionId, input) {
     const summary = requireBoundedString(input.summary, 'summary', MAX_SUMMARY_LENGTH);
     const remainingStepsRaw = input.remainingSteps ?? [];
     if (!Array.isArray(remainingStepsRaw)) {
@@ -77,7 +77,7 @@ export async function createCheckpoint(stateDir, missionId, input) {
     if (input.context !== undefined && input.context !== null) {
         context = requireBoundedString(input.context, 'context', MAX_CONTEXT_LENGTH);
     }
-    const { result } = await mutateState(stateDir, (draft) => {
+    const { result } = await mutateState(target, (draft) => {
         const mission = draft.tactical.missions[missionId];
         if (!mission)
             throw new MissionNotFoundError(missionId);
@@ -105,8 +105,8 @@ export async function createCheckpoint(stateDir, missionId, input) {
  * "no missions yet" behavior). Remains available for a finished mission —
  * only *creation* is gated on mission status.
  */
-export async function listCheckpoints(stateDir, missionId) {
-    const state = await readState(stateDir);
+export async function listCheckpoints(target, missionId) {
+    const state = await readState(target);
     return Object.values(state.tactical.checkpoints)
         .filter((c) => c.missionId === missionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
@@ -115,8 +115,8 @@ export async function listCheckpoints(stateDir, missionId) {
  * Fetch a single checkpoint by id, regardless of its mission's current
  * status — reading history never stops working for a finished mission.
  */
-export async function getCheckpoint(stateDir, id) {
-    const state = await readState(stateDir);
+export async function getCheckpoint(target, id) {
+    const state = await readState(target);
     const checkpoint = state.tactical.checkpoints[id];
     if (!checkpoint)
         throw new CheckpointNotFoundError(id);

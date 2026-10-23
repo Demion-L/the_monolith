@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { existsSync, readdirSync } from 'fs';
-import { join, resolve, relative, sep } from 'path';
-import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, } from '../root/index.js';
+import { isAbsolute, join, resolve, relative, sep } from 'path';
+import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, findWriteArtifacts, describeWriteArtifacts, } from '../root/index.js';
 const DEFINITION_FILE_NAME = 'project.definition.mjs';
 const REQUIRED_DIRS = ['memory', 'context', 'protocols', 'skills', 'governance', 'learning', 'tests'];
 // Only flag variables that init is responsible for substituting.
@@ -73,10 +73,13 @@ function walkFiles(dir) {
     if (!existsSync(dir))
         return results;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (entry.isSymbolicLink())
-            continue; // never follow links out of the instance (SEC-001A)
         const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
+        // A link is never descended into; it is listed so the reader refuses it by name
+        // (FILE_SYMLINK) instead of the instance silently passing (SEC-001B.1-R).
+        if (entry.isSymbolicLink()) {
+            results.push(full);
+        }
+        else if (entry.isDirectory()) {
             results.push(...walkFiles(full));
         }
         else {
@@ -150,13 +153,23 @@ function formatRow(result) {
     return `${label}${status}${tail}`;
 }
 export async function runValidate(options) {
-    const targetDir = resolve(options.targetDir);
     const quiet = options.quiet ?? false;
+    // SEC-001B.1-R: the project root is the read boundary and is never inferred
+    // from the cwd; the CLI passes `process.cwd()` explicitly.
+    if (typeof options.targetDir !== 'string' || options.targetDir.length === 0 || !isAbsolute(options.targetDir)) {
+        console.log(formatRow({ label: 'Configuration', passed: false, error: 'targetDir must be an explicit absolute path (the cwd is never assumed)' }));
+        process.exit(1);
+        return;
+    }
+    const targetDir = resolve(options.targetDir);
     // Containment failures are reported by checkConfiguration; the instance
     // and template checks must not touch a root that failed resolution.
     let monolithRoot = null;
+    let rootAbs = null;
     try {
-        monolithRoot = resolveMonolithRoot(targetDir).monolithRoot;
+        const resolved = resolveMonolithRoot(targetDir);
+        monolithRoot = resolved.monolithRoot;
+        rootAbs = resolved.rootAbs;
     }
     catch (err) {
         if (!(err instanceof RootContainmentError))
@@ -190,6 +203,11 @@ export async function runValidate(options) {
         console.log(`Result: ${passed ? 'PASS' : 'FAIL'}`);
         if (configResult.passed && configResult.note)
             console.log(`Note: ${configResult.note}`);
+        // Read-only warning (SEC-001B.2): never affects the result or the exit code.
+        const artifacts = rootAbs === null || monolithRoot === null ? [] : findWriteArtifacts(rootAbs);
+        if (artifacts.length > 0 && monolithRoot !== null) {
+            console.log(`Warning: ${describeWriteArtifacts(artifacts, monolithRoot)}`);
+        }
         console.log('');
     }
     process.exit(passed ? 0 : 1);

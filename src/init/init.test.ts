@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { scaffoldInstance } from './scaffold.js';
+import { SafeWriteError } from '../root/index.js';
 import { runValidate } from '../validate/index.js';
 import type { ProjectConfig } from './types.js';
 
@@ -63,11 +64,35 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
       tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'keep me', system: 's', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } } },
     };
     writeFileSync(statePath, JSON.stringify(mutated), 'utf8');
+    writeFileSync(join(dir, 'AGENTS.md'), 'user-authored', 'utf8');
 
-    await scaffoldInstance(dir, CONFIG); // re-init
+    // SEC-001B.2 (DEC-B2-03): files are created without overwriting. A second
+    // scaffold over an already scaffolded tree is refused instead of silently
+    // rewriting every document (it used to), and nothing existing is touched.
+    await expect(scaffoldInstance(dir, CONFIG)).rejects.toBeInstanceOf(SafeWriteError); // re-init
 
     const onDisk = JSON.parse(readFileSync(statePath, 'utf8'));
     expect(onDisk).toEqual(mutated);
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe('user-authored');
+  });
+
+  it('keeps an existing state.json when it is the only thing present (missions recorded before init), and scaffolds the rest', async () => {
+    const dir = makeTempDir();
+    mkdirSync(join(dir, '.monolith'), { recursive: true });
+    const statePath = join(dir, '.monolith', 'state.json');
+    const recorded = {
+      schemaVersion: 2,
+      revision: 5,
+      strategic: { systems: {} },
+      tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'keep me', system: 's', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } }, checkpoints: {} },
+    };
+    writeFileSync(statePath, JSON.stringify(recorded), 'utf8');
+
+    await scaffoldInstance(dir, CONFIG);
+
+    expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual(recorded);
+    expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);
+    expect(existsSync(join(dir, '.monolith', 'adr', '.gitkeep'))).toBe(true);
   });
 
   it('does not break existing validate behavior on a freshly scaffolded instance', async () => {

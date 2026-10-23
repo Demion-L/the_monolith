@@ -163,22 +163,25 @@ describe('SEC-002: validate is static', () => {
     symlinkSync(join(outside, 'evil.mjs'), join(project, 'project.definition.mjs'));
     const r = await validateInProcess(project);
     expect(r.code).toBe(1);
-    expect(r.out).toContain('FILE_OUTSIDE_PROJECT');
+    expect(r.out).toContain('FILE_SYMLINK');
     expect(existsSync(marker)).toBe(false);
   });
 
-  // T7 — SEC-001A contract: symlinks that stay inside the project are allowed (and still checked as files).
-  it('T7: an internal symlink is accepted; an internal symlink to a missing target is not', async () => {
+  // T7 — SEC-001B.1-R: validate reads under the unified policy; a symlink is refused even when it
+  // stays inside the project (dangling or not). Symlinks elsewhere in the project are not inspected.
+  it('T7: an internal symlink is refused, dangling or not (FILE_SYMLINK)', async () => {
     const { project } = validProject();
     writeFileSync(join(project, 'real.mjs'), 'export const PROJECT_DEFINITION = {};\n');
     rmSync(join(project, 'project.definition.mjs'));
     symlinkSync(join(project, 'real.mjs'), join(project, 'project.definition.mjs'));
-    expect((await validateInProcess(project)).code).toBe(0);
+    const live = await validateInProcess(project);
+    expect(live.code).toBe(1);
+    expect(live.out).toContain('FILE_SYMLINK');
 
     rmSync(join(project, 'real.mjs'));
     const dangling = await validateInProcess(project);
     expect(dangling.code).toBe(1);
-    expect(dangling.out).toContain('FILE_UNRESOLVABLE');
+    expect(dangling.out).toContain('FILE_SYMLINK');
   });
 
   // T8 — a FIFO as the definition: open() on a FIFO without a writer blocks forever unless guarded.
@@ -301,7 +304,7 @@ describe('SEC-002: validate is static', () => {
     symlinkSync(join(agents.outside, 'agents.md'), join(agents.project, 'AGENTS.md'));
     const a = await validateInProcess(agents.project);
     expect(a.code).toBe(1);
-    expect(a.out).toContain('AGENTS.md (FILE_OUTSIDE_PROJECT)');
+    expect(a.out).toContain('AGENTS.md (FILE_SYMLINK)');
 
     const cfg = validProject();
     writeFileSync(join(cfg.outside, 'cfg.json'), JSON.stringify({ monolithRoot: '.monolith' }));
@@ -309,7 +312,7 @@ describe('SEC-002: validate is static', () => {
     symlinkSync(join(cfg.outside, 'cfg.json'), join(cfg.project, 'monolith.config.json'));
     const c = await validateInProcess(cfg.project);
     expect(c.code).toBe(1);
-    expect(c.out).toContain('FILE_OUTSIDE_PROJECT');
+    expect(c.out).toContain('FILE_SYMLINK');
 
     const dir = validProject();
     rmSync(join(dir.project, 'project.definition.mjs'));
@@ -346,7 +349,7 @@ describe('SEC-002: validate is static', () => {
     expect(r.out).toContain('.monolith/memory/huge.bin (FILE_TOO_LARGE)');
   });
 
-  it('T18: instance scan still finds placeholders in regular files and never reads symlinks out of the project', async () => {
+  it('T18: instance scan still finds placeholders in regular files; a symlink in the instance is reported (FILE_SYMLINK) and never read', async () => {
     const hit = validProject();
     writeFileSync(join(hit.project, '.monolith', 'memory', 'tpl.md'), '# {{PROJECT_NAME}}\n');
     const h = await validateInProcess(hit.project);
@@ -357,6 +360,9 @@ describe('SEC-002: validate is static', () => {
     const link = validProject();
     writeFileSync(join(link.outside, 'ext.md'), '# {{PROJECT_NAME}}\n');
     symlinkSync(join(link.outside, 'ext.md'), join(link.project, '.monolith', 'memory', 'ext.md'));
-    expect((await validateInProcess(link.project)).code).toBe(0);
+    const l = await validateInProcess(link.project);
+    expect(l.code).toBe(1);
+    expect(l.out).toContain('.monolith/memory/ext.md (FILE_SYMLINK)');
+    expect(l.out).not.toContain('unreplaced placeholders');
   });
 });

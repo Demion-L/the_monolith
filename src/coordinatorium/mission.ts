@@ -6,7 +6,7 @@
  * state-keeper.ts owns persistence and never knows what a mission is.
  */
 
-import { mutateState, readState } from './state-keeper.js';
+import { mutateState, readState, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
 import type { CoordinatoriumState, Mission, MissionResult } from './types.js';
 
@@ -40,11 +40,11 @@ function requireNonEmptyString(value: string, field: string): string {
  * same locked critical section as the write, so concurrent `start` calls
  * from independent processes can never collide on an ID.
  */
-export async function startMission(stateDir: string, input: StartMissionInput): Promise<Mission> {
+export async function startMission(target: StateWriteTarget, input: StartMissionInput): Promise<Mission> {
   const title = requireNonEmptyString(input.title, 'title');
   const system = requireNonEmptyString(input.system, 'system');
 
-  const { result } = await mutateState(stateDir, (draft: CoordinatoriumState) => {
+  const { result } = await mutateState(target, (draft: CoordinatoriumState) => {
     const id = nextMissionId(draft.tactical.missions);
     const now = new Date().toISOString();
     const mission: Mission = {
@@ -63,13 +63,13 @@ export async function startMission(stateDir: string, input: StartMissionInput): 
   return result;
 }
 
-export async function listMissions(stateDir: string): Promise<Mission[]> {
-  const state = await readState(stateDir);
+export async function listMissions(target: StateReadTarget): Promise<Mission[]> {
+  const state = await readState(target);
   return Object.values(state.tactical.missions).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }
 
-export async function getMission(stateDir: string, id: string): Promise<Mission> {
-  const state = await readState(stateDir);
+export async function getMission(target: StateReadTarget, id: string): Promise<Mission> {
+  const state = await readState(target);
   const mission = state.tactical.missions[id];
   if (!mission) throw new MissionNotFoundError(id);
   return mission;
@@ -86,7 +86,7 @@ export interface FinishMissionInput {
  * terminal, a mission's lifecycle is closed.
  */
 export async function finishMission(
-  stateDir: string,
+  target: StateWriteTarget,
   id: string,
   input: FinishMissionInput,
 ): Promise<Mission> {
@@ -96,7 +96,7 @@ export async function finishMission(
     );
   }
 
-  const { result } = await mutateState(stateDir, (draft: CoordinatoriumState) => {
+  const { result } = await mutateState(target, (draft: CoordinatoriumState) => {
     const mission = draft.tactical.missions[id];
     if (!mission) throw new MissionNotFoundError(id);
     if (mission.status !== 'in_progress') {

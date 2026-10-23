@@ -13,6 +13,7 @@
  * knowledge of what a "mission" is — that belongs to mission.ts.
  */
 import { type LockOptions } from './lock.js';
+import { type WriteWarning } from '../root/index.js';
 import { type CoordinatoriumState } from './types.js';
 export declare const STATE_FILE_NAME = "state.json";
 /**
@@ -22,6 +23,49 @@ export declare const STATE_FILE_NAME = "state.json";
  */
 export declare const MAX_STATE_BYTES: number;
 export declare function stateFilePath(stateDir: string): string;
+/**
+ * Where a write may land (SEC-001B.2, ADR-012). There is no default and no
+ * plain-string form: the caller states which trust model applies.
+ *
+ *  - `project`: `projectRoot` is the boundary. `stateDir` must lie inside it and
+ *    no component below the root may be a symlink (even one that stays inside).
+ *  - `trusted-directory`: the caller asserts that `stateDir` AND ALL ITS
+ *    ANCESTORS are trusted. Nothing about the ancestors is checked (so a
+ *    symlinked `.monolith` is invisible in this mode); only what lies below
+ *    `stateDir` is. A missing `stateDir` is created.
+ *
+ * `onWarning` receives non-fatal findings reported after a successful publish
+ * (durability downgrade, platform note, ...). It is called once per warning,
+ * after the state lock has been released; an exception it throws is ignored and
+ * never affects the result. Without it they are only returned by `mutateState`.
+ */
+export type StateWriteTarget = {
+    scope: 'project';
+    projectRoot: string;
+    stateDir: string;
+    onWarning?: (warning: WriteWarning) => void;
+} | {
+    scope: 'trusted-directory';
+    stateDir: string;
+    onWarning?: (warning: WriteWarning) => void;
+};
+/** Project-scoped write target (the CLI always uses this). */
+export declare function projectTarget(projectRoot: string, stateDir: string, onWarning?: (warning: WriteWarning) => void): StateWriteTarget;
+/** Trusted-directory write target: `stateDir` and its ancestors are asserted trusted by the caller. */
+export declare function trustedDirectoryTarget(stateDir: string, onWarning?: (warning: WriteWarning) => void): StateWriteTarget;
+/**
+ * Where a read may look (SEC-001B.1-R). Same shape and same scopes as a write
+ * target, minus `onWarning`; there is no default and no plain-string form. A
+ * `StateWriteTarget` is accepted as is.
+ */
+export type StateReadTarget = {
+    scope: 'project';
+    projectRoot: string;
+    stateDir: string;
+} | {
+    scope: 'trusted-directory';
+    stateDir: string;
+};
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
@@ -55,7 +99,7 @@ export declare function validateState(raw: unknown): CoordinatoriumState;
  * have the side effect of creating state.json. Corrupted JSON or an
  * unsupported schema throws rather than being silently replaced.
  */
-export declare function readState(stateDir: string): Promise<CoordinatoriumState>;
+export declare function readState(target: StateReadTarget): Promise<CoordinatoriumState>;
 /**
  * Read-modify-write under an exclusive cross-process lock. `mutator`
  * receives a deep-cloned draft of the current state and an `applyResult`
@@ -63,8 +107,9 @@ export declare function readState(stateDir: string): Promise<CoordinatoriumState
  * created) alongside the write. The revision is incremented exactly once
  * per successful call, after the mutator returns.
  */
-export declare function mutateState<T>(stateDir: string, mutator: (draft: CoordinatoriumState) => T, lockOptions?: LockOptions): Promise<{
+export declare function mutateState<T>(target: StateWriteTarget, mutator: (draft: CoordinatoriumState) => T, lockOptions?: LockOptions): Promise<{
     state: CoordinatoriumState;
     result: T;
+    warnings: WriteWarning[];
 }>;
 //# sourceMappingURL=state-keeper.d.ts.map

@@ -17,4 +17,6 @@ export { MONOLITH_VERSION } from './version.js';
 export { runInit } from './init/index.js';
 export { compileMarkdownArtifact, isStructuralHeadingNoise } from './scriptorium/index.js';
 export { buildGraph, normalizeLabel, selectCanonicalLabel } from './graph/index.js';
-export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, MissionNotFoundError, InvalidTransitionError, ValidationError, readState, mutateState, startMission, listMissions, getMission, finishMission, } from './coordinatorium/index.js';
+export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, MissionNotFoundError, InvalidTransitionError, ValidationError, readState, mutateState, projectTarget, trustedDirectoryTarget, startMission, listMissions, getMission, finishMission, } from './coordinatorium/index.js';
+// Safe writes — explicit write scope and publication states (SEC-001B.2, ADR-012)
+export { SafeWriteError } from './root/index.js';

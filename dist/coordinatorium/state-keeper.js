@@ -12,13 +12,11 @@
  * AI reports state; this module validates and persists it. It has no
  * knowledge of what a "mission" is — that belongs to mission.ts.
  */
-import { writeFile, rename, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
-import { randomBytes } from 'crypto';
 import { acquireLock } from './lock.js';
 import { StateCorruptedError, StateSchemaError, StateFileError } from './errors.js';
-import { SafeWriteError, openParent, projectBoundary, readBoundedFileStable, trustedDirectoryBoundary, } from '../root/index.js';
+import { SafeWriteError, openParent, projectBoundary, readBoundedFileStable, replaceFile, trustedDirectoryBoundary, } from '../root/index.js';
 import { STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1, createInitialState, } from './types.js';
 export const STATE_FILE_NAME = 'state.json';
 /**
@@ -252,8 +250,16 @@ export async function readState(stateDir) {
     }
     return validateState(parsed);
 }
-async function atomicWriteState(stateDir, state) {
-    const filePath = stateFilePath(stateDir);
+/**
+ * Persist `state` through the safe-write primitive (SEC-001B.2, ADR-012):
+ * temp file (`O_EXCL|O_NOFOLLOW`, `0600`) -> fsync -> `rename`, then fsync of
+ * the directory. A new `state.json` is `0600`; an existing one keeps its mode.
+ * A symlink, FIFO/special file or hardlinked file at the destination is
+ * refused (never replaced). Throws SafeWriteError with publication
+ * NOT_PUBLISHED or UNKNOWN; once published nothing throws — later findings are
+ * returned as warnings.
+ */
+function atomicWriteState(parent, filePath, state) {
     const serialized = `${JSON.stringify(state, null, 2)}\n`;
     // Refuse BEFORE creating the temp file: an oversized state.json would be
     // unreadable by readState, locking the project out of its own state. The
@@ -262,14 +268,24 @@ async function atomicWriteState(stateDir, state) {
     if (bytes > MAX_STATE_BYTES) {
         throw new StateFileError('FILE_TOO_LARGE', `refusing to write "${filePath}": ${bytes} bytes exceeds the ${MAX_STATE_BYTES}-byte limit (see STATE-001); state was not modified.`);
     }
-    const tmpPath = `${filePath}.tmp.${process.pid}.${randomBytes(4).toString('hex')}`;
-    await writeFile(tmpPath, serialized, 'utf8');
-    try {
-        await rename(tmpPath, filePath);
-    }
-    catch (err) {
-        await unlink(tmpPath).catch(() => undefined);
-        throw err;
+    return replaceFile(parent, STATE_FILE_NAME, serialized, {
+        mode: 0o600,
+        preserveMode: true,
+        durability: 'full',
+        maxBytes: MAX_STATE_BYTES,
+    }).warnings;
+}
+/** The write is already published; a throwing callback must not turn it into a failure. */
+function reportWarnings(warnings, onWarning) {
+    if (!onWarning)
+        return;
+    for (const w of warnings) {
+        try {
+            onWarning(w);
+        }
+        catch {
+            /* ignored on purpose */
+        }
     }
 }
 /**
@@ -287,14 +303,15 @@ export async function mutateState(target, mutator, lockOptions) {
     // Creating it here — component by component, refusing symlinks below the
     // boundary — is the "safe, explicit initialization path" for that case; it
     // never touches a state.json that already exists.
-    openParent(boundary, stateDir, { create: true });
+    const parent = openParent(boundary, stateDir, { create: true });
     const release = await acquireLock(lockFilePath(stateDir), lockOptions);
     try {
         const current = await readState(stateDir);
         const draft = structuredClone(current);
         const result = mutator(draft);
         draft.revision = current.revision + 1;
-        await atomicWriteState(stateDir, draft);
+        warnings.push(...atomicWriteState(parent, stateFilePath(stateDir), draft));
+        reportWarnings(warnings, onWarning);
         return { state: draft, result, warnings };
     }
     finally {

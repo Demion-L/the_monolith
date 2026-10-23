@@ -78,7 +78,7 @@ export declare function assertContainedFile(root: ResolvedMonolithRoot, relFromR
 export declare function checkContainedFile(root: ResolvedMonolithRoot, relFromRoot: string): RootContainmentError | null;
 /** Upper bound for any file this module inspects or reads (1 MiB). */
 export declare const MAX_PROJECT_FILE_BYTES: number;
-export type ProjectFileErrorCode = 'FILE_MISSING' | 'FILE_OUTSIDE_PROJECT' | 'FILE_UNRESOLVABLE' | 'FILE_NOT_REGULAR' | 'FILE_EMPTY' | 'FILE_TOO_LARGE' | 'FILE_UNREADABLE';
+export type ProjectFileErrorCode = 'FILE_MISSING' | 'FILE_OUTSIDE_PROJECT' | 'FILE_UNRESOLVABLE' | 'FILE_NOT_REGULAR' | 'FILE_EMPTY' | 'FILE_TOO_LARGE' | 'FILE_CHANGED' | 'FILE_UNREADABLE';
 export interface ProjectFileOptions {
     /** Size cap in bytes. Defaults to MAX_PROJECT_FILE_BYTES. */
     maxBytes?: number;
@@ -104,6 +104,21 @@ export type ProjectFileRead = {
     code: ProjectFileErrorCode;
     detail: string;
 };
+/**
+ * Steps 2-6 of `openProjectFile`, for a path whose containment the caller has
+ * already established (or does not need to: e.g. a lock file next to
+ * `state.json`, whose directory was resolved through `resolveMonolithRoot`).
+ * `label` is only used in diagnostics. A file replaced between `stat` and
+ * `open` is reported as FILE_CHANGED (transient, retryable), not as a fault.
+ */
+export declare function readBoundedFile(abs: string, label: string, opts: ProjectFileOptions, wantContent: boolean): ProjectFileRead | ProjectFileCheck;
+/**
+ * `readBoundedFile`, retried while the file is atomically replaced under us
+ * (FILE_CHANGED). For readers that race a rename-based writer or a lock
+ * release/re-acquire: those are normal, not faults. After the retries it
+ * still reports FILE_CHANGED rather than guessing.
+ */
+export declare function readBoundedFileStable(abs: string, label: string, opts: ProjectFileOptions, wantContent: boolean): ProjectFileRead | ProjectFileCheck;
 /**
  * Static check of a file below the PROJECT root (not `monolithRoot`): exists,
  * stays inside the project (symlinks that stay inside are allowed), is a

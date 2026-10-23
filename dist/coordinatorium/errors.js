@@ -26,6 +26,34 @@ export class StateSchemaError extends CoordinatoriumError {
         this.name = 'StateSchemaError';
     }
 }
+/**
+ * Thrown when `state.json` cannot be read or written within the bounded-file
+ * contract (SEC-001B.1): a FIFO or other special file, a file over its size
+ * limit (`FILE_TOO_LARGE`, also raised before a write would produce an
+ * oversized file), or an unreadable file. `fileCode` is the machine-readable
+ * reason. Nothing is modified, truncated or compacted when this is thrown.
+ */
+export class StateFileError extends CoordinatoriumError {
+    fileCode;
+    constructor(fileCode, detail) {
+        super('STATE_FILE_UNSAFE', `${fileCode}: ${detail}`);
+        this.name = 'StateFileError';
+        this.fileCode = fileCode;
+    }
+}
+/**
+ * Thrown when the lock file exists but cannot be safely inspected (a FIFO or
+ * other special file, over the lock size limit, or unreadable). The lock is
+ * NOT acquired, and the file is never deleted: a human has to look at it.
+ */
+export class LockUnsafeError extends CoordinatoriumError {
+    fileCode;
+    constructor(lockPath, fileCode, detail) {
+        super('LOCK_UNSAFE', `Lock at "${lockPath}" cannot be safely read (${fileCode}): ${detail}`);
+        this.name = 'LockUnsafeError';
+        this.fileCode = fileCode;
+    }
+}
 export class LockTimeoutError extends CoordinatoriumError {
     constructor(message) {
         super('LOCK_TIMEOUT', message);

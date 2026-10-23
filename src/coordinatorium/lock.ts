@@ -54,13 +54,16 @@ import {
   openSync,
   writeSync,
   closeSync,
-  readFileSync,
   unlinkSync,
   linkSync,
   fsyncSync,
 } from 'fs';
 import { randomBytes } from 'crypto';
-import { LockTimeoutError, LockCreationError, type LockCreationPhase } from './errors.js';
+import { LockTimeoutError, LockUnsafeError, LockCreationError, type LockCreationPhase } from './errors.js';
+import { readBoundedFileStable, type ProjectFileErrorCode } from '../root/index.js';
+
+/** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
+export const MAX_LOCK_BYTES = 256;
 
 export interface LockOptions {
   /** How long a challenger will wait to acquire the lock before giving up. */
@@ -166,16 +169,41 @@ function parseLockRecord(raw: string): LockRecord | null {
   return { pid, nonce };
 }
 
-/** Read and parse a lock file. Returns null for "does not exist or
- * unreadable/malformed" alike — both are handled identically by callers
- * (uncertain, in the ENOENT case trivially resolved by the next create
- * attempt). */
-function readLockRecord(path: string): LockRecord | null {
-  try {
-    return parseLockRecord(readFileSync(path, 'utf8'));
-  } catch {
-    return null;
+/**
+ * What an inspection of the lock path found (SEC-001B.1).
+ *  - `absent`: no lock, or it vanished / was replaced while being read
+ *    (transient — the exclusive create attempt that follows is the arbiter).
+ *  - `valid`: a well-formed `pid:nonce` record.
+ *  - `unsafe`: something is there that is not a valid record. NEVER read as
+ *    "free" and never deleted. `structural` means it can never be a lock
+ *    (FIFO/special file, over MAX_LOCK_BYTES, unreadable); `content` means a
+ *    regular, in-bounds file whose body is empty or malformed — which an
+ *    older, non-staging binary could also produce momentarily, so callers
+ *    keep waiting on it exactly as before.
+ */
+type LockInspection =
+  | { kind: 'absent' }
+  | { kind: 'valid'; record: LockRecord }
+  | { kind: 'unsafe'; class: 'structural' | 'content'; fileCode: ProjectFileErrorCode; detail: string };
+
+function inspectLock(path: string): LockInspection {
+  const r = readBoundedFileStable(path, 'lock file', { maxBytes: MAX_LOCK_BYTES, allowEmpty: true }, true);
+  if (r.ok) {
+    const record = 'content' in r ? parseLockRecord(r.content) : null;
+    if (record) return { kind: 'valid', record };
+    return { kind: 'unsafe', class: 'content', fileCode: 'FILE_UNREADABLE', detail: 'lock content is empty or malformed' };
   }
+  // Missing, or still being released/re-acquired after the retries: not
+  // observed. The exclusive create attempt that follows is the arbiter.
+  if (r.code === 'FILE_MISSING' || r.code === 'FILE_CHANGED') return { kind: 'absent' };
+  return { kind: 'unsafe', class: 'structural', fileCode: r.code, detail: r.detail };
+}
+
+/** Valid record or null. `unsafe` is deliberately collapsed to null here for
+ * the two callers that must merely refuse to act on it (invariant 2). */
+function readLockRecord(path: string): LockRecord | null {
+  const i = inspectLock(path);
+  return i.kind === 'valid' ? i.record : null;
 }
 
 /** Write `buffer` to `fd` in full, looping on short writes (a single
@@ -428,7 +456,14 @@ export async function acquireLock(
     // normal observe/wait/recover logic below, exactly as a plain EEXIST
     // did before.
 
-    const observed = readLockRecord(lockPath);
+    const inspection = inspectLock(lockPath);
+    if (inspection.kind === 'unsafe' && inspection.class === 'structural') {
+      // A FIFO / oversize / unreadable lock can never become a valid one:
+      // refuse with a diagnostic instead of waiting out the timeout. The
+      // file is left exactly as found and the lock is not acquired.
+      throw new LockUnsafeError(lockPath, inspection.fileCode, inspection.detail);
+    }
+    const observed = inspection.kind === 'valid' ? inspection.record : null;
     if (observed !== null) {
       const verdict = checkLiveness(observed.pid);
       if (verdict === 'dead') {
@@ -448,8 +483,9 @@ export async function acquireLock(
     // the same waiting/backoff discipline as a confirmed-busy lock.
 
     if (Date.now() >= deadline) {
+      const why = inspection.kind === 'unsafe' ? ` (${inspection.detail}; the file was left untouched)` : '';
       throw new LockTimeoutError(
-        `Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}"`,
+        `Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}"${why}`,
       );
     }
 

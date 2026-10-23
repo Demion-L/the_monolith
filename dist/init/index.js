@@ -2,6 +2,7 @@
 import { resolve } from 'path';
 import { promptProjectConfig } from './prompts.js';
 import { scaffoldInstance, planScaffoldConflicts } from './scaffold.js';
+import { reportWriteWarning } from '../root/index.js';
 const CONFLICT_LIST_LIMIT = 20;
 /**
  * Thrown when `monolith init` would overwrite existing tracked files.
@@ -61,6 +62,8 @@ export async function runInit(options = { targetDir: process.cwd() }) {
     console.log('  Scaffolding instance...');
     console.log('');
     const result = await scaffoldInstance(targetDir, config);
+    for (const w of result.warnings)
+        reportWriteWarning(w);
     console.log('');
     console.log('  ✅ MONOLITH instance initialized!');
     console.log('');

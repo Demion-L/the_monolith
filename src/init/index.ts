@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import { promptProjectConfig } from './prompts.js';
 import { scaffoldInstance, planScaffoldConflicts } from './scaffold.js';
 import type { InitOptions } from './types.js';
+import { reportWriteWarning } from '../root/index.js';
 
 const CONFLICT_LIST_LIMIT = 20;
 
@@ -72,6 +73,7 @@ export async function runInit(options: InitOptions = { targetDir: process.cwd() 
   console.log('');
 
   const result = await scaffoldInstance(targetDir, config);
+  for (const w of result.warnings) reportWriteWarning(w);
 
   console.log('');
   console.log('  ✅ MONOLITH instance initialized!');

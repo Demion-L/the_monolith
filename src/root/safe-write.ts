@@ -1177,3 +1177,36 @@ export function createFile(parent: ParentRef, name: string, data: string | Buffe
   const dirReached = p.fsyncDir ? syncDirectory(parent, ctx, warnings) : 'file';
   return { publication: 'PUBLISHED', durability: reached(p.requested, dirReached), warnings };
 }
+
+// ---------------------------------------------------------------------------
+// Reporting
+// ---------------------------------------------------------------------------
+
+let platformNoticePrinted = false;
+
+/**
+ * Print a post-publication finding as one `warning` line (stderr by default).
+ * The platform note is printed once per process, however many files are written.
+ * Never throws: the write it reports on is already published.
+ */
+export function reportWriteWarning(
+  warning: WriteWarning,
+  print: (line: string) => void = (line) => {
+    process.stderr.write(`${line}\n`);
+  },
+): void {
+  try {
+    if (warning.code === 'PLATFORM_BEST_EFFORT') {
+      if (platformNoticePrinted) return;
+      platformNoticePrinted = true;
+    }
+    print(`warning [${warning.code}]: ${warning.message}${warning.path ? ` (${warning.path})` : ''}`);
+  } catch {
+    /* ignored on purpose */
+  }
+}
+
+/** Test-only: forget that the platform note was printed. */
+export function resetWriteWarningState(): void {
+  platformNoticePrinted = false;
+}

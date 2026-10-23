@@ -419,6 +419,8 @@ export {
   createFile,
   replaceFile,
   detectPlatformCaps,
+  reportWriteWarning,
+  resetWriteWarningState,
 } from './safe-write.js';
 export type {
   PublicationState,

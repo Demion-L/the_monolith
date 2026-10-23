@@ -7,7 +7,8 @@
  * in mission.ts.
  */
 
-import { resolveMonolithRoot, assertContainedFile } from '../root/index.js';
+import { resolveMonolithRoot, assertContainedFile, reportWriteWarning, SafeWriteError } from '../root/index.js';
+import { LockCreationError } from './errors.js';
 import { STATE_FILE_NAME, projectTarget, type StateWriteTarget } from './state-keeper.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
@@ -31,7 +32,28 @@ function writeTargetFor(targetDir: string): StateWriteTarget {
   const root = resolveMonolithRoot(targetDir);
   assertContainedFile(root, STATE_FILE_NAME);
   assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
-  return projectTarget(root.projectRoot, root.rootAbs);
+  return projectTarget(root.projectRoot, root.rootAbs, (w) => reportWriteWarning(w));
+}
+
+/**
+ * A write whose outcome is UNKNOWN (SEC-001B.2) was NOT retried and nothing was
+ * cleaned up: tell the user to look before repeating a command that is not
+ * idempotent (a second `start` would register a second mission).
+ */
+export async function withWriteGuidance<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    const unknown =
+      (err instanceof SafeWriteError || err instanceof LockCreationError) && err.publication === 'UNKNOWN';
+    if (!unknown) throw err;
+    throw new Error(
+      `${(err as Error).message}\n` +
+        'The outcome of this write is UNKNOWN. It was not retried. Check the current state with ' +
+        '`monolith mission list` (and `monolith mission show <id>`) before running this command again.',
+      { cause: err },
+    );
+  }
 }
 
 function parseFlag(args: string[], name: string): string | undefined {
@@ -68,7 +90,7 @@ export async function runMissionStart(args: string[], targetDir = process.cwd())
   if (!title || !system) {
     throw new Error('Usage: monolith mission start --title "..." --system "..."');
   }
-  const mission = await startMission(writeTargetFor(targetDir), { title, system });
+  const mission = await withWriteGuidance(() => startMission(writeTargetFor(targetDir), { title, system }));
   console.log(`Started mission ${mission.id} (${mission.status})`);
   console.log(formatMission(mission));
 }
@@ -129,11 +151,13 @@ export async function runMissionCheckpoint(args: string[], targetDir = process.c
   }
   const remainingSteps = parseRepeatedFlag(args, '--remaining');
   const context = parseFlag(args, '--context');
-  const checkpoint = await createCheckpoint(writeTargetFor(targetDir), missionId, {
-    summary,
-    remainingSteps,
-    context: context ?? null,
-  });
+  const checkpoint = await withWriteGuidance(() =>
+    createCheckpoint(writeTargetFor(targetDir), missionId, {
+      summary,
+      remainingSteps,
+      context: context ?? null,
+    }),
+  );
   console.log(`Created checkpoint ${checkpoint.id} for mission ${checkpoint.missionId}`);
   console.log(formatCheckpoint(checkpoint));
 }
@@ -162,10 +186,12 @@ export async function runMissionFinish(args: string[], targetDir = process.cwd()
   if (!id || !result) {
     throw new Error('Usage: monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]');
   }
-  const mission = await finishMission(writeTargetFor(targetDir), id, {
-    result: result as MissionResult,
-    summary: summary ?? undefined,
-  });
+  const mission = await withWriteGuidance(() =>
+    finishMission(writeTargetFor(targetDir), id, {
+      result: result as MissionResult,
+      summary: summary ?? undefined,
+    }),
+  );
   console.log(`Mission ${mission.id} finished as ${mission.status}`);
   console.log(formatMission(mission));
 }

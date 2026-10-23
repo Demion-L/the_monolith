@@ -244,5 +244,13 @@ export declare function replaceFile(parent: ParentRef, name: string, data: strin
  * warnings (`STAGING_RESIDUE`, directory fsync), never errors.
  */
 export declare function createFile(parent: ParentRef, name: string, data: string | Buffer, opts: WriteOptions): WriteOutcome;
+/**
+ * Print a post-publication finding as one `warning` line (stderr by default).
+ * The platform note is printed once per process, however many files are written.
+ * Never throws: the write it reports on is already published.
+ */
+export declare function reportWriteWarning(warning: WriteWarning, print?: (line: string) => void): void;
+/** Test-only: forget that the platform note was printed. */
+export declare function resetWriteWarningState(): void;
 export {};
 //# sourceMappingURL=safe-write.d.ts.map

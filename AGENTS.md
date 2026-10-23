@@ -133,6 +133,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + bounded project-file helpers `checkProjectFile()`/`readProjectFile()` (ADR-011) |
+| `src/root/safe-write.ts`          | The single safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile`, publication states, identity-checked cleanup |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
@@ -259,8 +260,31 @@ Over-limit is fail-closed — never truncated, compacted or auto-cleaned
 (in-project allowed, escaping/dangling/looping refused). Bounded reads do not
 close check-then-use races.
 
-Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) but
-check-then-use races remain (SEC-001B, OPEN — see
+**File write contract (SEC-001B.2, ADR-012).** Every write of `state.json`, the
+lock files and the `init` scaffold goes through `src/root/safe-write.ts`:
+
+| Property | Contract |
+|---|---|
+| Scope | Explicit, no default: `project` (CLI, `init`; the project root is the boundary) or `trusted-directory` (the caller asserts the directory **and its ancestors** are trusted; they are not inspected). `mutateState` / `startMission` / `finishMission` take a `StateWriteTarget`; a plain string throws `WRITE_SCOPE_REQUIRED` |
+| Symlinks (W-SYM) | Refused for writes anywhere below the boundary — in the target or in a parent, dangling or not, **including links that stay inside the project**. Reads keep the ADR-009 policy |
+| Destination | Replaced only if absent or a regular file with one link; FIFO/special file, directory, symlink and `nlink > 1` (`WRITE_TARGET_HARDLINKED`) are refused |
+| Temp file | `O_CREAT\|O_EXCL\|O_NOFOLLOW`; `rename()` over the state file, `link()` for create-only files |
+| Modes | New `state.json` / lock: `0600`; an existing `state.json` keeps its mode; scaffold documents follow the umask |
+| Durability | create → write → `fchmod` → `fstat` verify → `fsync(file)` → `close` → publish → `fsync(directory)`; state uses all of it, scaffold fsyncs files only, lock fsync stays opt-in |
+| Publication | `NOT_PUBLISHED` / `PUBLISHED` / `UNKNOWN`. `UNKNOWN` is never retried, never downgraded and nothing is deleted; the CLI tells the user to check state first. Failures after publication are warnings |
+| Cleanup | Only a temp file created by the current call, and only while its `dev/ino` still matches. No cleanup by age, PID or name; leftovers are not deleted (FS-CLEAN-001) |
+| Lock | Ownership, backoff, liveness, stale recovery and record format unchanged; only staging creation uses the primitive |
+| Platform | Guarantees: POSIX. Windows best-effort and **unverified** (warning `PLATFORM_BEST_EFFORT`); macOS/BSD unverified; NFS/SMB outside |
+
+This does **not** defend against a local actor changing directories or
+symlinks concurrently with a command (SEC-001B.3): the parent-directory
+re-check is a tripwire, not protection, and removing the owned temp file is not
+conditional on the identity check. `init` is neither atomic nor coordinated
+between processes.
+
+Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) and
+file reads/writes are bounded and checked (SEC-001B.1 / .2), but
+check-then-use races remain (SEC-001B.3, OPEN — see
 `.monolith/memory/long-term/tech-debt.md`);
 `monolith context <topic>` and JSON output do not exist.
 
@@ -371,7 +395,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 and SEC-001B.3 OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED on `fix/sec-001b2-safe-writes`, NOT merged; SEC-001B.3 OPEN
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

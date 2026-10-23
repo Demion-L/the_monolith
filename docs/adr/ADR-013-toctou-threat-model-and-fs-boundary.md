@@ -31,17 +31,21 @@ explicit-scope, exclusive and atomic per file. Each of them checks a path and
 then uses the path in a separate syscall. SEC-001B.3 asked whether that gap can
 be closed with what Node.js offers, and what closing it would cost.
 
-The SEC-001B.3 feasibility research concluded (one research stand, figures in
-"Feasibility evidence"; the PoC sources are not part of this repository and the
-experiment was not repeated for this decision):
+The SEC-001B.3 feasibility research **reported** the following (one research
+stand; figures in "Feasibility evidence"). The PoC harness is not part of this
+repository, the experiment was not repeated for this decision, and none of the
+statements below has been independently confirmed:
 
-- The dynamic TOCTOU was **reproduced**: a directory or symlink swapped
-  concurrently with a command redirects the operation that follows the check.
-- Pure Node.js path-based operations cannot provide TM-C. `fs` has no
-  descriptor-relative (`openat`-style) API, so every call re-resolves the whole
-  path.
-- Stepwise descriptor-relative resolution through `/proc/self/fd` and Linux
-  `openat2` both **held up in the PoC**.
+- The research **observed** the dynamic TOCTOU on its stand: a directory or
+  symlink swapped concurrently with an operation redirected the operation that
+  followed the check.
+- Pure Node.js path-based operations cannot provide TM-C. This follows from the
+  API, not from the PoC: `fs` has no descriptor-relative (`openat`-style) API,
+  so every call re-resolves the whole path.
+- For stepwise descriptor-relative resolution through `/proc/self/fd` and Linux
+  `openat2` the research **reported no boundary escape** in its runs. That is an
+  observation under conditions that are not fully reported, not evidence of
+  safety.
 - A native filesystem layer was **not built** and is deferred (below).
 
 The evidence and its limits are recorded in "Feasibility evidence".
@@ -317,8 +321,10 @@ re-resolved path string. Nothing in this section is implemented or scheduled.
 
 **Native filesystem layer: DEFERRED.**
 
-The decision is a product decision, not a technical impossibility: the PoC shows
-the mechanism works. The cost (native build and distribution, platform matrix,
+The decision is a product decision, not a claim of technical impossibility: the
+reported PoC observations (one stand, not reproduced here) and the kernel's
+resolution semantics make a descriptor-relative design plausible, not proven for
+MONOLITH. The cost (native build and distribution, platform matrix,
 a new class of failure) is not justified while MONOLITH is a TM-A/TM-B tool.
 
 Revisit when **any** of these holds:
@@ -331,10 +337,29 @@ Revisit when **any** of these holds:
 The decision is **not** tied to any particular consumer, including the launch of
 SphynX or of the Mission Control UI: the existence of such a consumer does not
 trigger a review, a condition arising there does. A proposal for a
-**write-enabled** Mission Control UI is the concrete case in which condition 3 has
-to be answered (see "Compatibility with ADR-010"). A story or ADR that introduces
-a consumer which could satisfy any of the three conditions cites this section and
-either opens the review or records why the condition does not hold.
+**write-enabled** Mission Control UI must have **all applicable revisit
+conditions** assessed (see "Compatibility with ADR-010"); this ADR does not
+presume that any particular condition, in particular TM-C, is or is not required
+for it. A story or ADR that introduces a consumer which could satisfy any of the
+three conditions cites this section and either opens the review or records why
+the condition does not hold.
+
+**Who decides.** The decision to revisit the native filesystem layer belongs to
+**MONOLITH Core Architecture / Mission Control**. A consumer may *initiate* a
+review through a story or an ADR. A consumer may **not**, on its own authority,
+declare TM-C supported, lift the ADR-010 restriction, or change the declared
+filesystem security policy; each of those needs a Core Architecture decision
+(a new or amended ADR). This clarifies the section above and creates no new
+decision.
+
+**Every new consumer of the filesystem API** (a CLI command, a UI, an
+integration) states, in its own story or ADR: its trust boundary; its threat
+model (TM-A/B/C); its read and write capabilities; whether the filesystem can be
+modified concurrently while it runs; and the residual risks that apply. This is
+a requirement on the new consumer's own record, not a matrix of existing
+commands. A **write-enabled UI** additionally needs an architectural decision
+about its specific API; this ADR does not say which threat model that decision
+must select.
 
 #### Compatibility with ADR-010
 
@@ -359,9 +384,16 @@ This ADR therefore records:
   and how it is met. If that decision requires TM-C, the native layer deferred in
   this section has to be reopened first; if it does not, the decision must say
   why the residual risk is acceptable. This ADR makes neither decision.
-- The residual risk ADR-010 records for the read-only UI is the TM-C /
-  same-UID case of section 2. This ADR does not accept it on the UI's behalf; the
+- The residual risk ADR-010 records for the read-only UI (a local process with
+  the owner's rights swapping a path for a symlink) is classified here as the
+  TM-C / same-UID case of section 2. That classification is **ADR-013's
+  architectural interpretation**, not a statement made by ADR-010, which does not
+  mention TM-C. This ADR does not accept the risk on the UI's behalf; the
   acceptance stays a UI-001 decision.
+- A write-enabled UI is assessed against **all** revisit conditions of section 5
+  (untrusted concurrent processes, a TM-C promise, a directory-swap-resistance
+  requirement), not by assuming that TM-C is, or is not, mandatory for it. The
+  blocker stays in force meanwhile.
 - ADR-010 is **not modified** by this ADR.
 
 ### 6. ADR numbering, status transitions and integration dependencies
@@ -416,8 +448,9 @@ no production-ready native implementation exists.
 
 - **Provenance.** The figures below are taken from the SEC-001B.3 research
   report. **They were not reproduced in this branch:** no experiment was run
-  while preparing this revision, and the PoC sources are not in the repository.
-  They are recorded as reported, not as independently verified here.
+  while preparing this revision, nor in any review of it, and the PoC harness is
+  not in the repository. They are recorded as reported, not as independently
+  verified here, and nothing in this ADR relies on them as proof of safety.
 - **Stand.** One research stand: Linux 7.0, Node.js 24.19.0, `tmpfs`.
 - **Method (directory-swap PoC).** A reader or writer operated on a path under a
   boundary directory while a concurrent actor replaced a directory component with
@@ -447,13 +480,16 @@ How to read the table:
   probability and not a rate to expect in practice; no percentage is derived
   from them, and rows 1 and 2, whose relation is not reported, are not comparable
   with each other or with row 5.
-- **What the non-zero rows show:** the dynamic TOCTOU against path-based
-  operations is reproducible on this stand (rows 1, 2, 5). That is the basis for
-  "pure Node.js path-based calls cannot provide TM-C".
+- **What the non-zero rows show:** the research **reported** boundary escapes
+  for path-based operations on this stand (rows 1, 2, 5); row 1's mechanism is
+  not reported. They illustrate the TOCTOU the API structure predicts; the basis
+  for "pure Node.js path-based calls cannot provide TM-C" is that structure (no
+  descriptor-relative API in `fs`), not these counts.
 - **What the zero rows do not show.** "0 of N" is consistent with the design
   and does not prove it safe. A race that did not occur in N runs is not a proof
   of absence, and a zero row is informative only if its swapper load matched the
-  non-zero rows, which is not reported. The supporting argument for `openat2` and
+  non-zero rows, which is not reported; unreported load conditions must not be
+  assumed equal across rows. The supporting argument for `openat2` and
   descriptor-relative resolution is the kernel's resolution semantics, not the
   absence of failures.
 - **Coverage.** Linux, Node.js `fs` versus the researched alternatives, `tmpfs`.

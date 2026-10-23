@@ -33,7 +33,8 @@ export type BriefDiagnosticCode =
   | 'DOC_DIR_UNREADABLE'
   | 'DOC_FILE_UNREADABLE'
   | 'DOC_DIR_OUTSIDE_PROJECT'
-  | 'PATH_OUTSIDE_PROJECT';
+  | 'PATH_OUTSIDE_PROJECT'
+  | 'WRITE_ARTIFACTS_PRESENT';
 
 export interface BriefDiagnostic {
   code: BriefDiagnosticCode;

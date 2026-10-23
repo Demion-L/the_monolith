@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import { existsSync, readdirSync } from 'fs';
 import { join, resolve, relative, sep } from 'path';
-import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, } from '../root/index.js';
+import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, findWriteArtifacts, describeWriteArtifacts, } from '../root/index.js';
 const DEFINITION_FILE_NAME = 'project.definition.mjs';
 const REQUIRED_DIRS = ['memory', 'context', 'protocols', 'skills', 'governance', 'learning', 'tests'];
 // Only flag variables that init is responsible for substituting.
@@ -155,8 +155,11 @@ export async function runValidate(options) {
     // Containment failures are reported by checkConfiguration; the instance
     // and template checks must not touch a root that failed resolution.
     let monolithRoot = null;
+    let rootAbs = null;
     try {
-        monolithRoot = resolveMonolithRoot(targetDir).monolithRoot;
+        const resolved = resolveMonolithRoot(targetDir);
+        monolithRoot = resolved.monolithRoot;
+        rootAbs = resolved.rootAbs;
     }
     catch (err) {
         if (!(err instanceof RootContainmentError))
@@ -190,6 +193,11 @@ export async function runValidate(options) {
         console.log(`Result: ${passed ? 'PASS' : 'FAIL'}`);
         if (configResult.passed && configResult.note)
             console.log(`Note: ${configResult.note}`);
+        // Read-only warning (SEC-001B.2): never affects the result or the exit code.
+        const artifacts = rootAbs === null || monolithRoot === null ? [] : findWriteArtifacts(rootAbs);
+        if (artifacts.length > 0 && monolithRoot !== null) {
+            console.log(`Warning: ${describeWriteArtifacts(artifacts, monolithRoot)}`);
+        }
         console.log('');
     }
     process.exit(passed ? 0 : 1);

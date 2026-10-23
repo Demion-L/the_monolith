@@ -422,6 +422,8 @@ export {
   reportWriteWarning,
   resetWriteWarningState,
 } from './safe-write.js';
+export { findWriteArtifacts, describeWriteArtifacts } from './write-artifacts.js';
+export type { WriteArtifact, WriteArtifactKind } from './write-artifacts.js';
 export type {
   PublicationState,
   WriteErrorCode,

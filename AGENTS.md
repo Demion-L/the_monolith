@@ -133,6 +133,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + bounded project-file helpers `checkProjectFile()`/`readProjectFile()` (ADR-011) |
+| `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
 | `src/root/safe-write.ts`          | The single safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile`, publication states, identity-checked cleanup |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
@@ -141,7 +142,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (374 tests passing, typecheck clean):
+What MONOLITH does today (630 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -259,6 +260,11 @@ Over-limit is fail-closed — never truncated, compacted or auto-cleaned
 (growth policy: STATE-001, not started). Symlinks keep their existing policy
 (in-project allowed, escaping/dangling/looping refused). Bounded reads do not
 close check-then-use races.
+
+`brief` adds a `WRITE_ARTIFACTS_PRESENT` **warning** when leftover write files
+are present in the instance directory (and `validate` prints a `Warning:` line);
+neither changes `Completeness` or an exit code, and nothing is deleted — a
+matching name does not prove a file is an orphan (FS-CLEAN-001).
 
 **File write contract (SEC-001B.2, ADR-012).** Every write of `state.json`, the
 lock files and the `init` scaffold goes through `src/root/safe-write.ts`:

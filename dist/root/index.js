@@ -320,3 +320,4 @@ export function readProjectFile(projectRoot, relPath, opts = {}) {
 // Safe writes (SEC-001B.2, ADR-012)
 // ---------------------------------------------------------------------------
 export { SafeWriteError, WriteBoundary, ParentRef, projectBoundary, trustedDirectoryBoundary, openParent, probeTarget, createExclusive, disposeOwned, publishLink, createFile, replaceFile, detectPlatformCaps, reportWriteWarning, resetWriteWarningState, } from './safe-write.js';
+export { findWriteArtifacts, describeWriteArtifacts } from './write-artifacts.js';

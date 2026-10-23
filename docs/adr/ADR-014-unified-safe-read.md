@@ -8,6 +8,7 @@ related_adrs:
   - ADR-009
   - ADR-011
   - ADR-012
+  - ADR-013
 ---
 
 # ADR-014 — Unified Safe Read Contract (SEC-001B.1-R)
@@ -91,10 +92,32 @@ boundary.
   a swap of the *file* only. No native addon, `/proc/self/fd` or directory handle
   is used; SEC-001B.3 may replace the path walk without changing these codes.
 
+## Acceptance basis (recorded at integration, 2026-10-23)
+
+This ADR carries `status: accepted`. ADR-013 requires that an ADR not rest on its
+author's own say-so, so the basis is stated here (finding F-04):
+
+1. **It records implemented, merged code.** The contract is in `src/root/` and its
+   consumers, covered by `src/root/safe-read.test.ts` and the related suites;
+   at integration the full suite passes and typecheck and build are clean.
+2. **Independent review.** SEC-001B.1-R passed an independent review with verdict
+   **APPROVED WITH NOTES**. Notes M-1, L-2 and B-1 were fixed in the corrective
+   pass (`b6d0eed`, addendum below); L-1 was characterized and registered as
+   LOCK-RELEASE-001 instead of being fixed.
+3. **Integration authorization** by the project owner (SEC-001B integration task).
+
+Limits of this basis: the review report is not in this repository, and it is not
+recorded whether the review covered this document's text or the code only; no
+separate re-review of the corrective pass is recorded. ADR-014 is an
+*implementation record*: it does not decide the threat model (that is ADR-013,
+`proposed`), does **not** re-state TM-B as supported (still partially supported,
+ADR-013 §1/§6) and does **not** touch TM-C (unsupported). Open residuals:
+LOCK-RELEASE-001, BRIEF-DOCDIR-001.
+
 ## Addendum 2026-10-23 — corrective pass (independent review notes)
 
 - **Numbering.** This record is ADR-014. ADR-013 is the Filesystem Threat Model and Dynamic TOCTOU
-  decision (SEC-001B.3) and is not changed here.
+  decision (SEC-001B.3, `proposed`); the two reference each other in `related_adrs`.
 - **M-1.** A refusal by this policy is not "missing". `brief` reports `active.md` as
   `ACTIVE_MD_MISSING` (warn, `FILE_MISSING` only), `ACTIVE_MD_REJECTED` (error, a `READ_SECURITY_CODES`
   code) or `ACTIVE_MD_UNREADABLE` (error, other); diagnostics carry the typed `readCode`, never the

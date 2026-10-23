@@ -98,10 +98,14 @@ Nothing defends against another local process that swaps directories or
 symlinks while a command runs (SEC-001B.3, open): concurrent adversarial
 mutation is **not supported** (TM-C, ADR-013). A trusted local project is
 supported with limitations; a static adversarial project is only **partially**
-supported: reads still follow symlinks that stay inside the project, so a
-hostile repository can make a managed path expose another private file in the
-project (a strict read contract, SEC-001B.1-R, is implemented on a separate
-branch whose re-review and merge are pending, so it does not apply here).
+supported (TM-B, ADR-013 — proposed). Since SEC-001B.1-R (ADR-014) managed files
+are read through one strict contract: a symlink anywhere below an explicit
+boundary, a non-regular file and a file with other hard links are refused, so a
+hostile repository can no longer make a managed path expose another file through
+a link. TM-B is **not** re-stated as supported by that merge: it awaits a recorded
+re-evaluation. Known gaps: LOCK-RELEASE-001 and BRIEF-DOCDIR-001
+(`.monolith/memory/long-term/tech-debt.md`). Not covered: a write-enabled UI
+(ADR-010's blocker is preserved) and any TM-C adversary.
 
 A new `state.json` and the lock file are created `0600`; replacing an existing
 `state.json` keeps its mode. In a directory **shared between users or
@@ -144,15 +148,15 @@ checks run in sequence:
 Exit codes: `0` = PASS, `1` = FAIL. Use `--quiet` for CI (prints nothing on PASS, errors only on FAIL).
 
 **`validate` never executes project code (SEC-002, ADR-011).** `project.definition.mjs`
-is checked **as a file only**: it exists, stays inside the project (a symlink
-that leaves it is a FAIL), is a regular file (a FIFO or device is a FAIL and is
+is checked **as a file only**: it exists, stays inside the project (any symlink in
+its path is a FAIL, ADR-014), is a regular file (a FIFO or device is a FAIL and is
 never opened for reading), is non-empty, and is at most 1 MiB. It is not
 imported, evaluated or parsed as JavaScript, so a PASS says **nothing** about
 its syntax, whether it exports `PROJECT_DEFINITION` (that check was removed),
 whether its content is safe, or whether it could be executed. A successful
 non-quiet run prints a note saying exactly this. `monolith.config.json` and
-`AGENTS.md` are read through the same bounded, containment-checked reader
-(1 MiB cap, no blocking on FIFOs). Residual risk: path checks and `open()` are
+`AGENTS.md` are read through the same bounded, strict reader
+(1 MiB cap, no blocking on FIFOs, no symlinks — ADR-014). Residual risk: path checks and `open()` are
 separate syscalls, so a local attacker racing a path swap is not stopped
 (SEC-001B, open).
 

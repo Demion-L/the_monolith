@@ -6,6 +6,8 @@ status: accepted
 date: 2026-10-22
 related_adrs:
   - ADR-009
+  - ADR-013
+  - ADR-014
 ---
 
 # ADR-011 — Static `monolith validate` (SEC-002)
@@ -78,11 +80,14 @@ without limit, and a symlink could point outside the project.
 - **TOCTOU (SEC-001B, open):** containment, `stat` and `open` are separate
   syscalls. A local attacker who can swap a path component or the file
   between them is not stopped; the dev/ino comparison only narrows the window.
-  `O_NOFOLLOW` is not used because internal symlinks are allowed (ADR-009).
-  Update (ADR-013, 2026-10-23): forbidding internal symlinks and `nlink > 1` for
-  managed reads is the target policy of SEC-001B.1-R (DEC-READ-UNIFIED-001); it
-  is implemented on a separate branch (ADR-014; first review approved with
-  notes, **re-review and merge pending**), and the policy above is still in force.
+  `O_NOFOLLOW` was not used because internal symlinks were allowed (ADR-009).
+  Update (ADR-014, 2026-10-23): that policy is **superseded for managed reads** by
+  the Unified Safe Read Contract (SEC-001B.1-R, merged; policy DEC-READ-UNIFIED-001
+  of ADR-013): `validate` reads through the strict reader (`O_NOFOLLOW`, no symlink
+  component, `nlink == 1`, explicit absolute boundary) and reports a symlinked
+  instance entry as `FILE_SYMLINK` instead of skipping it. The swap race between
+  check and `open` described here is still not closed (SEC-001B.3; TM-C unsupported,
+  ADR-013).
 - An unreadable directory inside the instance tree still makes the placeholder
   walk (`readdirSync`) throw; this is a robustness gap, not a hang or a read
   outside the project.

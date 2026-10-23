@@ -291,6 +291,19 @@ relative or empty `stateDir`/`projectRoot` is `READ_BOUNDARY_INVALID`; in
 (a dangling link, a loop or a non-directory is refused). Ancestors of a
 trusted directory are, by that scope's definition, not inspected.
 
+**Threat models (ADR-013, PROPOSED; TM-C is not supported).** TM-A, a trusted local
+project: **supported with limitations**. TM-B, a static adversarial project
+(hostile content at rest): **partially supported** — the unified safe read contract
+above closes the in-project symlink and hardlink read gap for managed files, but
+TM-B is not re-stated as supported until a separate, recorded re-evaluation
+(ADR-013 §6); merging the contract does not do that. TM-C, concurrent adversarial
+mutation: **UNSUPPORTED** — no document, comment or review may claim it. The native
+filesystem layer is deferred (ADR-013 §5); ADR-010's blocker for a write-enabled UI
+is preserved. Not covered: dynamic TOCTOU, directory swap, NFS/SMB, the same-UID
+adversary (an actor that can rewrite MONOLITH's own files is outside every
+filesystem guarantee), lock release and stale recovery (LOCK-RELEASE-001), and
+the brief document-directory walk (BRIEF-DOCDIR-001). See `tech-debt.md`.
+
 `brief` adds a `WRITE_ARTIFACTS_PRESENT` **warning** when leftover write files
 are present in the instance directory (and `validate` prints a `Warning:` line);
 neither changes `Completeness` or an exit code, and nothing is deleted — a
@@ -437,7 +450,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.1-R (unified safe read, ADR-014) IMPLEMENTED on `fix/sec-001b1r-unified-safe-read`, NOT merged, SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED on `fix/sec-001b2-safe-writes`, NOT merged; SEC-001B.3 OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED / MERGED (`4bc7b9d`), SEC-001B.1-R (unified safe read, ADR-014) IMPLEMENTED / MERGED (`c3a428b`); SEC-001B.3 DOCUMENTED, not implemented (ADR-013, PROPOSED pending independent architectural review: TM-C unsupported, native layer deferred; ADR-010's blocker for a write-enabled UI is preserved, not lifted)
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

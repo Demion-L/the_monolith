@@ -9,6 +9,7 @@ related_adrs:
   - ADR-010
   - ADR-011
   - ADR-012
+  - ADR-014
 ---
 
 # ADR-013 — Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3)
@@ -17,7 +18,8 @@ related_adrs:
 > `status: accepted`. It has had only the author's preliminary audit, which is not
 > an independent review. It becomes `accepted` only after an independent
 > architectural review, as ADR-010 did (UI-000E). Until then it must not be cited
-> as an accepted decision.
+> as an accepted decision. (Integrated into `main` on 2026-10-23 with this
+> status unchanged; see section 7.)
 
 Documentation-only decision. It changes no source, no test and no behaviour. It
 states which adversary the current implementation does and does not withstand,
@@ -57,8 +59,8 @@ The evidence and its limits are recorded in "Feasibility evidence".
 | | Model | Adversary | Status |
 |---|---|---|---|
 | **TM-A** | Trusted Local Project | none: the project directory and everything that can write to it are trusted; the risk is accident (a mistyped config, a stray file) | **Supported with limitations** (the limits in "Security boundary" apply: platforms, network filesystems, operational robustness, multi-process coordination) |
-| **TM-B** | Static Adversarial Project | the project content is hostile (a cloned repository or an unpacked archive) but **at rest**: nothing changes it while a MONOLITH command runs | **PARTIALLY SUPPORTED** until SEC-001B.1-R is integrated and has passed its independent re-review (see below) |
-| **TM-C** | Concurrent Adversarial Mutation | another process changes directories, symlinks or file names **while** a MONOLITH command runs | **NOT supported** by the current implementation |
+| **TM-B** | Static Adversarial Project | the project content is hostile (a cloned repository or an unpacked archive) but **at rest**: nothing changes it while a MONOLITH command runs | **PARTIALLY SUPPORTED**: the read gap below is closed for managed files by the merged SEC-001B.1-R, but TM-B is not re-stated as supported until a recorded re-evaluation (see below and section 6) |
+| **TM-C** | Concurrent Adversarial Mutation | any actor — a differently-privileged process or the same user, see "Same-UID adversary" and section 7 — changes directories, symlinks or file names on a path **while** a MONOLITH command runs | **NOT supported** by the current implementation |
 
 The residual risks in section 2 fall into four categories: **TM-B** (static
 hostile content), **TM-C** (concurrent hostile mutation), **operational
@@ -66,7 +68,7 @@ robustness** and **multi-process coordination**. They have different causes and
 different fixes and are kept apart on purpose; only the TM-C category is about
 the adversary that section 4 addresses.
 
-**TM-B known problem.** Reads of MONOLITH-managed paths follow symlinks that stay
+**TM-B problem (found before SEC-001B.1-R; closed for managed files by its merge).** Reads of MONOLITH-managed paths followed symlinks that stay
 inside the project (ADR-009, ADR-011). In a hostile repository a managed path
 (for example `active.md`, or a Markdown document `brief` scans) can therefore be
 an internal symlink to another private file **inside the project root**, and its
@@ -74,28 +76,28 @@ contents are read although the file is not a managed one (for `active.md`,
 `brief` prints an excerpt of what it reads). Escaping, dangling and looping links
 are refused; internal ones are not. Reads also accept a file with `nlink > 1`;
 that variant needs a hardlink inside the project, which a git clone cannot carry
-(git stores no hardlinks) but an unpacked archive can. TM-B is therefore not
-fully supported today. Writes are not affected (W-SYM, ADR-012).
+(git stores no hardlinks) but an unpacked archive can. ADR-014 now refuses both
+for managed reads. TM-B is nevertheless **not** declared fully supported (see
+below). Writes were not affected (W-SYM, ADR-012).
 
-TM-B is **not declared fully supported in advance.** Its status is to be
-re-evaluated after SEC-001B.1-R is integrated, on the basis of an independent
-security review; implementation alone does not change it.
+TM-B is **not declared fully supported by the integration.** Its status is
+re-evaluated on the basis of an independent security review of the integrated
+contract; implementation and merge alone do not change it.
 
-**State of SEC-001B.1-R at this revision (2026-10-23).**
+**State of SEC-001B.1-R (updated at integration, 2026-10-23).**
 
-- Implementation: **complete**, on a separate branch
-  (`fix/sec-001b1r-unified-safe-read`).
-- First independent review: **APPROVED WITH NOTES** (as reported to the author of
-  this revision; the review report is not in this repository).
-- Corrective pass for the review notes: **committed** (`b6d0eed`, the branch tip
-  at the time of writing; the tip moves, the review decides).
-- Independent re-review: **pending**.
-- Merge: **pending**. Neither this branch nor `main` contains it.
-
-Until the re-review has passed **and** the merge has happened, the Unified Safe
-Read Contract must not be described as integrated and TM-B stays PARTIALLY
-SUPPORTED. The expected change of status is recorded in section 6; it is an
-expectation, not a status.
+- Implementation: **complete and merged into `main`** (integration merge
+  `c3a428b`; branch `fix/sec-001b1r-unified-safe-read`, tip `b6d0eed`).
+- Independent review: **APPROVED WITH NOTES** (reported to the integrator; the
+  review report is not in this repository). Notes M-1, L-2, B-1 were fixed in the
+  corrective pass `b6d0eed`; L-1 was characterized and registered as
+  LOCK-RELEASE-001.
+- The repository holds **no evidence of a separate re-review of the corrective
+  pass** that the earlier revision of this section required before TM-B could be
+  re-stated.
+- The Unified Safe Read Contract is therefore **integrated**, and TM-B **stays
+  PARTIALLY SUPPORTED**: re-stating it is a separate, recorded re-evaluation
+  (section 6), not a side effect of the merge. Merging does not change TM-C.
 
 The current implementation does not provide TM-C and must not be described as
 doing so, in code comments, documentation, CLI output or reviews.
@@ -104,7 +106,7 @@ doing so, in code comments, documentation, CLI output or reviews.
 
 **What is provided (TM-A, and the parts of TM-B that are in place).** Everything
 below is evaluated at the moment of each operation, on a quiescent tree. The
-TM-B read gap above is an exception to it:
+static-read gap described above was an exception to it until SEC-001B.1-R:
 
 - `monolithRoot` containment: relative, no `..`, every existing component
   `realpath`ed and kept inside the project root (ADR-009).
@@ -194,19 +196,17 @@ directory); for an actor that is the same user, directory-swap adds only the
 confused-deputy case.
 
 **Platforms.** POSIX (verified on Linux) per ADR-012 DEC-B2-05; macOS/BSD
-unverified; Windows best-effort and unverified. This describes this branch and
-`main`. SEC-001B.1-R as implemented on its branch refuses managed reads where
-`O_NOFOLLOW` or `O_NONBLOCK` is unavailable, so on Windows managed files cannot
-be read at all (FS-PLAT-001, per that branch's record); that applies only after
-integration.
+unverified; Windows best-effort and unverified. SEC-001B.1-R
+(ADR-014, merged) refuses managed reads where `O_NOFOLLOW` or `O_NONBLOCK` is
+unavailable, so on Windows managed files cannot be read at all (FS-PLAT-001).
 
 ### 3. DEC-READ-UNIFIED-001 — Single Strict Managed Read Contract
 
-**Target policy of SEC-001B.1-R. Implemented on a separate branch (first
-independent review APPROVED WITH NOTES, corrective pass committed); re-review and
-merge pending; not in force.** Nothing in this ADR is evidence that it holds
-today; the code on this branch and on `main` still follows ADR-009 / ADR-011 for
-reads.
+**Policy of SEC-001B.1-R. Implemented and merged into `main` (ADR-014; independent
+review APPROVED WITH NOTES, corrective pass `b6d0eed`); in force for managed
+reads.** This ADR is the decision input; ADR-014 is the implementation record and
+describes the code. The guarantee it gives is the one listed below and in
+ADR-014 — it does not close dynamic TOCTOU.
 
 For every MONOLITH-managed file read (`state.json`, the lock record, `active.md`,
 the Markdown documents under `monolithRoot` that `brief` scans, and the root
@@ -235,7 +235,7 @@ it enforces this contract rather than only staying beneath the root.
 SEC-001B.1-R is where the ADR-009 / ADR-011 amendments are made.
 
 The implementation record of this contract is the "Unified Safe Read Contract"
-ADR, **ADR-014**, which exists on the SEC-001B.1-R branch and not on this one.
+ADR, **ADR-014** (`docs/adr/ADR-014-unified-safe-read.md`, accepted, on `main`).
 This section states the policy as a decision input of the threat model; ADR-014
 records how SEC-001B.1-R implements it. ADR-014 is more specific in places: it
 names `monolith.config.json` among the managed files, makes the boundary an
@@ -345,7 +345,7 @@ three conditions cites this section and either opens the review or records why
 the condition does not hold.
 
 **Who decides.** The decision to revisit the native filesystem layer belongs to
-**MONOLITH Core Architecture / Mission Control**. A consumer may *initiate* a
+**MONOLITH Core Architecture** (defined in section 7, "Decision owner"). A consumer may *initiate* a
 review through a story or an ADR. A consumer may **not**, on its own authority,
 declare TM-C supported, lift the ADR-010 restriction, or change the declared
 filesystem security policy; each of those needs a Core Architecture decision
@@ -403,14 +403,15 @@ This ADR therefore records:
 | ID | Subject | State |
 |---|---|---|
 | ADR-013 | Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3) — this document | **proposed**; documentation only |
-| ADR-014 | Unified Safe Read Contract (SEC-001B.1-R) | **reserved** for it; the document (`docs/adr/ADR-014-unified-safe-read.md`) exists on the SEC-001B.1-R branch, not on this one |
+| ADR-014 | Unified Safe Read Contract (SEC-001B.1-R) | **accepted**; the document is `docs/adr/ADR-014-unified-safe-read.md`; the basis of its acceptance is recorded in it |
 
-The SEC-001B.1-R branch has already renumbered its ADR to ADR-014 in its
-corrective pass and reserves ADR-013 for this document in its ADR index. The two
-branches were not edited by each other. Its ADR-014 carries `status: accepted`
-while its re-review is pending; the same rule applies to it as to this ADR
-(`proposed` until the independent review), which is for that branch's owner to
-apply.
+The SEC-001B.1-R branch renumbered its ADR to ADR-014 in its corrective pass and
+reserved ADR-013 for this document; the two branches were integrated together
+(2026-10-23) with the numbering above and each ADR lists the other in
+`related_adrs`. ADR-014 carries `status: accepted`; the rule that an ADR is
+`proposed` until an independent review was applied to it by recording the basis
+of acceptance in ADR-014 ("Acceptance basis"). ADR-013 itself has **not** had an
+independent architectural review and stays `proposed`.
 
 **Checks at integration.** Instead of counting references (a count drifts with
 the corrective pass), run these on the merged tree:
@@ -428,17 +429,80 @@ the corrective pass), run these on the merged tree:
 
 | Event | Documented consequence |
 |---|---|
-| Now | TM-A supported with limitations; TM-B **PARTIALLY SUPPORTED**; TM-C **UNSUPPORTED**. SEC-001B.1-R: implementation complete, first review APPROVED WITH NOTES, corrective pass committed, re-review pending, merge pending. ADR-010's write-enabled-UI blocker preserved |
-| SEC-001B.1-R passes the independent re-review **and** is merged | TM-B is re-evaluated. If the review supports it, TM-B is re-stated as supported **within the guarantees of section 2**, and Unified Safe Reads are described as integrated. Section 3 changes from "target" to "in force", and ADR-009 / ADR-011 / `AGENTS.md` / `README.md` / `tech-debt.md` / `decisions.md` lose their "not integrated" wording; `decisions.md` gains a pointer to ADR-014; the Windows paragraph of section 2 is re-written for the strict reader. Merge alone, or a review with open findings, does not change the status |
+| Now (after integration, 2026-10-23) | TM-A supported with limitations; TM-B **PARTIALLY SUPPORTED**; TM-C **UNSUPPORTED**. SEC-001B.1-R: implemented, **merged**, first review APPROVED WITH NOTES, corrective pass `b6d0eed`; no separate re-review recorded. ADR-010's write-enabled-UI blocker preserved |
+| A recorded re-evaluation of TM-B (an independent security review of the integrated contract, recorded in an ADR or review record) | TM-B is re-evaluated. If the review supports it, TM-B is re-stated as supported **within the guarantees of section 2**, and only the TM-B row changes. The "integrated" wording of the read contract, the pointer to ADR-014 in `decisions.md` and the amendments of ADR-009 / ADR-011 / `AGENTS.md` / `README.md` / `tech-debt.md` were made at integration. A review with open findings does not change the status |
 | In every case | TM-C stays **UNSUPPORTED**. The unified read contract does not close dynamic TOCTOU; TM-C changes only through section 5's revisit conditions and a new decision. ADR-010's blocker is not affected |
 
-**Merge-time conflicts to expect.** Both branches edit `AGENTS.md`,
+**Merge-time conflicts (resolved at integration, 2026-10-23).** Both branches edited `AGENTS.md`,
 `tech-debt.md` (the SEC-001B.1-R and SEC-001B.3 rows) and `docs/adr/README.md`
 (the ADR-013 / ADR-014 rows). Keep both changes: the ADR-013 row and document
 from this branch, the ADR-014 row and document from the other, status wording from
 the table above. Statements that merge cleanly but become stale (ADR-009,
 ADR-011, root `README.md`, `decisions.md`, sections 2 and 3 of this ADR) are
 covered by the checks above.
+
+### 7. Decision owner, residual-risk acceptance and TM-C scope (integration addendum, 2026-10-23)
+
+This section resolves findings F-01 to F-04 of the independent review of this ADR.
+It clarifies roles and procedure; it adds **no** security guarantee, changes no
+threat-model status and lifts no restriction.
+
+**Decision owner (F-01).** "MONOLITH Core Architecture" in this ADR means the
+**repository maintainer(s) who hold ADR acceptance authority for this repository**
+(an ADR is `accepted` only by them; ADR-010 was accepted that way in UI-000E).
+It is a role, not a subsystem. **Mission Control is a consumer** of the core
+(ADR-010) and is **not** a decision body: it can initiate a review through a story
+or an ADR, it cannot decide one. The earlier wording "Core Architecture / Mission
+Control" is withdrawn. The owner defined here is an interpretation made at
+integration; the independent architectural review that moves this ADR to
+`accepted` confirms or amends it.
+
+**Residual-risk acceptance — minimal procedure (F-02).** A residual risk named in
+this ADR, ADR-010 or `tech-debt.md` counts as *accepted* only if a record in a
+story or an ADR contains all of:
+
+1. the risk (a `tech-debt.md` ID or an ADR section) and its class (TM-B, TM-C
+   with sub-case, operational, coordination);
+2. the consumer, its trust boundary and its concurrent-modification assumption;
+3. why the risk is acceptable for that consumer, and any compensating measure;
+4. the acceptor: the decision owner above (a consumer proposes; it does not accept
+   on its own authority);
+5. the date and the trigger that reopens it (at least the revisit conditions of
+   section 5);
+6. an entry in `tech-debt.md` and `decisions.md` that points to the record.
+
+An acceptance covers only the named consumer and risk. It does not change a
+threat-model status, does not support TM-C and does not lift ADR-010's blocker.
+The read-only UI's acceptance that section 5 leaves to UI-001 follows this
+procedure; no acceptance has been recorded yet.
+
+**TM-C and the same-UID adversary (F-03).** TM-C is defined by **capability**,
+not by user ID: an actor that can change a directory, symlink or file name on a
+path component while a MONOLITH command runs. It has two sub-cases, both
+**unsupported**:
+
+- *TM-C / other principal* — a differently-privileged or sandboxed process with
+  write access to a directory on the path. This is the case a descriptor-relative
+  layer (section 4) is designed for.
+- *TM-C / same-UID* — a process running as the same user. It can already rewrite
+  `state.json`, the lock record and the binary, so for it directory swap adds only
+  the confused-deputy redirect described in section 2. The residual risk ADR-010
+  records for the read-only UI is this sub-case.
+
+What a same-UID actor can do by rewriting MONOLITH's own files is **not a TM-C
+case** and is outside every filesystem guarantee; no design in this ADR claims to
+defend it.
+
+**Basis of ADR-014's acceptance (F-04).** Recorded in ADR-014 ("Acceptance
+basis"). In short: an implemented and merged contract, an independent review with
+verdict APPROVED WITH NOTES, the notes dispositioned in the corrective pass, and
+the integrator's authorization. It does not rest on this ADR and does not make
+this ADR accepted.
+
+**Other findings (F-05 to F-12).** The text of these findings is not in this
+repository and was not available at integration. They are not claimed to be
+resolved by this section; they remain for the independent architectural review of
+this ADR.
 
 ## Feasibility evidence
 
@@ -501,8 +565,8 @@ How to read the table:
 
 - ADR-013 is **proposed**. TM-A (with limitations) and TM-B (partially) are the
   documented envelope. Reviews and docs may assert TM-B guarantees only as listed
-  in section 2, must not call TM-B fully supported before the independent
-  re-review of SEC-001B.1-R and its merge, and may not assert TM-C.
+  in section 2, must not call TM-B fully supported before a recorded re-evaluation (section 6),
+  and may not assert TM-C.
 - SEC-001B.3 remains **OPEN**: it is documented and its direction is chosen, not
   implemented. Registered residuals stay registered: LOCK-RELEASE-001,
   FS-CLEAN-001, FS-PLAT-001.
@@ -512,8 +576,7 @@ How to read the table:
 - ADR numbers are fixed: ADR-013 is this document, ADR-014 is the Unified Safe
   Read Contract.
 - ADR-009 / ADR-011 read policy is **unchanged by this ADR**; SEC-001B.1-R is the
-  story that changes it (DEC-READ-UNIFIED-001), and it is implemented on a
-  branch with its re-review and merge pending. ADR-012's write contract is
+  story that changed it (DEC-READ-UNIFIED-001, ADR-014), now merged. ADR-012's write contract is
   unchanged. ADR-012's "SEC-001B.2 / SEC-001B.3 boundary" section remains
   accurate and now points here.
 - ADR-010's blocker for a write-enabled UI is **not lifted** (section 5).
@@ -543,6 +606,5 @@ How to read the table:
   FS-CLEAN-001, FS-PLAT-001
 - `AGENTS.md` — "File read contract (SEC-001B.1)", "File write contract
   (SEC-001B.2, ADR-012)"
-- ADR-014 (reserved) — Unified Safe Read Contract (SEC-001B.1-R); exists on branch
-  `fix/sec-001b1r-unified-safe-read` as
-  `docs/adr/ADR-014-unified-safe-read.md`, not on this branch
+- ADR-014 — Unified Safe Read Contract (SEC-001B.1-R),
+  `docs/adr/ADR-014-unified-safe-read.md` (accepted)

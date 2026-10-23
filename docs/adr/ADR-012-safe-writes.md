@@ -8,6 +8,8 @@ related_adrs:
   - ADR-008
   - ADR-009
   - ADR-011
+  - ADR-013
+  - ADR-014
 ---
 
 # ADR-012 — Safe Writes and Explicit Write Scope (SEC-001B.2)
@@ -65,8 +67,10 @@ package entrypoint.
 ### W-SYM — symlinks are refused for writes
 
 Any symlink below the boundary, **including one that stays inside the project**,
-is refused for writes (`WRITE_PARENT_SYMLINK`, `WRITE_TARGET_SYMLINK`). Reads keep
-the ADR-009 policy (in-project symlinks allowed). A project that symlinks
+is refused for writes (`WRITE_PARENT_SYMLINK`, `WRITE_TARGET_SYMLINK`). Reads of
+managed files followed the ADR-009 policy (in-project symlinks allowed) when this ADR
+was written; since SEC-001B.1-R (ADR-014, merged) they are refused as well, so reads
+and writes now share one symlink policy. A project that symlinks
 `monolithRoot` must replace the link with a real directory before `mission
 start|finish|checkpoint` or `init` will write.
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
 import {
-  mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, lstatSync, symlinkSync, writeFileSync,
+  linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, lstatSync, symlinkSync, writeFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -217,10 +217,10 @@ describe('readDashboardModel — damaged sources', () => {
     mkdirSync(join(dir, '.monolith/context/maps'), { recursive: true });
     execFileSync('mkfifo', [join(dir, '.monolith', ROADMAP_REL)]);
     const m = readDashboardModel(dir);
-    expect(src(m, 'config')).toMatchObject({ status: 'unreadable', code: 'SOURCE_NOT_REGULAR' });
+    expect(src(m, 'config')).toMatchObject({ status: 'forbidden', code: 'SOURCE_NOT_REGULAR' });
     expect(m.projectOverview.data).toBeNull();
     const m2 = (() => { rmSync(join(dir, 'monolith.config.json')); return readDashboardModel(dir); })();
-    expect(src(m2, 'roadmap')).toMatchObject({ status: 'unreadable', code: 'SOURCE_NOT_REGULAR' });
+    expect(src(m2, 'roadmap')).toMatchObject({ status: 'forbidden', code: 'SOURCE_NOT_REGULAR' });
   });
 
   it('oversized roadmap is refused, never truncated', () => {
@@ -230,11 +230,11 @@ describe('readDashboardModel — damaged sources', () => {
     expect(m.roadmap.data).toBeNull();
   });
 
-  it('dangling symlink source is unreadable, not a crash', () => {
+  it('dangling symlink source is forbidden (never followed), not a crash', () => {
     mkdirSync(join(dir, '.monolith'), { recursive: true });
     symlinkSync(join(dir, 'nowhere.json'), join(dir, '.monolith/state.json'));
     const m = readDashboardModel(dir);
-    expect(src(m, 'state')).toMatchObject({ status: 'unreadable', code: 'SOURCE_UNRESOLVABLE' });
+    expect(src(m, 'state')).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
   });
 
   it('nonexistent project root yields a typed result, not an exception', () => {
@@ -261,17 +261,17 @@ describe('readDashboardModel — security regression (G1)', () => {
     mkdirSync(join(dir, rel, '..'), { recursive: true });
     symlinkSync(join(outside, 'payload'), join(dir, rel));
     const m = readDashboardModel(dir);
-    expect(src(m, id)).toMatchObject({ status: 'forbidden', code: 'SOURCE_OUTSIDE_PROJECT' });
+    expect(src(m, id)).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
     const json = JSON.stringify(m);
     expect(json).not.toContain(OUT_SECRET);
     expect(json).not.toContain(outside);
   });
 
-  it('symlinked monolith.config.json escaping the project is forbidden (file outside .monolith, inside project root rules)', () => {
+  it('symlinked monolith.config.json escaping the project is forbidden', () => {
     write('c.json', JSON.stringify({ project: { name: OUT_SECRET } }), outside);
     symlinkSync(join(outside, 'c.json'), join(dir, 'monolith.config.json'));
     const m = readDashboardModel(dir);
-    expect(src(m, 'config')).toMatchObject({ status: 'forbidden', code: 'SOURCE_OUTSIDE_PROJECT' });
+    expect(src(m, 'config')).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
     expect(src(m, 'state')).toMatchObject({ status: 'forbidden', code: 'ROOT_INVALID' });
     expect(JSON.stringify(m)).not.toContain(OUT_SECRET);
   });
@@ -290,7 +290,7 @@ describe('readDashboardModel — security regression (G1)', () => {
     mkdirSync(join(dir, '.monolith/context'), { recursive: true });
     symlinkSync(outside, join(dir, '.monolith/context/maps'));
     const m = readDashboardModel(dir);
-    expect(src(m, 'roadmap')).toMatchObject({ status: 'forbidden', code: 'SOURCE_OUTSIDE_PROJECT' });
+    expect(src(m, 'roadmap')).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
     expect(JSON.stringify(m)).not.toContain(OUT_SECRET);
   });
 
@@ -305,23 +305,25 @@ describe('readDashboardModel — security regression (G1)', () => {
     expect(JSON.stringify(m)).not.toContain(OUT_SECRET);
   });
 
-  it('a symlink that stays inside the project keeps the existing Core policy (allowed)', () => {
+  it('a symlink that stays inside the project is forbidden too (ADR-014: no symlink anywhere)', () => {
     write('real/state.json', JSON.stringify({
       schemaVersion: 2, revision: 9, strategic: { systems: {} }, tactical: { missions: {}, checkpoints: {} },
     }));
     mkdirSync(join(dir, '.monolith'), { recursive: true });
     symlinkSync(join(dir, 'real/state.json'), join(dir, '.monolith/state.json'));
-    expect(readDashboardModel(dir).projectOverview.data!.stateRevision).toBe(9);
+    const m = readDashboardModel(dir);
+    expect(src(m, 'state')).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
+    expect(m.projectOverview.data!.stateRevision).toBeNull();
   });
 
   it('the API takes no path other than the fixed project root', () => {
     expect(readDashboardModel.length).toBe(1);
   });
 
-  // Not covered, deliberately: a swap of a path component between the realpath
-  // check and open(). Node has no openat/O_NOFOLLOW per component, Core does
-  // not close it (SEC-001B), and a unit test cannot interleave the two
-  // syscalls deterministically. The residual risk is recorded in the report.
+  // Not covered, deliberately (TM-C, ADR-013): a swap of a path component between
+  // Core's lstat walk and open(). Core does not close it, a unit test cannot
+  // interleave the syscalls deterministically, and the UI must not add a second
+  // reader. Core's own tests (src/root/safe-read.test.ts) cover the file-swap seam.
 });
 
 function snapshot(root: string): string[] {
@@ -398,3 +400,118 @@ describe('readDashboardModel — read-only, deterministic, no code execution', (
 function __dirnameOfModule(): string {
   return new URL('.', import.meta.url).pathname;
 }
+
+const SOURCES = [
+  ['config', 'monolith.config.json'],
+  ['state', '.monolith/state.json'],
+  ['activeStory', '.monolith/memory/working/active.md'],
+  ['roadmap', `.monolith/${ROADMAP_REL}`],
+] as const;
+
+describe('readDashboardModel — source identity (F-1, ADR-014)', () => {
+  const SECRET = 'PRIVATE-NOTES-SECRET-777';
+
+  function expectNoLeak(m: DashboardReadModel): void {
+    const json = JSON.stringify(m);
+    expect(json).not.toContain(SECRET);
+    expect(json).not.toContain(dir);
+    expect(json).not.toContain(outside);
+  }
+
+  it.each(SOURCES)('%s → symlink to a private file INSIDE the project is forbidden, content unread', (id, rel) => {
+    write('private-notes.txt', SECRET);
+    write('.env', SECRET);
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    symlinkSync(join(dir, id === 'roadmap' ? '.env' : 'private-notes.txt'), join(dir, rel));
+    const m = readDashboardModel(dir);
+    expect(src(m, id)).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
+    expectNoLeak(m);
+  });
+
+  it.each(SOURCES)('%s → symlink to a file OUTSIDE the project is forbidden, content unread', (id, rel) => {
+    write('payload', SECRET, outside);
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    symlinkSync(join(outside, 'payload'), join(dir, rel));
+    const m = readDashboardModel(dir);
+    expect(src(m, id)).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
+    expectNoLeak(m);
+  });
+
+  it.each(SOURCES.filter(([id]) => id !== 'config'))('%s → hard link to another file is forbidden, content unread', (id, rel) => {
+    write('private-notes.txt', SECRET);
+    mkdirSync(join(dir, rel, '..'), { recursive: true });
+    linkSync(join(dir, 'private-notes.txt'), join(dir, rel));
+    const m = readDashboardModel(dir);
+    expect(src(m, id)).toMatchObject({ status: 'forbidden', code: 'SOURCE_HARDLINKED' });
+    expectNoLeak(m);
+  });
+
+  it('config → hard link is forbidden and fails closed for every dependent source', () => {
+    write('private-notes.txt', JSON.stringify({ project: { name: SECRET } }));
+    linkSync(join(dir, 'private-notes.txt'), join(dir, 'monolith.config.json'));
+    const m = readDashboardModel(dir);
+    expect(src(m, 'config')).toMatchObject({ status: 'forbidden', code: 'SOURCE_HARDLINKED' });
+    expect(src(m, 'state')).toMatchObject({ status: 'forbidden', code: 'ROOT_INVALID' });
+    expectNoLeak(m);
+  });
+
+  it.each([
+    ['inside the project', () => join(dir, 'elsewhere')],
+    ['outside the project', () => outside],
+  ])('intermediate directory symlinked %s is forbidden (memory/working)', (_label, target) => {
+    const t = target();
+    write('active.md', `# Active\n\n## Current Story\n\n${SECRET}\n`, t === outside ? outside : join(dir, 'elsewhere'));
+    mkdirSync(join(dir, '.monolith/memory'), { recursive: true });
+    symlinkSync(t, join(dir, '.monolith/memory/working'));
+    const m = readDashboardModel(dir);
+    expect(src(m, 'activeStory')).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
+    expect(m.projectOverview.data!.currentStory).toBeNull();
+    expectNoLeak(m);
+  });
+
+  it('the instance directory symlinked INSIDE the project: every .monolith source is forbidden', () => {
+    write('real/state.json', SECRET);
+    write(`real/${ROADMAP_REL}`, SECRET);
+    symlinkSync(join(dir, 'real'), join(dir, '.monolith'));
+    const m = readDashboardModel(dir);
+    for (const id of ['state', 'activeStory', 'roadmap'] as const) {
+      expect(src(m, id)).toMatchObject({ status: 'forbidden', code: 'SOURCE_SYMLINK' });
+    }
+    expect(m.roadmap.data).toBeNull();
+    expectNoLeak(m);
+  });
+
+  it('a symlink target carrying real content is never reported as absent', () => {
+    write('private-notes.txt', SECRET);
+    mkdirSync(join(dir, '.monolith/context/maps'), { recursive: true });
+    symlinkSync(join(dir, 'private-notes.txt'), join(dir, '.monolith', ROADMAP_REL));
+    expect(src(readDashboardModel(dir), 'roadmap').status).not.toBe('absent');
+  });
+});
+
+describe('readDashboardModel — project root argument (F-4)', () => {
+  let cwd: string;
+  beforeEach(() => { cwd = process.cwd(); });
+  afterEach(() => { process.chdir(cwd); });
+
+  it.each([[''], ['.'], ['relative/path'], ['./'], ['..']])('%j never falls back to process.cwd()', (arg) => {
+    fullProject();
+    process.chdir(dir);
+    const m = readDashboardModel(arg);
+    expect(m.projectOverview.data).toBeNull();
+    expect(m.currentMissions.data).toBeNull();
+    expect(m.roadmap.data).toBeNull();
+    expect(src(m, 'config')).toMatchObject({ status: 'forbidden', code: 'SOURCE_BOUNDARY_INVALID' });
+    expect(src(m, 'state')).toMatchObject({ status: 'forbidden', code: 'ROOT_INVALID' });
+    const json = JSON.stringify(m);
+    expect(json).not.toContain('Demo');
+    expect(json).not.toContain('Roadmap');
+    expect(json).not.toContain(dir);
+  });
+
+  it.each([[undefined], [null], [42], [{}]])('non-string %j yields a typed result, not an exception', (arg) => {
+    const m = readDashboardModel(arg as unknown as string);
+    expect(m.projectOverview.data).toBeNull();
+    expect(m.diagnostics.sources.every((s) => s.status !== 'available')).toBe(true);
+  });
+});

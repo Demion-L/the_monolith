@@ -16,6 +16,12 @@
  * bounded, non-blocking read of SEC-001B.1. `readState` is deliberately NOT
  * used: it does not check containment. Check-then-use races are NOT closed by
  * Core (SEC-001B) and are therefore not closed here.
+ *
+ * Every source goes through `readProjectFile` (ADR-014): no symlink in any
+ * component, one hard link, regular file, absolute boundary, never the cwd.
+ * This module adds no filesystem checks of its own; it only interprets Core's
+ * typed result (`FILE_CODE_MAP`). Threat model (ADR-013): TM-A supported with
+ * limitations, TM-B partially supported, TM-C (concurrent mutation) NOT supported.
  */
 
 import { MAX_STATE_BYTES, validateState } from '../coordinatorium/index.js';
@@ -23,6 +29,7 @@ import type { CoordinatoriumState } from '../coordinatorium/types.js';
 import {
   CONFIG_FILE_NAME,
   MAX_PROJECT_FILE_BYTES,
+  isReadSecurityViolation,
   RootContainmentError,
   readProjectFile,
   resolveMonolithRoot,
@@ -63,16 +70,33 @@ interface Loaded {
   content: string | null;
 }
 
-const FILE_CODE_MAP: Record<ProjectFileErrorCode, [SourceStatus, SourceErrorCode]> = {
+/**
+ * Exhaustive over Core's `ProjectFileErrorCode`: a new Core code is a compile
+ * error here until it is mapped. The status of a security violation is NOT
+ * decided here — `sourceFailure` takes it from Core's `isReadSecurityViolation`,
+ * so the UI keeps no second classification of filesystem security. The
+ * 'forbidden' entries only document that and are checked against Core in tests.
+ */
+export const FILE_CODE_MAP: Readonly<Record<ProjectFileErrorCode, readonly [SourceStatus, SourceErrorCode]>> = {
   FILE_MISSING: ['absent', 'SOURCE_ABSENT'],
   FILE_OUTSIDE_PROJECT: ['forbidden', 'SOURCE_OUTSIDE_PROJECT'],
   FILE_UNRESOLVABLE: ['unreadable', 'SOURCE_UNRESOLVABLE'],
-  FILE_NOT_REGULAR: ['unreadable', 'SOURCE_NOT_REGULAR'],
+  FILE_NOT_REGULAR: ['forbidden', 'SOURCE_NOT_REGULAR'],
   FILE_EMPTY: ['corrupt', 'SOURCE_EMPTY'],
   FILE_TOO_LARGE: ['unreadable', 'SOURCE_TOO_LARGE'],
   FILE_CHANGED: ['unreadable', 'SOURCE_CHANGED'],
   FILE_UNREADABLE: ['unreadable', 'SOURCE_UNREADABLE'],
+  FILE_SYMLINK: ['forbidden', 'SOURCE_SYMLINK'],
+  FILE_HARDLINKED: ['forbidden', 'SOURCE_HARDLINKED'],
+  READ_BOUNDARY_INVALID: ['forbidden', 'SOURCE_BOUNDARY_INVALID'],
+  READ_UNSUPPORTED_PLATFORM: ['forbidden', 'SOURCE_UNSUPPORTED_PLATFORM'],
 };
+
+/** Never maps a security violation to anything but 'forbidden'; no default for unknown codes. */
+function sourceFailure(code: ProjectFileErrorCode): [SourceStatus, SourceErrorCode] {
+  const [status, sourceCode] = FILE_CODE_MAP[code];
+  return [isReadSecurityViolation(code) ? 'forbidden' : status, sourceCode];
+}
 
 function report(id: SourceId, path: string | null, status: SourceStatus, code: SourceErrorCode | null): SourceReport {
   return { id, path, status, code };
@@ -91,7 +115,7 @@ function load(projectRoot: string, id: SourceId, relPath: string, maxBytes: numb
       read = readProjectFile(projectRoot, relPath, { maxBytes, allowEmpty: true });
     }
     if (read.ok) return { report: report(id, relPath, 'available', null), content: read.content };
-    const [status, code] = FILE_CODE_MAP[read.code];
+    const [status, code] = sourceFailure(read.code);
     return { report: report(id, relPath, status, code), content: null };
   } catch {
     return { report: report(id, relPath, 'unreadable', 'INTERNAL'), content: null };

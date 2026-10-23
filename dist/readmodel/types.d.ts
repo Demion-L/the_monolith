@@ -23,7 +23,7 @@ export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap';
  * - unreadable: the file exists inside the boundary but could not be read
  */
 export type SourceStatus = 'available' | 'absent' | 'corrupt' | 'forbidden' | 'unreadable';
-export type SourceErrorCode = 'SOURCE_ABSENT' | 'SOURCE_OUTSIDE_PROJECT' | 'SOURCE_UNRESOLVABLE' | 'SOURCE_NOT_REGULAR' | 'SOURCE_EMPTY' | 'SOURCE_TOO_LARGE' | 'SOURCE_CHANGED' | 'SOURCE_UNREADABLE' | 'PARSE_ERROR' | 'SCHEMA_INVALID' | 'CONFIG_INVALID' | 'ROOT_INVALID' | 'INTERNAL';
+export type SourceErrorCode = 'SOURCE_ABSENT' | 'SOURCE_OUTSIDE_PROJECT' | 'SOURCE_UNRESOLVABLE' | 'SOURCE_NOT_REGULAR' | 'SOURCE_EMPTY' | 'SOURCE_TOO_LARGE' | 'SOURCE_CHANGED' | 'SOURCE_UNREADABLE' | 'SOURCE_SYMLINK' | 'SOURCE_HARDLINKED' | 'SOURCE_BOUNDARY_INVALID' | 'SOURCE_UNSUPPORTED_PLATFORM' | 'PARSE_ERROR' | 'SCHEMA_INVALID' | 'CONFIG_INVALID' | 'ROOT_INVALID' | 'INTERNAL';
 export interface SourceReport {
     id: SourceId;
     /** Project-relative, `/`-separated; null when the instance root could not be trusted. */

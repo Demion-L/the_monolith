@@ -886,32 +886,51 @@ function stage(
 // Publication
 // ---------------------------------------------------------------------------
 
-/** `rename`/`link` errors after which the destination is known to be untouched. */
-const NOT_PUBLISHED_ERRNO: ReadonlySet<string> = new Set([
-  'EACCES', 'EPERM', 'EROFS', 'ENOENT', 'ENOTDIR', 'EISDIR', 'EXDEV', 'EBUSY', 'ETXTBSY', 'ELOOP',
-  'ENAMETOOLONG', 'EINVAL', 'EMLINK', 'ENOSPC', 'EDQUOT', 'ENOTEMPTY',
-]);
+type Verdict = 'published' | 'not-published' | 'lost-race' | 'unknown';
 
-type Verdict = 'published' | 'not-published' | 'unknown';
+type PublishKind = 'rename' | 'link';
+
+function isOurs(st: BigStats | null, staged: Staged): boolean {
+  return st !== null && st.isFile() && sameId(st, staged.token.dev, staged.token.ino);
+}
 
 /**
- * One read-only look after a publish call failed with an error that does not
- * prove the destination is untouched. Decides only when it can; otherwise the
- * answer stays UNKNOWN. Never retries the publish.
+ * One read-only look at the two names after a publish call failed. NO errno is
+ * taken as proof that the destination is untouched: an error can be reported
+ * for an operation that took effect (a lost reply), and which errors can follow
+ * success depends on the filesystem, so the decision is made from identity
+ * (`dev/ino` recorded from the descriptor), never from the error code.
+ *
+ *  - the destination is our file                          -> `published`;
+ *  - the temp name is still our file and the destination is not
+ *    (`link`+`EEXIST`: the name is held by something else) -> `lost-race`, else
+ *    `not-published`;
+ *  - anything else, or a failed inspection                  -> `unknown`.
+ *
+ * For `link`+`EEXIST` the link count of the temp file is deliberately NOT
+ * evidence: a second hard link to the temp name (a backup tool, another actor)
+ * would otherwise make a foreign destination look like ours.
+ * Never retries the publish and never removes anything.
  */
-function verifyPublication(targetPath: string, staged: Staged, ctx: Ctx): Verdict {
+function verifyPublication(kind: PublishKind, errno: string | undefined, targetPath: string, staged: Staged, ctx: Ctx): Verdict {
   try {
     const t = bigLstatOrNull(ctx, targetPath);
-    if (t && t.isFile() && sameId(t, staged.token.dev, staged.token.ino)) return 'published';
+    if (isOurs(t, staged)) return 'published';
     const m = bigLstatOrNull(ctx, staged.tmpPath);
-    if (m && m.isFile() && sameId(m, staged.token.dev, staged.token.ino)) return 'not-published';
+    if (isOurs(m, staged)) {
+      if (kind === 'link' && errno === 'EEXIST') {
+        // Held by another object, or it vanished again while our temp name was
+        // never linked (link count 1): either way nothing of ours was published.
+        if (t !== null || m!.nlink === 1n) return 'lost-race';
+        return 'unknown';
+      }
+      return 'not-published';
+    }
   } catch {
     /* the verification itself failed: undecided */
   }
   return 'unknown';
 }
-
-type PublishKind = 'rename' | 'link';
 
 function publishFailure(
   kind: PublishKind,
@@ -935,36 +954,23 @@ function publishFailure(
       cause: err,
     });
   };
-  const verified = (): 'published' => {
+
+  const verdict = verifyPublication(kind, errno, targetPath, staged, ctx);
+  if (verdict === 'published') {
     warnings.push({
       code: 'PUBLICATION_VERIFIED_AFTER_ERROR',
       message: `${kind} reported "${errMsg(err)}" but the destination holds the new file; treated as published.`,
       path: targetPath,
     });
     return 'published';
-  };
-
-  if (kind === 'link' && errno === 'EEXIST') {
-    // `EEXIST` can be a lost reply on a network filesystem: our link count tells.
-    try {
-      const m = bigLstatOrNull(ctx, staged.tmpPath);
-      if (m && m.isFile() && sameId(m, staged.token.dev, staged.token.ino)) {
-        if (m.nlink === 2n) return verified();
-        if (m.nlink === 1n) return 'lost-race';
-      }
-    } catch {
-      /* undecided: fall through to the UNKNOWN handling */
-    }
-  } else if (errno !== undefined && NOT_PUBLISHED_ERRNO.has(errno)) {
+  }
+  if (verdict === 'lost-race') return 'lost-race';
+  if (verdict === 'not-published') {
     if (kind === 'link' && (errno === 'EPERM' || errno === 'EXDEV')) {
       return notPublished('WRITE_LINK_UNSUPPORTED', `the filesystem does not support hard links here`);
     }
     return notPublished(codeForErrno(err), `cannot publish "${targetPath}"`);
   }
-
-  const verdict = verifyPublication(targetPath, staged, ctx);
-  if (verdict === 'published') return verified();
-  if (verdict === 'not-published') return notPublished(codeForErrno(err), `cannot publish "${targetPath}"`);
   throw new SafeWriteError(
     `could not determine whether "${targetPath}" was written (${kind} failed with: ${errMsg(err)}). ` +
       `Check its current state before repeating the operation; nothing was retried or removed` +

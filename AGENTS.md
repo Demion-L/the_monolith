@@ -132,7 +132,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
-| `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + the unified safe reader `readBoundedFile()` and its wrappers `checkProjectFile()`/`readProjectFile()` (ADR-011, ADR-013) |
+| `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + the unified safe reader `readBoundedFile()` and its wrappers `checkProjectFile()`/`readProjectFile()` (ADR-011, ADR-014) |
 | `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
 | `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
@@ -142,7 +142,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (824 tests passing, typecheck clean):
+What MONOLITH does today (865 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -252,14 +252,14 @@ read, descriptor always closed. Limits are protective ceilings, not policy:
 | File | Limit | On violation |
 |---|---:|---|
 | lock record | 256 B | `LockUnsafeError` (`mission` exits non-zero); lock not acquired, file untouched |
-| `active.md` | 256 KiB | `ACTIVE_MD_MISSING` warning naming `FILE_TOO_LARGE` / `FILE_NOT_REGULAR` |
+| `active.md` | 256 KiB | `ACTIVE_MD_UNREADABLE` error naming `FILE_TOO_LARGE` → `INCOMPLETE`; a policy refusal (`FILE_NOT_REGULAR`, symlink, …) is `ACTIVE_MD_REJECTED` |
 | Markdown documents (protocols, ADRs) | 1 MiB | `DOC_FILE_UNREADABLE` error → `INCOMPLETE` |
 | `state.json` | 16 MiB | read: `StateFileError` / `STATE_UNREADABLE`; write: refused before the temp file is created |
 
 Over-limit is fail-closed — never truncated, compacted or auto-cleaned
 (growth policy: STATE-001, not started).
 
-**Unified safe read contract (SEC-001B.1-R, ADR-013).** One strict policy for
+**Unified safe read contract (SEC-001B.1-R, ADR-014).** One strict policy for
 every MONOLITH-managed file (`monolith.config.json`, `state.json`, `active.md`,
 the lock record, brief's protocol/ADR documents and everything `validate`
 reads); no permissive mode. It is the one `readBoundedFile` in `src/root/`: an
@@ -273,6 +273,23 @@ before `open` (`FILE_NOT_REGULAR`); `nlink == 1` (`FILE_HARDLINKED`);
 (`project` | `trusted-directory`); a plain path is refused. Symlinks elsewhere in
 the user's project are not inspected. The check is a path walk followed by an
 `open`: a concurrent directory swap is NOT defended against (SEC-001B.3).
+
+*Missing, refused and unreadable are three different things* (corrective pass
+SEC-001B.1-R, M-1). `brief` diagnostics that come from a read carry the typed
+`readCode` of the reader and are never told apart by message text. `active.md`:
+`ACTIVE_MD_MISSING` (warn, `FILE_MISSING` only — the brief stays `COMPLETE`),
+`ACTIVE_MD_REJECTED` (error, a `READ_SECURITY_CODES` refusal — the file exists
+and was not shown) and `ACTIVE_MD_UNREADABLE` (error, any other read failure);
+the last two make the brief `INCOMPLETE` and `--strict` exit 2. A refused file's
+content never appears in a diagnostic (label and code only). `state.json`
+(`STATE_NOT_INITIALIZED` info vs `STATE_UNREADABLE` error) and documents
+(`DOC_FILE_UNREADABLE` error) keep the same separation; a configured document
+directory that is a dangling symlink is `DOC_DIR_UNREADABLE`, not "not created
+yet". `StateReadTarget` paths are validated before any filesystem call: a
+relative or empty `stateDir`/`projectRoot` is `READ_BOUNDARY_INVALID`; in
+`trusted-directory` scope only `ENOENT` on the path itself means "no state yet"
+(a dangling link, a loop or a non-directory is refused). Ancestors of a
+trusted directory are, by that scope's definition, not inspected.
 
 `brief` adds a `WRITE_ARTIFACTS_PRESENT` **warning** when leftover write files
 are present in the instance directory (and `validate` prints a `Warning:` line);
@@ -321,7 +338,7 @@ present, inside the project, regular, non-empty, at most 1 MiB. A PASS does
 not verify JS syntax, the `PROJECT_DEFINITION` export (decision D-1: that
 check was removed), content safety, or executability. `monolith.config.json`,
 `project.definition.mjs` and `AGENTS.md` are read through the unified safe reader
-in `src/root/` (ADR-013: no symlink, single link, regular file, non-blocking open,
+in `src/root/` (ADR-014: no symlink, single link, regular file, non-blocking open,
 fstat identity/size check, capped read); a symlinked one is `FILE_SYMLINK`.
 Check-then-use races remain open (SEC-001B.3).
 
@@ -419,7 +436,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.1-R (unified safe read, ADR-013) IMPLEMENTED on `fix/sec-001b1r-unified-safe-read`, NOT merged, SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED on `fix/sec-001b2-safe-writes`, NOT merged; SEC-001B.3 OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.1-R (unified safe read, ADR-014) IMPLEMENTED on `fix/sec-001b1r-unified-safe-read`, NOT merged, SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED on `fix/sec-001b2-safe-writes`, NOT merged; SEC-001B.3 OPEN
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

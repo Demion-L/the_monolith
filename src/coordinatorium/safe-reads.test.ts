@@ -400,7 +400,7 @@ describe('monolith brief reads', () => {
     const r = cli(p.proj, 'brief');
     expect(r.timedOut).toBe(false);
     expect(r.out).not.toMatch(/INTERNAL-SECRET/);
-    expect(r.out).toMatch(/ACTIVE_MD_MISSING[^\n]*FILE_SYMLINK|FILE_SYMLINK/);
+    expect(r.out).toMatch(/ACTIVE_MD_REJECTED[^\n]*FILE_SYMLINK/);
   });
 
   it('Markdown documents: a FIFO named *.md never blocks; an over-limit .md is reported; boundary is read', () => {

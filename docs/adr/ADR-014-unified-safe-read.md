@@ -1,6 +1,6 @@
 ---
 type: adr
-id: ADR-013
+id: ADR-014
 title: Unified Safe Read Contract (SEC-001B.1-R)
 status: accepted
 date: 2026-10-23
@@ -10,7 +10,7 @@ related_adrs:
   - ADR-012
 ---
 
-# ADR-013 — Unified Safe Read Contract (SEC-001B.1-R)
+# ADR-014 — Unified Safe Read Contract (SEC-001B.1-R)
 
 ## Context
 
@@ -90,3 +90,17 @@ boundary.
   between the `lstat` walk and the `open` (SEC-001B.3). The identity check detects
   a swap of the *file* only. No native addon, `/proc/self/fd` or directory handle
   is used; SEC-001B.3 may replace the path walk without changing these codes.
+
+## Addendum 2026-10-23 — corrective pass (independent review notes)
+
+- **Numbering.** This record is ADR-014. ADR-013 is the Filesystem Threat Model and Dynamic TOCTOU
+  decision (SEC-001B.3) and is not changed here.
+- **M-1.** A refusal by this policy is not "missing". `brief` reports `active.md` as
+  `ACTIVE_MD_MISSING` (warn, `FILE_MISSING` only), `ACTIVE_MD_REJECTED` (error, a `READ_SECURITY_CODES`
+  code) or `ACTIVE_MD_UNREADABLE` (error, other); diagnostics carry the typed `readCode`, never the
+  file content. The two errors make the brief `INCOMPLETE` (`--strict` → exit 2).
+- **L-2.** A `StateReadTarget` is validated (absolute `stateDir`/`projectRoot`) before any filesystem
+  call; in `trusted-directory` scope only `ENOENT` on the path means "no state yet" (not
+  `existsSync`, which also hides dangling links and loops).
+- **L-1.** Lock release stays fail-closed and, in the cases listed in LOCK-RELEASE-001, silent. Making
+  it observable changes a public contract and is left to a separate decision (tech-debt.md).

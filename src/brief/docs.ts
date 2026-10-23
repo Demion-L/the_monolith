@@ -29,7 +29,7 @@
  * (SEC-001A); this check covers document directories only.
  */
 
-import { readdirSync, existsSync, realpathSync, type Dirent } from 'fs';
+import { readdirSync, existsSync, lstatSync, realpathSync, type Dirent } from 'fs';
 import { join, relative, isAbsolute, resolve } from 'path';
 import { readBoundedFileStable } from '../root/index.js';
 import { parseFrontmatter } from '../scriptorium/frontmatter.js';
@@ -80,9 +80,23 @@ function resolveContainedDir(targetDir: string, relDir: string, diagnostics: Bri
     return null;
   }
 
-  if (!existsSync(requestedAbs)) {
-    // Not an error: an ADR/protocol directory that hasn't been created yet is routine.
-    return requestedAbs;
+  // `lstat`, not `existsSync`: existsSync follows symlinks, so a DANGLING symlink would
+  // read as "absent" and be skipped silently (SEC-001B.1-R, M-1). Only ENOENT on the
+  // path itself means "not created yet"; a dangling link falls through to realpath below
+  // and is reported as DOC_DIR_UNREADABLE.
+  try {
+    lstatSync(requestedAbs);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Not an error: an ADR/protocol directory that hasn't been created yet is routine.
+      return requestedAbs;
+    }
+    diagnostics.push({
+      code: 'DOC_DIR_UNREADABLE',
+      severity: 'error',
+      message: `"${relDir}" could not be inspected: ${errMsg(err)}`,
+    });
+    return null;
   }
 
   let realRequested: string;
@@ -177,6 +191,7 @@ function parseDoc(absPath: string, targetDir: string, diagnostics: BriefDiagnost
       code: 'DOC_FILE_UNREADABLE',
       severity: 'error',
       message: `"${relative(targetDir, absPath)}" could not be read: ${read.code}: ${read.detail}`,
+      readCode: read.code,
     });
     return null;
   }

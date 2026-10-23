@@ -17,7 +17,7 @@
  *
  * This module only reads (lstat/realpath/open+read). It never creates
  * anything. Check-then-use (TOCTOU) races are NOT closed here; see ADR-009,
- * ADR-011 and ADR-013 (the unified safe read contract implemented below).
+ * ADR-011 and ADR-014 (the unified safe read contract implemented below).
  *
  * It also hosts the bounded project-file helpers (`checkProjectFile`,
  * `readProjectFile`, SEC-002) used for root-level files such as

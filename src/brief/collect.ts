@@ -18,6 +18,7 @@ import {
   resolveMonolithRootValue,
   checkContainedFile,
   readBoundedFileStable,
+  isReadSecurityViolation,
   findWriteArtifacts,
   describeWriteArtifacts,
   type ResolvedMonolithRoot,
@@ -86,6 +87,7 @@ async function readStateForBrief(
       code: 'STATE_NOT_INITIALIZED',
       severity: 'info',
       message: `${provenance.source} does not exist — no missions have ever been recorded.`,
+      readCode: 'FILE_MISSING',
     });
     return { summary: { status: 'absent', provenance }, state: createInitialState() };
   }
@@ -94,6 +96,7 @@ async function readStateForBrief(
       code: 'STATE_UNREADABLE',
       severity: 'error',
       message: `${provenance.source} exists but could not be read: ${read.code}: ${read.detail}`,
+      readCode: read.code,
     });
     return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
   }
@@ -231,14 +234,33 @@ function collectStory(
     true,
   );
   if (!read.ok) {
-    diagnostics.push({
-      code: 'ACTIVE_MD_MISSING',
-      severity: 'warn',
-      message:
-        read.code === 'FILE_MISSING'
-          ? `${relPath} does not exist.`
-          : `${relPath} exists but could not be read: ${read.code}: ${read.detail}`,
-    });
+    // SEC-001B.1-R (M-1): three different situations, three different diagnostics.
+    // Only a really absent file is "missing" (a warning: a project may have no story
+    // yet). A file the safe-read policy refuses, or one that cannot be read, is an
+    // error: the story exists but was not shown, so the brief is INCOMPLETE. The
+    // detail never carries file content — only the label and the typed code.
+    if (read.code === 'FILE_MISSING') {
+      diagnostics.push({
+        code: 'ACTIVE_MD_MISSING',
+        severity: 'warn',
+        message: `${relPath} does not exist.`,
+        readCode: read.code,
+      });
+    } else if (isReadSecurityViolation(read.code)) {
+      diagnostics.push({
+        code: 'ACTIVE_MD_REJECTED',
+        severity: 'error',
+        message: `${relPath} exists but was refused by the safe-read policy and not read: ${read.code}: ${read.detail}`,
+        readCode: read.code,
+      });
+    } else {
+      diagnostics.push({
+        code: 'ACTIVE_MD_UNREADABLE',
+        severity: 'error',
+        message: `${relPath} exists but could not be read: ${read.code}: ${read.detail}`,
+        readCode: read.code,
+      });
+    }
     return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
   }
   const content = 'content' in read ? read.content : '';

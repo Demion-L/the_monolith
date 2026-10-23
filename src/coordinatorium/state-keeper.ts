@@ -13,8 +13,8 @@
  * knowledge of what a "mission" is — that belongs to mission.ts.
  */
 
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { lstatSync, mkdirSync } from 'fs';
+import { isAbsolute, join } from 'path';
 import { acquireLock, type LockOptions } from './lock.js';
 import { StateCorruptedError, StateSchemaError, StateFileError } from './errors.js';
 import {
@@ -146,9 +146,14 @@ function resolveReadTarget(target: unknown, fn: string): { boundary: string; sta
     );
   if (typeof target !== 'object' || target === null) throw bad('got a non-object');
   const t = target as { scope?: unknown; projectRoot?: unknown; stateDir?: unknown };
+  // Every path is validated here, before any filesystem call: a path that cannot be
+  // trusted must never be probed (and so never "not found" -> empty state) (L-2).
+  // The cwd is never a boundary, so a relative path is refused, not resolved.
   if (typeof t.stateDir !== 'string' || t.stateDir.length === 0) throw bad('stateDir is missing');
+  if (!isAbsolute(t.stateDir)) throw bad('stateDir must be an absolute path');
   if (t.scope === 'project') {
     if (typeof t.projectRoot !== 'string' || t.projectRoot.length === 0) throw bad('projectRoot is missing');
+    if (!isAbsolute(t.projectRoot)) throw bad('projectRoot must be an absolute path');
     return { boundary: t.projectRoot, stateDir: t.stateDir };
   }
   if (t.scope === 'trusted-directory') return { boundary: t.stateDir, stateDir: t.stateDir };
@@ -329,8 +334,17 @@ export async function readState(target: StateReadTarget): Promise<Coordinatorium
   const filePath = stateFilePath(stateDir);
   // A trusted directory that does not exist holds no state (it is the boundary,
   // so it cannot be walked to). In `project` scope a missing directory is
-  // reported by the reader itself as FILE_MISSING.
-  if (target.scope === 'trusted-directory' && !existsSync(stateDir)) return createInitialState();
+  // reported by the reader itself as FILE_MISSING. Only ENOENT on the path itself
+  // counts as "does not exist": `existsSync` would also say so for a dangling
+  // symlink or a loop, and an unusable boundary is not an empty state — those fall
+  // through to the reader, which refuses them (READ_BOUNDARY_INVALID) (L-2).
+  if (target.scope === 'trusted-directory') {
+    try {
+      lstatSync(stateDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return createInitialState();
+    }
+  }
   // Unified safe read (SEC-001B.1-R): explicit boundary, no symlink or hardlink,
   // non-blocking (a FIFO at this path cannot hang us), capped at MAX_STATE_BYTES.
   const read = readBoundedFileStable(

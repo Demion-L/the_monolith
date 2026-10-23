@@ -446,7 +446,7 @@ describe('managed consumers use the same policy', () => {
     const model = await collect(s.project);
     expect(JSON.stringify(model)).not.toContain(SECRET);
     expect(model.story.excerpt).toBeNull();
-    expect(model.diagnostics.some((d) => d.code === 'ACTIVE_MD_MISSING' && d.message.includes('FILE_SYMLINK'))).toBe(true);
+    expect(model.diagnostics.some((d) => d.code === 'ACTIVE_MD_REJECTED' && d.severity === 'error' && d.readCode === 'FILE_SYMLINK')).toBe(true);
   });
 
   it('brief (collect): state.json symlinked to .env is unreadable, never parsed', async () => {

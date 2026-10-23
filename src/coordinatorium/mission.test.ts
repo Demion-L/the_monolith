@@ -44,7 +44,7 @@ describe('startMission', () => {
     const dir = makeTempDir();
     await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's1' });
     await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's2' });
-    const all = await listMissions(dir);
+    const all = await listMissions(trustedDirectoryTarget(dir));
     expect(all.filter((m) => m.status === 'in_progress')).toHaveLength(2);
   });
 
@@ -58,7 +58,7 @@ describe('startMission', () => {
 describe('listMissions', () => {
   it('returns an empty list for a project with no missions', async () => {
     const dir = makeTempDir();
-    expect(await listMissions(dir)).toEqual([]);
+    expect(await listMissions(trustedDirectoryTarget(dir))).toEqual([]);
   });
 
   it('distinguishes active from finished missions', async () => {
@@ -67,7 +67,7 @@ describe('listMissions', () => {
     const b = await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's' });
     await finishMission(trustedDirectoryTarget(dir), a.id, { result: 'completed' });
 
-    const all = await listMissions(dir);
+    const all = await listMissions(trustedDirectoryTarget(dir));
     const active = all.filter((m) => m.status === 'in_progress');
     const finished = all.filter((m) => m.status !== 'in_progress');
     expect(active.map((m) => m.id)).toEqual([b.id]);
@@ -79,13 +79,13 @@ describe('getMission', () => {
   it('returns full mission details', async () => {
     const dir = makeTempDir();
     const started = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
-    const fetched = await getMission(dir, started.id);
+    const fetched = await getMission(trustedDirectoryTarget(dir), started.id);
     expect(fetched).toEqual(started);
   });
 
   it('throws MissionNotFoundError for an unknown id', async () => {
     const dir = makeTempDir();
-    await expect(getMission(dir, 'MIS-9999')).rejects.toBeInstanceOf(MissionNotFoundError);
+    await expect(getMission(trustedDirectoryTarget(dir), 'MIS-9999')).rejects.toBeInstanceOf(MissionNotFoundError);
   });
 });
 

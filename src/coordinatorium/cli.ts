@@ -9,20 +9,17 @@
 
 import { resolveMonolithRoot, assertContainedFile, reportWriteWarning, SafeWriteError } from '../root/index.js';
 import { LockCreationError } from './errors.js';
-import { STATE_FILE_NAME, projectTarget, type StateWriteTarget } from './state-keeper.js';
+import { STATE_FILE_NAME, projectTarget, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
 import type { Mission, MissionResult, Checkpoint } from './types.js';
 
-// Resolves the instance directory through the shared containment resolver
-// (src/root) and vets the fixed state files, so a symlinked state.json,
-// state.json.lock, or intermediate directory cannot redirect reads/writes
-// outside the project. Throws RootContainmentError (fail closed).
-function stateDirFor(targetDir: string): string {
+// Reads use the same PROJECT scope as writes (SEC-001B.1-R): the project root is
+// the explicit boundary, so a symlink anywhere below it is refused.
+function readTargetFor(targetDir: string): StateReadTarget {
   const root = resolveMonolithRoot(targetDir);
   assertContainedFile(root, STATE_FILE_NAME);
-  assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
-  return root.rootAbs;
+  return projectTarget(root.projectRoot, root.rootAbs);
 }
 
 // Writes always use PROJECT scope (ADR-012): the project root is the boundary,
@@ -126,7 +123,7 @@ export async function runMissionStart(args: string[], targetDir = process.cwd())
 }
 
 export async function runMissionList(_args: string[], targetDir = process.cwd()): Promise<void> {
-  const missions = await listMissions(stateDirFor(targetDir));
+  const missions = await listMissions(readTargetFor(targetDir));
   if (missions.length === 0) {
     console.log('No missions.');
     return;
@@ -154,7 +151,7 @@ export async function runMissionShow(args: string[], targetDir = process.cwd()):
   if (!id) {
     throw new Error('Usage: monolith mission show <id>');
   }
-  const mission = await getMission(stateDirFor(targetDir), id);
+  const mission = await getMission(readTargetFor(targetDir), id);
   console.log(formatMission(mission));
 }
 
@@ -197,7 +194,7 @@ export async function runMissionCheckpoints(args: string[], targetDir = process.
   if (!missionId) {
     throw new Error('Usage: monolith mission checkpoints <missionId>');
   }
-  const checkpoints = await listCheckpoints(stateDirFor(targetDir), missionId);
+  const checkpoints = await listCheckpoints(readTargetFor(targetDir), missionId);
   if (checkpoints.length === 0) {
     console.log(`No checkpoints for mission ${missionId}.`);
     return;

@@ -3,7 +3,7 @@ import { existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, r
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { acquireLock } from './lock.js';
-import { LockCreationError, LockTimeoutError } from './errors.js';
+import { LockCreationError, LockTimeoutError, LockUnsafeError } from './errors.js';
 import { realFsOps, type FsOps } from '../root/safe-write.js';
 
 // SEC-001B.2: lock staging is created through the shared safe-write
@@ -66,9 +66,9 @@ describe('lock file mode', () => {
 });
 
 describe('symlinks and special files at the lock path', () => {
-  it('a dangling symlink at the lock path is never written through: the acquire times out and the link is untouched', async () => {
+  it('a dangling symlink at the lock path is never written through: refused at once as unsafe (SEC-001B.1-R) and left untouched', async () => {
     symlinkSync(join(outside, 'victim'), lockPath);
-    await expect(acquireLock(lockPath, { timeoutMs: 150, retryDelayMs: 10 })).rejects.toBeInstanceOf(LockTimeoutError);
+    await expect(acquireLock(lockPath, { timeoutMs: 150, retryDelayMs: 10 })).rejects.toBeInstanceOf(LockUnsafeError);
     expect(existsSync(join(outside, 'victim'))).toBe(false);
     expect(lstatSync(lockPath).isSymbolicLink()).toBe(true);
     expect(staging()).toEqual([]);
@@ -121,7 +121,12 @@ describe('publication states of the publish step', () => {
     expect(staging()).toEqual([]);
   });
 
-  it('UNKNOWN and undecidable by identity, but the ownership record at the lock path is ours: acquired, no second attempt', async () => {
+  // SEC-001B.1-R: the ownership record is read under the unified policy, which refuses a
+  // file with two links. Right after a `link()` whose outcome is unknown the staging name still
+  // exists (it cannot be removed either: the identity check cannot look), so the record cannot be
+  // confirmed. The outcome is the honest one — UNKNOWN, no second attempt, nothing removed —
+  // instead of "acquired".
+  it('UNKNOWN and undecidable by identity, with the staging name still linked: stays UNKNOWN, no second attempt, nothing removed', async () => {
     let links = 0;
     let linked = false;
     const ops: Partial<FsOps> = {
@@ -136,11 +141,13 @@ describe('publication states of the publish step', () => {
         return realFsOps.lstatSync(p, o as never);
       }) as unknown as FsOps['lstatSync'],
     };
-    const release = await acquireLock(lockPath, { timeoutMs: 1000 }, { fsOps: ops });
+    const err = (await caught(acquireLock(lockPath, { timeoutMs: 1000 }, { fsOps: ops }))) as LockCreationError;
+    expect(err).toBeInstanceOf(LockCreationError);
+    expect(err.publication).toBe('UNKNOWN');
+    expect(err.cleanedUp).toBe(false);
     expect(links).toBe(1);
     expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`^${process.pid}:`));
-    release();
-    expect(existsSync(lockPath)).toBe(false);
+    expect(staging().length).toBe(1);
   });
 
   it('UNKNOWN that nothing can decide: fails with publication UNKNOWN, never retries, keeps the staging file', async () => {

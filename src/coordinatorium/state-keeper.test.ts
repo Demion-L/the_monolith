@@ -33,7 +33,7 @@ afterEach(() => {
 describe('readState', () => {
   it('returns a fresh initial state when state.json does not exist, without creating it', async () => {
     const dir = makeTempDir();
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state).toEqual(createInitialState());
     expect(readdirSync(dir)).toEqual([]); // no side-effect write
   });
@@ -41,7 +41,7 @@ describe('readState', () => {
   it('throws StateCorruptedError on malformed JSON and never overwrites it', async () => {
     const dir = makeTempDir();
     writeFileSync(stateFilePath(dir), '{ this is not json', 'utf8');
-    await expect(readState(dir)).rejects.toBeInstanceOf(StateCorruptedError);
+    await expect(readState(trustedDirectoryTarget(dir))).rejects.toBeInstanceOf(StateCorruptedError);
     // File must be untouched.
     expect(readFileSync(stateFilePath(dir), 'utf8')).toBe('{ this is not json');
   });
@@ -49,7 +49,7 @@ describe('readState', () => {
   it('throws StateSchemaError on an unsupported schemaVersion', async () => {
     const dir = makeTempDir();
     writeFileSync(stateFilePath(dir), JSON.stringify({ ...createInitialState(), schemaVersion: 99 }), 'utf8');
-    await expect(readState(dir)).rejects.toBeInstanceOf(StateSchemaError);
+    await expect(readState(trustedDirectoryTarget(dir))).rejects.toBeInstanceOf(StateSchemaError);
   });
 });
 
@@ -121,7 +121,7 @@ describe('validateState', () => {
       tactical: { missions: {} },
     };
     writeFileSync(stateFilePath(dir), JSON.stringify(legacy, null, 2), 'utf8');
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.tactical.checkpoints).toEqual({});
   });
 
@@ -241,7 +241,7 @@ describe('mutateState', () => {
       }),
     ).rejects.toThrow('boom');
 
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.revision).toBe(1);
     expect(state.tactical.missions['MIS-0001'].title).toBe('kept');
   });
@@ -289,7 +289,7 @@ describe('mutateState', () => {
     }
 
     expect(readFileSync(stateFilePath(dir), 'utf8')).toBe(before);
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.tactical.missions['MIS-0002']).toBeUndefined();
   });
 
@@ -304,7 +304,7 @@ describe('mutateState', () => {
         startedAt: 'a', updatedAt: 'a', summary: null,
       };
     });
-    const state = await readState(dir);
+    const state = await readState(trustedDirectoryTarget(dir));
     expect(state.strategic.systems['core']).toEqual({ note: 'reserved for Strategic Coordinatorium' });
     expect(state.revision).toBe(2);
   });
@@ -409,7 +409,7 @@ describe('concurrency (independent processes)', () => {
       const ids = missions.map((m) => m.id);
       expect(new Set(ids).size).toBe(N); // all unique — no collisions
 
-      const state = await readState(stateDir);
+      const state = await readState(trustedDirectoryTarget(stateDir));
       expect(Object.keys(state.tactical.missions)).toHaveLength(N);
       expect(state.revision).toBe(N); // no lost updates
     },

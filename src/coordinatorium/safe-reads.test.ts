@@ -10,6 +10,7 @@ import {
   existsSync,
   readdirSync,
   statSync,
+  lstatSync,
 } from 'fs';
 import { execFileSync, spawnSync } from 'child_process';
 import { tmpdir } from 'os';
@@ -144,7 +145,7 @@ describe('state.json reads (state-keeper)', () => {
   it('readState rejects an over-limit state.json with FILE_TOO_LARGE before reading it', async () => {
     const p = project();
     sparse(p.state, MAX_STATE_BYTES + 1);
-    const err = await readState(p.mon).catch((e) => e);
+    const err = await readState(trustedDirectoryTarget(p.mon)).catch((e) => e);
     expect(err).toBeInstanceOf(StateFileError);
     expect((err as StateFileError).fileCode).toBe('FILE_TOO_LARGE');
   });
@@ -157,21 +158,21 @@ describe('state.json reads (state-keeper)', () => {
     const text = JSON.stringify({ ...state, strategic: { systems: { pad } } }, null, 2) + '\n';
     expect(Buffer.byteLength(text, 'utf8')).toBe(MAX_STATE_BYTES);
     writeFileSync(p.state, text);
-    const read = await readState(p.mon);
+    const read = await readState(trustedDirectoryTarget(p.mon));
     expect((read.strategic.systems as { pad: string }).pad.length).toBe(pad.length);
   });
 
   it('a corrupted state.json is still StateCorruptedError (not masked as empty)', async () => {
     const p = project();
     writeFileSync(p.state, '{ not json');
-    await expect(readState(p.mon)).rejects.toMatchObject({ code: 'STATE_CORRUPTED' });
+    await expect(readState(trustedDirectoryTarget(p.mon))).rejects.toMatchObject({ code: 'STATE_CORRUPTED' });
     writeFileSync(p.state, '');
-    await expect(readState(p.mon)).rejects.toMatchObject({ code: 'STATE_CORRUPTED' });
+    await expect(readState(trustedDirectoryTarget(p.mon))).rejects.toMatchObject({ code: 'STATE_CORRUPTED' });
   });
 
   it('an absent state.json is still the initial state, and is not created by a read', async () => {
     const p = project();
-    expect((await readState(p.mon)).revision).toBe(0);
+    expect((await readState(trustedDirectoryTarget(p.mon))).revision).toBe(0);
     expect(existsSync(p.state)).toBe(false);
   });
 
@@ -193,13 +194,14 @@ describe('state.json reads (state-keeper)', () => {
     expect(listing(dangling.outside)).toEqual([]);
   });
 
-  it('an internal symlink that stays inside the project keeps working (existing policy)', () => {
+  it('an internal symlink that stays inside the project is refused too (unified read policy, SEC-001B.1-R)', () => {
     const p = project();
     writeFileSync(join(p.mon, 'real-state.json'), JSON.stringify(createInitialState()));
     symlinkSync(join(p.mon, 'real-state.json'), p.state);
     const r = cli(p.proj, 'mission', 'list');
     expect(r.timedOut).toBe(false);
-    expect(r.code).toBe(0);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/FILE_SYMLINK/);
   });
 });
 
@@ -316,9 +318,11 @@ describe('lock reads', () => {
     const p = project();
     symlinkSync(join(p.outside, 'nope'), p.lock);
     const err = await acquireLock(p.lock, { timeoutMs: 300, retryDelayMs: 20 }).catch((e) => e);
-    // a dangling link reads as "absent", the exclusive create then fails EEXIST
-    // on the link itself: waiting out the timeout, never replacing it.
-    expect(err).toBeInstanceOf(LockTimeoutError);
+    // SEC-001B.1-R: a symlink is a structural fault — refused at once (no waiting
+    // out a timeout), never followed, replaced or deleted.
+    expect(err).toBeInstanceOf(LockUnsafeError);
+    expect((err as LockUnsafeError).fileCode).toBe('FILE_SYMLINK');
+    expect(lstatSync(p.lock).isSymbolicLink()).toBe(true);
     expect(listing(p.outside)).toEqual([]);
   });
 });
@@ -389,11 +393,14 @@ describe('monolith brief reads', () => {
     }
   });
 
-  it('an internal active.md symlink is still honoured', () => {
+  it('an internal active.md symlink is not read either (unified read policy, SEC-001B.1-R)', () => {
     const p = project();
-    writeFileSync(join(p.mon, 'real-active.md'), '## Current Story\n\nINTERNAL-OK\n');
+    writeFileSync(join(p.mon, 'real-active.md'), '## Current Story\n\nINTERNAL-SECRET\n');
     symlinkSync(join(p.mon, 'real-active.md'), p.active);
-    expect(cli(p.proj, 'brief').out).toMatch(/INTERNAL-OK/);
+    const r = cli(p.proj, 'brief');
+    expect(r.timedOut).toBe(false);
+    expect(r.out).not.toMatch(/INTERNAL-SECRET/);
+    expect(r.out).toMatch(/ACTIVE_MD_REJECTED[^\n]*FILE_SYMLINK/);
   });
 
   it('Markdown documents: a FIFO named *.md never blocks; an over-limit .md is reported; boundary is read', () => {

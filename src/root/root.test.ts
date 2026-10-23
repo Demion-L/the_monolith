@@ -529,12 +529,13 @@ describe('corrupted monolith.config.json — fail closed on every entry point', 
     expect(snapshotTree(project)).toEqual(before);
   });
 
-  it('a config symlinked to a valid in-project file is still honored', async () => {
+  it('a config symlinked to a valid in-project file is refused (unified read policy, SEC-001B.1-R) — nothing falls back', async () => {
     silence();
     const { project } = sandbox();
     writeFileSync(join(project, 'real.json'), JSON.stringify({ monolithRoot: 'ns/root' }));
     symlinkSync(join(project, 'real.json'), join(project, 'monolith.config.json'));
-    await runMissionStart(['--title', 't', '--system', 's'], project);
-    expect(existsSync(join(project, 'ns/root/state.json'))).toBe(true);
+    await expect(runMissionStart(['--title', 't', '--system', 's'], project)).rejects.toThrow(/FILE_SYMLINK/);
+    expect(existsSync(join(project, 'ns/root/state.json'))).toBe(false);
+    expect(existsSync(join(project, '.monolith/state.json'))).toBe(false);
   });
 });

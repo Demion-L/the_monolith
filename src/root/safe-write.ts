@@ -365,6 +365,15 @@ export class ParentRef {
   }
 }
 
+/**
+ * Absolute path of the boundary a verified parent lies below, for the READ side
+ * of the same trust decision (SEC-001B.1-R): a lock file is read under the
+ * boundary its staging files are written under. Not a handle; a path.
+ */
+export function boundaryPathOf(p: ParentRef): string {
+  return dataOf(pdata(p).boundary).lexical;
+}
+
 function pdata(p: ParentRef): ParentData {
   const d = parentData.get(p);
   if (!d) throw new TypeError('not a ParentRef');

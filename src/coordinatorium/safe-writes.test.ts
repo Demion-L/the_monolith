@@ -85,12 +85,12 @@ describe('state.json permissions', () => {
     await mutateState(projectTarget(project, mon), bump);
     await mutateState(projectTarget(project, mon), bump);
     expect(modeOf(stateFilePath(mon))).toBe(0o640);
-    expect((await readState(mon)).revision).toBe(3);
+    expect((await readState(trustedDirectoryTarget(mon))).revision).toBe(3);
   });
 
   it('the file stays readable by its owner at 0600 and leaves no temporary residue', async () => {
     await startMission(projectTarget(project, mon), { title: 't', system: 's' });
-    expect((await readState(mon)).tactical.missions['MIS-0001']?.title).toBe('t');
+    expect((await readState(trustedDirectoryTarget(mon))).tactical.missions['MIS-0001']?.title).toBe('t');
     noResidue();
   });
 });
@@ -100,7 +100,7 @@ describe('destinations that must not be replaced', () => {
     ['a symlink to a valid state file outside the project', true, 'WRITE_TARGET_SYMLINK'],
     ['a dangling symlink', false, undefined],
   ])('%s is refused; nothing outside is created or changed; the lock is released', async (_name, live, code) => {
-    const initial = JSON.stringify(await readState(mon), null, 2);
+    const initial = JSON.stringify(await readState(trustedDirectoryTarget(mon)), null, 2);
     if (live) {
       writeFileSync(join(outside, 'real'), initial);
       symlinkSync(join(outside, 'real'), stateFilePath(mon));
@@ -123,10 +123,10 @@ describe('destinations that must not be replaced', () => {
     noResidue();
   });
 
-  it('an in-project symlink is refused for writes (W-SYM) while reads keep working', async () => {
-    writeFileSync(join(project, 'real-state.json'), JSON.stringify((await readState(mon)), null, 2));
+  it('an in-project symlink is refused for writes (W-SYM) and for reads (SEC-001B.1-R)', async () => {
+    writeFileSync(join(project, 'real-state.json'), JSON.stringify((await readState(trustedDirectoryTarget(mon))), null, 2));
     symlinkSync(join(project, 'real-state.json'), stateFilePath(mon));
-    expect((await readState(mon)).revision).toBe(0);
+    await expect(readState(trustedDirectoryTarget(mon))).rejects.toMatchObject({ fileCode: 'FILE_SYMLINK' });
     const err = await failure(mutateState(projectTarget(project, mon), bump));
     expect(err).toBeInstanceOf(SafeWriteError);
     expect((err as SafeWriteError).code).toBe('WRITE_TARGET_SYMLINK');

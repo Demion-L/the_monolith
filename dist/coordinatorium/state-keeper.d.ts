@@ -54,6 +54,19 @@ export declare function projectTarget(projectRoot: string, stateDir: string, onW
 /** Trusted-directory write target: `stateDir` and its ancestors are asserted trusted by the caller. */
 export declare function trustedDirectoryTarget(stateDir: string, onWarning?: (warning: WriteWarning) => void): StateWriteTarget;
 /**
+ * Where a read may look (SEC-001B.1-R). Same shape and same scopes as a write
+ * target, minus `onWarning`; there is no default and no plain-string form. A
+ * `StateWriteTarget` is accepted as is.
+ */
+export type StateReadTarget = {
+    scope: 'project';
+    projectRoot: string;
+    stateDir: string;
+} | {
+    scope: 'trusted-directory';
+    stateDir: string;
+};
+/**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
  * match a supported schema version — this function never "fixes" or
@@ -86,7 +99,7 @@ export declare function validateState(raw: unknown): CoordinatoriumState;
  * have the side effect of creating state.json. Corrupted JSON or an
  * unsupported schema throws rather than being silently replaced.
  */
-export declare function readState(stateDir: string): Promise<CoordinatoriumState>;
+export declare function readState(target: StateReadTarget): Promise<CoordinatoriumState>;
 /**
  * Read-modify-write under an exclusive cross-process lock. `mutator`
  * receives a deep-cloned draft of the current state and an `applyResult`

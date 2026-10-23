@@ -6,7 +6,7 @@
  * state-keeper.ts owns persistence and never knows what a mission is.
  */
 
-import { mutateState, readState, type StateWriteTarget } from './state-keeper.js';
+import { mutateState, readState, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
 import type { CoordinatoriumState, Mission, MissionResult } from './types.js';
 
@@ -63,13 +63,13 @@ export async function startMission(target: StateWriteTarget, input: StartMission
   return result;
 }
 
-export async function listMissions(stateDir: string): Promise<Mission[]> {
-  const state = await readState(stateDir);
+export async function listMissions(target: StateReadTarget): Promise<Mission[]> {
+  const state = await readState(target);
   return Object.values(state.tactical.missions).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }
 
-export async function getMission(stateDir: string, id: string): Promise<Mission> {
-  const state = await readState(stateDir);
+export async function getMission(target: StateReadTarget, id: string): Promise<Mission> {
+  const state = await readState(target);
   const mission = state.tactical.missions[id];
   if (!mission) throw new MissionNotFoundError(id);
   return mission;

@@ -105,8 +105,8 @@ export async function createCheckpoint(target, missionId, input) {
  * "no missions yet" behavior). Remains available for a finished mission —
  * only *creation* is gated on mission status.
  */
-export async function listCheckpoints(stateDir, missionId) {
-    const state = await readState(stateDir);
+export async function listCheckpoints(target, missionId) {
+    const state = await readState(target);
     return Object.values(state.tactical.checkpoints)
         .filter((c) => c.missionId === missionId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
@@ -115,8 +115,8 @@ export async function listCheckpoints(stateDir, missionId) {
  * Fetch a single checkpoint by id, regardless of its mission's current
  * status — reading history never stops working for a finished mission.
  */
-export async function getCheckpoint(stateDir, id) {
-    const state = await readState(stateDir);
+export async function getCheckpoint(target, id) {
+    const state = await readState(target);
     const checkpoint = state.tactical.checkpoints[id];
     if (!checkpoint)
         throw new CheckpointNotFoundError(id);

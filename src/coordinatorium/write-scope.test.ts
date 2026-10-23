@@ -83,7 +83,7 @@ describe('explicit write scope is mandatory', () => {
   });
 
   it('read functions still take a plain directory (they never write)', async () => {
-    expect(await listMissions(join(project, 'absent'))).toEqual([]);
+    expect(await listMissions(trustedDirectoryTarget(join(project, 'absent')))).toEqual([]);
     expect(existsSync(join(project, 'absent'))).toBe(false);
   });
 });
@@ -93,7 +93,7 @@ describe('project scope', () => {
     const stateDir = join(project, '.monolith');
     const m = await startMission(projectTarget(project, stateDir), { title: 't', system: 's' });
     expect(m.id).toBe('MIS-0001');
-    expect((await readState(stateDir)).tactical.missions['MIS-0001']).toBeDefined();
+    expect((await readState(trustedDirectoryTarget(stateDir))).tactical.missions['MIS-0001']).toBeDefined();
   });
 
   it('refuses a state directory outside the project root without creating anything', async () => {
@@ -209,7 +209,7 @@ describe('onWarning runs outside the critical section (review F-04)', () => {
     expect(out.state.revision).toBe(1);
     expect(out.result).toBe(0);
     expect(existsSync(`${stateFilePath(dir)}.lock`)).toBe(false);
-    expect((await readState(dir)).revision).toBe(1);
+    expect((await readState(trustedDirectoryTarget(dir))).revision).toBe(1);
     // the next writer is not blocked
     expect((await mutateState(trustedDirectoryTarget(dir), () => 2, { timeoutMs: 500 })).result).toBe(2);
   });

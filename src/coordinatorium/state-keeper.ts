@@ -13,8 +13,8 @@
  * knowledge of what a "mission" is — that belongs to mission.ts.
  */
 
-import { mkdirSync } from 'fs';
-import { join } from 'path';
+import { lstatSync, mkdirSync } from 'fs';
+import { isAbsolute, join } from 'path';
 import { acquireLock, type LockOptions } from './lock.js';
 import { StateCorruptedError, StateSchemaError, StateFileError } from './errors.js';
 import {
@@ -125,6 +125,39 @@ function resolveWriteTarget(target: unknown, fn: string): ResolvedTarget {
     return { boundary: trustedDirectoryBoundary(t.stateDir), stateDir: t.stateDir, onWarning: t.onWarning };
   }
   throw scopeRequired(fn, t.stateDir);
+}
+
+/**
+ * Where a read may look (SEC-001B.1-R). Same shape and same scopes as a write
+ * target, minus `onWarning`; there is no default and no plain-string form. A
+ * `StateWriteTarget` is accepted as is.
+ */
+export type StateReadTarget =
+  | { scope: 'project'; projectRoot: string; stateDir: string }
+  | { scope: 'trusted-directory'; stateDir: string };
+
+/** Validates the read scope; returns the boundary directory. Throws StateFileError, touches nothing. */
+function resolveReadTarget(target: unknown, fn: string): { boundary: string; stateDir: string } {
+  const bad = (why: string): StateFileError =>
+    new StateFileError(
+      'READ_BOUNDARY_INVALID',
+      `${fn} requires an explicit read scope (${why}). Use { scope: 'project', projectRoot, stateDir } for a project, ` +
+        `or { scope: 'trusted-directory', stateDir } when stateDir is trusted (SEC-001B.1-R).`,
+    );
+  if (typeof target !== 'object' || target === null) throw bad('got a non-object');
+  const t = target as { scope?: unknown; projectRoot?: unknown; stateDir?: unknown };
+  // Every path is validated here, before any filesystem call: a path that cannot be
+  // trusted must never be probed (and so never "not found" -> empty state) (L-2).
+  // The cwd is never a boundary, so a relative path is refused, not resolved.
+  if (typeof t.stateDir !== 'string' || t.stateDir.length === 0) throw bad('stateDir is missing');
+  if (!isAbsolute(t.stateDir)) throw bad('stateDir must be an absolute path');
+  if (t.scope === 'project') {
+    if (typeof t.projectRoot !== 'string' || t.projectRoot.length === 0) throw bad('projectRoot is missing');
+    if (!isAbsolute(t.projectRoot)) throw bad('projectRoot must be an absolute path');
+    return { boundary: t.projectRoot, stateDir: t.stateDir };
+  }
+  if (t.scope === 'trusted-directory') return { boundary: t.stateDir, stateDir: t.stateDir };
+  throw bad('unknown scope');
 }
 
 const MISSION_STATUSES: readonly MissionStatus[] = ['in_progress', 'completed', 'failed', 'cancelled'];
@@ -296,11 +329,30 @@ export function validateState(raw: unknown): CoordinatoriumState {
  * have the side effect of creating state.json. Corrupted JSON or an
  * unsupported schema throws rather than being silently replaced.
  */
-export async function readState(stateDir: string): Promise<CoordinatoriumState> {
+export async function readState(target: StateReadTarget): Promise<CoordinatoriumState> {
+  const { boundary, stateDir } = resolveReadTarget(target, 'readState');
   const filePath = stateFilePath(stateDir);
-  // Bounded, non-blocking read (a FIFO at this path cannot hang us); the
-  // reader is synchronous and capped at MAX_STATE_BYTES.
-  const read = readBoundedFileStable(filePath, `"${filePath}"`, { maxBytes: MAX_STATE_BYTES, allowEmpty: true }, true);
+  // A trusted directory that does not exist holds no state (it is the boundary,
+  // so it cannot be walked to). In `project` scope a missing directory is
+  // reported by the reader itself as FILE_MISSING. Only ENOENT on the path itself
+  // counts as "does not exist": `existsSync` would also say so for a dangling
+  // symlink or a loop, and an unusable boundary is not an empty state — those fall
+  // through to the reader, which refuses them (READ_BOUNDARY_INVALID) (L-2).
+  if (target.scope === 'trusted-directory') {
+    try {
+      lstatSync(stateDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return createInitialState();
+    }
+  }
+  // Unified safe read (SEC-001B.1-R): explicit boundary, no symlink or hardlink,
+  // non-blocking (a FIFO at this path cannot hang us), capped at MAX_STATE_BYTES.
+  const read = readBoundedFileStable(
+    filePath,
+    `"${filePath}"`,
+    { boundary, maxBytes: MAX_STATE_BYTES, allowEmpty: true },
+    true,
+  );
   if (!read.ok) {
     if (read.code === 'FILE_MISSING') return createInitialState();
     throw new StateFileError(read.code, read.detail);
@@ -314,6 +366,37 @@ export async function readState(stateDir: string): Promise<CoordinatoriumState> 
     throw new StateCorruptedError(`"${filePath}" is not valid JSON: ${msg}`);
   }
   return validateState(parsed);
+}
+
+/**
+ * The read that precedes a write. A symlink or hardlink at the destination is
+ * reported with the write-side typed error and `NOT_PUBLISHED`, exactly as before
+ * the unified read (SEC-001B.2 compat). Every other read failure — a FIFO or
+ * special file included (SEC-001B.1) — stays the StateFileError of the read.
+ */
+async function readStateForWrite(target: StateWriteTarget, stateDir: string): Promise<CoordinatoriumState> {
+  try {
+    return await readState(target);
+  } catch (err) {
+    if (err instanceof StateFileError) {
+      const code =
+        err.fileCode === 'FILE_SYMLINK'
+          ? 'WRITE_TARGET_SYMLINK'
+          : err.fileCode === 'FILE_HARDLINKED'
+            ? 'WRITE_TARGET_HARDLINKED'
+            : null;
+      if (code !== null) {
+        throw new SafeWriteError(`${err.message} (refusing to replace it)`, {
+          code,
+          phase: 'validate',
+          publication: 'NOT_PUBLISHED',
+          path: stateFilePath(stateDir),
+          cause: err,
+        });
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -381,7 +464,7 @@ export async function mutateState<T>(
   let draft: CoordinatoriumState;
   let result: T;
   try {
-    const current = await readState(stateDir);
+    const current = await readStateForWrite(target, stateDir);
     draft = structuredClone(current);
     result = mutator(draft);
     draft.revision = current.revision + 1;

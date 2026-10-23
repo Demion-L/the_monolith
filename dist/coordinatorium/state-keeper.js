@@ -304,7 +304,7 @@ export async function mutateState(target, mutator, lockOptions) {
     // boundary — is the "safe, explicit initialization path" for that case; it
     // never touches a state.json that already exists.
     const parent = openParent(boundary, stateDir, { create: true });
-    const release = await acquireLock(lockFilePath(stateDir), lockOptions);
+    const release = await acquireLock(lockFilePath(stateDir), lockOptions, {}, parent);
     try {
         const current = await readState(stateDir);
         const draft = structuredClone(current);

@@ -437,4 +437,5 @@ export type {
   PlatformCaps,
   TempFileInfo,
   LinkPublishResult,
+  FsOps,
 } from './safe-write.js';

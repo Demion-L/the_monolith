@@ -109,6 +109,9 @@ export interface LockCreationErrorParams {
   cleanedUp: boolean;
   /** The original fs error (e.g. ENOSPC/EIO), or whatever else was thrown. */
   cause: unknown;
+  /** `UNKNOWN`: the publish step may or may not have created the lock (SEC-001B.2).
+   * Default `NOT_PUBLISHED`. */
+  publication?: 'NOT_PUBLISHED' | 'UNKNOWN';
 }
 
 /**
@@ -126,6 +129,7 @@ export class LockCreationError extends CoordinatoriumError {
   readonly nonce: string;
   readonly timestamp: string;
   readonly cleanedUp: boolean;
+  readonly publication: 'NOT_PUBLISHED' | 'UNKNOWN';
   readonly cause: unknown;
   readonly causeCode: string | undefined;
 
@@ -137,7 +141,10 @@ export class LockCreationError extends CoordinatoriumError {
       'LOCK_CREATION_FAILED',
       `Failed to create lock at "${params.lockPath}" (phase: ${params.phase}` +
         `${causeCode ? `, cause: ${causeCode}` : ''}): ${causeMessage} ` +
-        `[pid=${params.pid} nonce=${params.nonce} at=${timestamp} cleanedUp=${params.cleanedUp}]`,
+        `[pid=${params.pid} nonce=${params.nonce} at=${timestamp} cleanedUp=${params.cleanedUp}]` +
+        (params.publication === 'UNKNOWN'
+          ? ` Whether the lock was created is UNKNOWN: inspect "${params.lockPath}" before retrying; nothing was retried or removed.`
+          : ''),
     );
     this.name = 'LockCreationError';
     this.lockPath = params.lockPath;
@@ -146,6 +153,7 @@ export class LockCreationError extends CoordinatoriumError {
     this.nonce = params.nonce;
     this.timestamp = timestamp;
     this.cleanedUp = params.cleanedUp;
+    this.publication = params.publication ?? 'NOT_PUBLISHED';
     this.cause = params.cause;
     this.causeCode = causeCode;
   }

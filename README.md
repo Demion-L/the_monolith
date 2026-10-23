@@ -101,7 +101,7 @@ supported with limitations; a static adversarial project is only **partially**
 supported: reads still follow symlinks that stay inside the project, so a
 hostile repository can make a managed path expose another private file in the
 project (a strict read contract, SEC-001B.1-R, is implemented on a separate
-branch but not yet reviewed or merged, so it does not apply here).
+branch whose re-review and merge are pending, so it does not apply here).
 
 A new `state.json` and the lock file are created `0600`; replacing an existing
 `state.json` keeps its mode. In a directory **shared between users or

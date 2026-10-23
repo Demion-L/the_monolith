@@ -30,8 +30,8 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-010 | Mission Control UI — Read-Only Local Interface over Core | accepted | — | 2026-10-22 |
 | ADR-011 | Static `monolith validate` — No Execution of Project Code (SEC-002); ADR-010 is reserved for UI | accepted | — | 2026-10-22 |
 | ADR-012 | Safe Writes and Explicit Write Scope (SEC-001B.2) | accepted | — | 2026-10-23 |
-| ADR-013 | Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3) — documentation only; native layer deferred | accepted | — | 2026-10-23 |
-| ADR-014 | **Reserved** for the Unified Safe Read Contract (SEC-001B.1-R) — not on this branch; its document on the SEC-001B.1-R branch is still named ADR-013 and must be renumbered before integration (ADR-013 §6) | — | — | — |
+| ADR-013 | Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3) — documentation only; native layer deferred; pending independent review | proposed | — | 2026-10-23 |
+| ADR-014 | **Reserved** for the Unified Safe Read Contract (SEC-001B.1-R) — the document is `ADR-014-unified-safe-read.md` on the SEC-001B.1-R branch, not on this branch; re-review and merge pending (ADR-013 §6) | — | — | — |
 
 **ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
 cognitive-architecture research program (Terra persistence, the Lexicon

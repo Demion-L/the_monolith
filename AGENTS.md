@@ -262,9 +262,10 @@ Over-limit is fail-closed — never truncated, compacted or auto-cleaned
 model TM-B is only partially supported):** an in-project symlink on a managed
 path can expose another private file inside the project root; the target policy
 that forbids symlinks and `nlink > 1` for managed reads is DEC-READ-UNIFIED-001
-(ADR-013, SEC-001B.1-R); it is implemented on a separate branch, **not
-independently reviewed and not integrated**, so it is not in force here. Bounded
-reads do not close check-then-use races.
+(ADR-013, SEC-001B.1-R; its implementation record is ADR-014); it is
+implemented on a separate branch (first independent review approved with notes,
+corrective pass committed), with **re-review and merge pending**, so it is not in
+force here. Bounded reads do not close check-then-use races.
 
 `brief` adds a `WRITE_ARTIFACTS_PRESENT` **warning** when leftover write files
 are present in the instance directory (and `validate` prints a `Warning:` line);
@@ -411,7 +412,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED / MERGED (`4bc7b9d`); SEC-001B.3 DOCUMENTED, not implemented (ADR-013: TM-C unsupported, native layer deferred); SEC-001B.1-R (strict managed read contract, DEC-READ-UNIFIED-001) IMPLEMENTED on `fix/sec-001b1r-unified-safe-read`, NOT independently reviewed, NOT merged; its ADR must be renumbered ADR-013 → ADR-014 before integration (ADR-013 §6)
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED / MERGED (`4bc7b9d`); SEC-001B.3 DOCUMENTED, not implemented (ADR-013, PROPOSED pending independent review: TM-C unsupported, native layer deferred; ADR-010's blocker for a write-enabled UI is preserved, not lifted); SEC-001B.1-R (strict managed read contract, DEC-READ-UNIFIED-001, ADR-014) IMPLEMENTED on `fix/sec-001b1r-unified-safe-read`, first independent review APPROVED WITH NOTES, corrective pass committed, re-review PENDING, NOT merged
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

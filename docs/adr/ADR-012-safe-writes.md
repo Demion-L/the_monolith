@@ -164,12 +164,25 @@ from the descriptor of the temp file), never by the code:
 | Destination | Temp name | Result |
 |---|---|---|
 | is our file | — | `PUBLISHED`, with a `PUBLICATION_VERIFIED_AFTER_ERROR` warning |
-| is not our file (or absent) | still our file | `NOT_PUBLISHED` (temp file removed, as ownership is verified). `link`+`EEXIST`: a lost race, the name belongs to someone else |
+| is not our file (or absent) | still our file | `rename`, or `link` with any other error: `NOT_PUBLISHED` (temp file removed, as ownership is verified). `link`+`EEXIST`: see the special cases below |
 | anything else, or an inspection fails | gone / not ours / undecidable | `UNKNOWN` |
 
-For `link`+`EEXIST` the **link count of the temp file is not evidence**: a second
-hard link to the temp name (a backup tool, another local actor) would make a
-foreign destination look like ours. Only the identity of the destination counts.
+`link`+`EEXIST` has its own classification, because `EEXIST` is also the normal
+answer of a lost race. After the identity of the destination is checked (ours →
+`PUBLISHED`, always):
+
+| Destination | Temp name | Result |
+|---|---|---|
+| present, not our file (including a symlink or special file) | still our file | lost race: `NOT_PUBLISHED`; the name belongs to someone else |
+| absent | still our file, link count 1 | lost race (the name vanished again; nothing of ours was linked): `NOT_PUBLISHED` |
+| absent | still our file, link count > 1 | `UNKNOWN` |
+| anything else, or an inspection fails | gone / not ours | `UNKNOWN` |
+
+The **link count of the temp file is not evidence of publication**: a second hard
+link to the temp name (a backup tool, another local actor) would make a foreign
+destination look like ours. Only the identity of the destination proves
+`PUBLISHED`; the link count is used solely to tell "vanished again" from
+"cannot tell" when the destination is absent.
 
 `UNKNOWN` is **never** converted to `NOT_PUBLISHED` automatically, the publish
 step is **never** retried, and nothing is deleted — in particular a temp name
@@ -177,10 +190,17 @@ that no longer shows our identity is left alone. After a successful publish, a
 failing staging unlink or directory fsync is a **warning**, not an error:
 throwing would invite a retry of a non-idempotent command (a second mission).
 
-This classification is made from what one inspection shows. It makes no claim
-about network filesystems (NFS/SMB, outside the guarantees), where lookups can
-themselves be stale; there the answer degrades towards `UNKNOWN`, which is the
-safe direction.
+This classification is made from what one inspection shows, and one inspection
+cannot separate every case. On a local POSIX filesystem a `link()` that took
+effect does not report an error. On NFS/SMB it can (the reply is lost and the
+retried call answers `EEXIST`). If the name we published is then replaced or
+removed by someone else before the inspection, the destination no longer shows
+our identity and our temp name is back to a single link, which is exactly what a
+genuine lost race looks like: the call is classified `lost-race` / `NOT_PUBLISHED`
+although the name was briefly ours. Telling the two apart would turn every
+ordinary lost race into `UNKNOWN`, so this is accepted. Network filesystems are
+outside the guaranteed contract; nothing here claims that undecidable situations
+there always end in `UNKNOWN`.
 
 The CLI words `UNKNOWN` differently for the two things that can be unknown:
 for `state.json` it asks the user to check the missions; for the lock it states

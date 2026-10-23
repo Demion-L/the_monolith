@@ -4,7 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { SafeWriteError, reportWriteWarning, resetWriteWarningState, type WriteWarning } from '../root/index.js';
 import { LockCreationError } from './errors.js';
-import { runMissionCheckpoint, runMissionFinish, runMissionStart, withWriteGuidance } from './cli.js';
+import { UnknownWriteOutcomeError, runMissionCheckpoint, runMissionFinish, runMissionStart, withWriteGuidance } from './cli.js';
 
 // SEC-001B.2: CLI integration — project scope, warnings after publication,
 // and the instruction to check state after an UNKNOWN outcome.
@@ -108,9 +108,9 @@ describe('UNKNOWN outcomes', () => {
     expect(err.message).toMatch(/mission list/);
   });
 
-  it('also covers an UNKNOWN lock publication', async () => {
-    const lockErr = new LockCreationError({
-      lockPath: '/l',
+  const lockUnknown = (): LockCreationError =>
+    new LockCreationError({
+      lockPath: '/l/state.json.lock',
       phase: 'publish-link',
       pid: 1,
       nonce: 'n',
@@ -118,8 +118,37 @@ describe('UNKNOWN outcomes', () => {
       publication: 'UNKNOWN',
       cause: new Error('EIO'),
     });
-    const err = await withWriteGuidance(() => Promise.reject(lockErr)).catch((e: unknown) => e as Error);
-    expect(err.message).toMatch(/mission list/);
+
+  it('a lock UNKNOWN points at the lock and its staging files, not at the mission list', async () => {
+    const err = await withWriteGuidance(() => Promise.reject(lockUnknown())).catch((e: unknown) => e as Error);
+    expect(err.message).toMatch(/creating the lock is UNKNOWN/);
+    expect(err.message).toMatch(/not retried/);
+    expect(err.message).toContain('/l/state.json.lock.creating.*');
+    expect(err.message).toContain('/l/state.json.lock.recovery');
+    expect(err.message).toMatch(/no state was written/);
+    expect(err.message).not.toMatch(/mission list/);
+    expect(err.message).toMatch(/never deletes/);
+    expect(err.message).not.toMatch(/\b(rm|delete it|remove it)\b/i);
+  });
+
+  it('a state UNKNOWN does not talk about the lock', async () => {
+    const err = await withWriteGuidance(() => Promise.reject(unknown())).catch((e: unknown) => e as Error);
+    expect(err.message).not.toMatch(/creating the lock/);
+  });
+
+  it('keeps code, publication, phase, path and the original error for machine readers (state)', async () => {
+    const orig = unknown();
+    const err = (await withWriteGuidance(() => Promise.reject(orig)).catch((e: unknown) => e)) as UnknownWriteOutcomeError;
+    expect(err).toBeInstanceOf(UnknownWriteOutcomeError);
+    expect(err).toMatchObject({ code: 'WRITE_PUBLICATION_UNKNOWN', publication: 'UNKNOWN', phase: 'publish', path: 'x', subject: 'state' });
+    expect(err.cause).toBe(orig);
+  });
+
+  it('keeps code, publication, phase, path and the original error for machine readers (lock)', async () => {
+    const orig = lockUnknown();
+    const err = (await withWriteGuidance(() => Promise.reject(orig)).catch((e: unknown) => e)) as UnknownWriteOutcomeError;
+    expect(err).toMatchObject({ code: 'LOCK_CREATION_FAILED', publication: 'UNKNOWN', phase: 'publish-link', path: '/l/state.json.lock', subject: 'lock' });
+    expect(err.cause).toBe(orig);
   });
 
   it('leave definite failures and unrelated errors untouched', async () => {

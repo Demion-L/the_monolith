@@ -37,22 +37,52 @@ function writeTargetFor(targetDir: string): StateWriteTarget {
 
 /**
  * A write whose outcome is UNKNOWN (SEC-001B.2) was NOT retried and nothing was
- * cleaned up: tell the user to look before repeating a command that is not
- * idempotent (a second `start` would register a second mission).
+ * cleaned up. The wrapper keeps the machine-readable fields of the original
+ * error (`code`, `publication`, `phase`, `path`) and the error itself as
+ * `cause`; only the message gains guidance, which depends on WHAT is unknown:
+ *
+ *  - `state`: `state.json` may or may not have been replaced. Look at the
+ *    missions before repeating a command that is not idempotent (a second
+ *    `start` would register a second mission).
+ *  - `lock`: it is the creation of the lock file that is unknown; no state was
+ *    written. The mission list says nothing about it — inspect the lock and its
+ *    staging files, and remove nothing while another command may be running.
  */
+export class UnknownWriteOutcomeError extends Error {
+  readonly code: string;
+  readonly publication = 'UNKNOWN' as const;
+  readonly phase: string;
+  readonly path: string;
+  readonly subject: 'state' | 'lock';
+  readonly cause: unknown;
+
+  constructor(original: SafeWriteError | LockCreationError) {
+    const lock = original instanceof LockCreationError;
+    const guidance = lock
+      ? `The outcome of creating the lock is UNKNOWN. It was not retried and nothing was removed; no state was written. ` +
+        `Inspect, read-only, "${original.lockPath}" and any "${original.lockPath}.creating.*" or "${original.lockPath}.recovery" ` +
+        'next to it. MONOLITH never deletes these automatically (FS-CLEAN-001); remove nothing while another monolith ' +
+        'command may be running.'
+      : 'The outcome of this write is UNKNOWN. It was not retried. Check the current state with ' +
+        '`monolith mission list` (and `monolith mission show <id>`) before running this command again.';
+    super(`${original.message}\n${guidance}`);
+    this.name = 'UnknownWriteOutcomeError';
+    this.code = original.code;
+    this.phase = original.phase;
+    this.path = lock ? original.lockPath : original.path;
+    this.subject = lock ? 'lock' : 'state';
+    this.cause = original;
+  }
+}
+
 export async function withWriteGuidance<T>(run: () => Promise<T>): Promise<T> {
   try {
     return await run();
   } catch (err) {
-    const unknown =
-      (err instanceof SafeWriteError || err instanceof LockCreationError) && err.publication === 'UNKNOWN';
-    if (!unknown) throw err;
-    throw new Error(
-      `${(err as Error).message}\n` +
-        'The outcome of this write is UNKNOWN. It was not retried. Check the current state with ' +
-        '`monolith mission list` (and `monolith mission show <id>`) before running this command again.',
-      { cause: err },
-    );
+    if ((err instanceof SafeWriteError || err instanceof LockCreationError) && err.publication === 'UNKNOWN') {
+      throw new UnknownWriteOutcomeError(err);
+    }
+    throw err;
   }
 }
 

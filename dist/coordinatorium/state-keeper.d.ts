@@ -35,8 +35,9 @@ export declare function stateFilePath(stateDir: string): string;
  *    `stateDir` is. A missing `stateDir` is created.
  *
  * `onWarning` receives non-fatal findings reported after a successful publish
- * (durability downgrade, platform note, ...). Without it they are only
- * returned by `mutateState`.
+ * (durability downgrade, platform note, ...). It is called once per warning,
+ * after the state lock has been released; an exception it throws is ignored and
+ * never affects the result. Without it they are only returned by `mutateState`.
  */
 export type StateWriteTarget = {
     scope: 'project';

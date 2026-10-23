@@ -305,16 +305,21 @@ export async function mutateState(target, mutator, lockOptions) {
     // never touches a state.json that already exists.
     const parent = openParent(boundary, stateDir, { create: true });
     const release = await acquireLock(lockFilePath(stateDir), lockOptions, {}, parent);
+    let draft;
+    let result;
     try {
         const current = await readState(stateDir);
-        const draft = structuredClone(current);
-        const result = mutator(draft);
+        draft = structuredClone(current);
+        result = mutator(draft);
         draft.revision = current.revision + 1;
         warnings.push(...atomicWriteState(parent, stateFilePath(stateDir), draft));
-        reportWarnings(warnings, onWarning);
-        return { state: draft, result, warnings };
     }
     finally {
         release();
     }
+    // The write is published and the lock is released: caller code runs outside
+    // the critical section, so a slow or re-entrant callback cannot hold up (or
+    // deadlock against) other writers.
+    reportWarnings(warnings, onWarning);
+    return { state: draft, result, warnings };
 }

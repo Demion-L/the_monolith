@@ -142,7 +142,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (630 tests passing, typecheck clean):
+What MONOLITH does today (711 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields

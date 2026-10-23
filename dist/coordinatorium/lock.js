@@ -255,7 +255,9 @@ async function createAndPublish(parent, lockPath, record, fsyncMetadata, testHoo
                 cause: err.cause ?? err,
             });
         }
-        // NOT_PUBLISHED: publishLink already removed our verified staging file.
+        // NOT_PUBLISHED: the staging file was removed if the publish step failed
+        // (`err.tmp.removed`); an error raised before it (e.g. the parent changed)
+        // leaves it in place and is reported as `cleanedUp: false`.
         throw new LockCreationError({
             ...base,
             phase: 'publish-link',

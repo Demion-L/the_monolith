@@ -7,7 +7,7 @@
  * in mission.ts.
  */
 import { resolveMonolithRoot, assertContainedFile } from '../root/index.js';
-import { STATE_FILE_NAME } from './state-keeper.js';
+import { STATE_FILE_NAME, projectTarget } from './state-keeper.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
 // Resolves the instance directory through the shared containment resolver
@@ -19,6 +19,15 @@ function stateDirFor(targetDir) {
     assertContainedFile(root, STATE_FILE_NAME);
     assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
     return root.rootAbs;
+}
+// Writes always use PROJECT scope (ADR-012): the project root is the boundary,
+// so a symlinked `monolithRoot` or intermediate directory is refused even when
+// it stays inside the project.
+function writeTargetFor(targetDir) {
+    const root = resolveMonolithRoot(targetDir);
+    assertContainedFile(root, STATE_FILE_NAME);
+    assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
+    return projectTarget(root.projectRoot, root.rootAbs);
 }
 function parseFlag(args, name) {
     const i = args.indexOf(name);
@@ -53,7 +62,7 @@ export async function runMissionStart(args, targetDir = process.cwd()) {
     if (!title || !system) {
         throw new Error('Usage: monolith mission start --title "..." --system "..."');
     }
-    const mission = await startMission(stateDirFor(targetDir), { title, system });
+    const mission = await startMission(writeTargetFor(targetDir), { title, system });
     console.log(`Started mission ${mission.id} (${mission.status})`);
     console.log(formatMission(mission));
 }
@@ -107,7 +116,7 @@ export async function runMissionCheckpoint(args, targetDir = process.cwd()) {
     }
     const remainingSteps = parseRepeatedFlag(args, '--remaining');
     const context = parseFlag(args, '--context');
-    const checkpoint = await createCheckpoint(stateDirFor(targetDir), missionId, {
+    const checkpoint = await createCheckpoint(writeTargetFor(targetDir), missionId, {
         summary,
         remainingSteps,
         context: context ?? null,
@@ -138,7 +147,7 @@ export async function runMissionFinish(args, targetDir = process.cwd()) {
     if (!id || !result) {
         throw new Error('Usage: monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]');
     }
-    const mission = await finishMission(stateDirFor(targetDir), id, {
+    const mission = await finishMission(writeTargetFor(targetDir), id, {
         result: result,
         summary: summary ?? undefined,
     });

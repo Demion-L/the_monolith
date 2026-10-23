@@ -12,7 +12,7 @@
  * once written, a checkpoint record never changes.
  */
 
-import { mutateState, readState } from './state-keeper.js';
+import { mutateState, readState, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, MissionNotActiveError, CheckpointNotFoundError, ValidationError } from './errors.js';
 import type { CoordinatoriumState, Checkpoint } from './types.js';
 
@@ -76,7 +76,7 @@ export interface CreateCheckpointInput {
  * concurrency design.
  */
 export async function createCheckpoint(
-  stateDir: string,
+  target: StateWriteTarget,
   missionId: string,
   input: CreateCheckpointInput,
 ): Promise<Checkpoint> {
@@ -98,7 +98,7 @@ export async function createCheckpoint(
     context = requireBoundedString(input.context, 'context', MAX_CONTEXT_LENGTH);
   }
 
-  const { result } = await mutateState(stateDir, (draft: CoordinatoriumState) => {
+  const { result } = await mutateState(target, (draft: CoordinatoriumState) => {
     const mission = draft.tactical.missions[missionId];
     if (!mission) throw new MissionNotFoundError(missionId);
     if (mission.status !== 'in_progress') {

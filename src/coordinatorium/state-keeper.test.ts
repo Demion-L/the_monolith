@@ -5,7 +5,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import ts from 'typescript';
-import { readState, mutateState, validateState, stateFilePath } from './state-keeper.js';
+import { readState, mutateState, validateState, stateFilePath, trustedDirectoryTarget } from './state-keeper.js';
 import { createInitialState, STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1 } from './types.js';
 import { StateCorruptedError, StateSchemaError } from './errors.js';
 
@@ -207,7 +207,7 @@ describe('validateState', () => {
 describe('mutateState', () => {
   it('persists atomically and leaves no temp files behind', async () => {
     const dir = makeTempDir();
-    await mutateState(dir, (draft) => {
+    await mutateState(trustedDirectoryTarget(dir), (draft) => {
       draft.tactical.missions['MIS-0001'] = {
         id: 'MIS-0001', title: 'x', system: 'y', status: 'in_progress',
         startedAt: 'a', updatedAt: 'a', summary: null,
@@ -221,22 +221,22 @@ describe('mutateState', () => {
 
   it('increments revision monotonically across successive mutations', async () => {
     const dir = makeTempDir();
-    const r1 = await mutateState(dir, () => undefined);
-    const r2 = await mutateState(dir, () => undefined);
-    const r3 = await mutateState(dir, () => undefined);
+    const r1 = await mutateState(trustedDirectoryTarget(dir), () => undefined);
+    const r2 = await mutateState(trustedDirectoryTarget(dir), () => undefined);
+    const r3 = await mutateState(trustedDirectoryTarget(dir), () => undefined);
     expect([r1.state.revision, r2.state.revision, r3.state.revision]).toEqual([1, 2, 3]);
   });
 
   it('never writes if the mutator throws', async () => {
     const dir = makeTempDir();
-    await mutateState(dir, (draft) => {
+    await mutateState(trustedDirectoryTarget(dir), (draft) => {
       draft.tactical.missions['MIS-0001'] = {
         id: 'MIS-0001', title: 'kept', system: 'y', status: 'in_progress',
         startedAt: 'a', updatedAt: 'a', summary: null,
       };
     });
     await expect(
-      mutateState(dir, () => {
+      mutateState(trustedDirectoryTarget(dir), () => {
         throw new Error('boom');
       }),
     ).rejects.toThrow('boom');
@@ -248,7 +248,7 @@ describe('mutateState', () => {
 
   it('throws (and never reaches the lock-protected write) when reading corrupted state', async () => {
     const dir = makeTempDir();
-    await mutateState(dir, (draft) => {
+    await mutateState(trustedDirectoryTarget(dir), (draft) => {
       draft.tactical.missions['MIS-0001'] = {
         id: 'MIS-0001', title: 'kept', system: 'y', status: 'in_progress',
         startedAt: 'a', updatedAt: 'a', summary: null,
@@ -257,7 +257,7 @@ describe('mutateState', () => {
     // Corrupt the file out-of-band (simulating external damage between calls).
     writeFileSync(stateFilePath(dir), '{ not json at all', 'utf8');
 
-    await expect(mutateState(dir, () => undefined)).rejects.toBeInstanceOf(StateCorruptedError);
+    await expect(mutateState(trustedDirectoryTarget(dir), () => undefined)).rejects.toBeInstanceOf(StateCorruptedError);
 
     // Nothing was written: the corrupted file is untouched, no temp files linger.
     expect(readFileSync(stateFilePath(dir), 'utf8')).toBe('{ not json at all');
@@ -266,7 +266,7 @@ describe('mutateState', () => {
 
   it('preserves the previous valid state.json when the write itself fails', async () => {
     const dir = makeTempDir();
-    await mutateState(dir, (draft) => {
+    await mutateState(trustedDirectoryTarget(dir), (draft) => {
       draft.tactical.missions['MIS-0001'] = {
         id: 'MIS-0001', title: 'kept', system: 'y', status: 'in_progress',
         startedAt: 'a', updatedAt: 'a', summary: null,
@@ -277,7 +277,7 @@ describe('mutateState', () => {
     chmodSync(dir, 0o555); // read+execute only — temp-file write must fail
     try {
       await expect(
-        mutateState(dir, (draft) => {
+        mutateState(trustedDirectoryTarget(dir), (draft) => {
           draft.tactical.missions['MIS-0002'] = {
             id: 'MIS-0002', title: 'should not persist', system: 'y', status: 'in_progress',
             startedAt: 'a', updatedAt: 'a', summary: null,
@@ -295,10 +295,10 @@ describe('mutateState', () => {
 
   it('preserves existing state fields it does not touch', async () => {
     const dir = makeTempDir();
-    await mutateState(dir, (draft) => {
+    await mutateState(trustedDirectoryTarget(dir), (draft) => {
       draft.strategic.systems['core'] = { note: 'reserved for Strategic Coordinatorium' };
     });
-    await mutateState(dir, (draft) => {
+    await mutateState(trustedDirectoryTarget(dir), (draft) => {
       draft.tactical.missions['MIS-0001'] = {
         id: 'MIS-0001', title: 'x', system: 'y', status: 'in_progress',
         startedAt: 'a', updatedAt: 'a', summary: null,
@@ -356,8 +356,9 @@ function transpileCoordinatoriumTo(destDir: string): void {
 
   const childScript = `
 import { startMission } from './mission.mjs';
+import { trustedDirectoryTarget } from './state-keeper.mjs';
 const [stateDir, idx] = process.argv.slice(2);
-const mission = await startMission(stateDir, { title: 'Concurrent mission ' + idx, system: 'concurrency-test' });
+const mission = await startMission(trustedDirectoryTarget(stateDir), { title: 'Concurrent mission ' + idx, system: 'concurrency-test' });
 process.stdout.write(JSON.stringify(mission));
 `;
   writeFileSync(join(destDir, 'start-mission-child.mjs'), childScript, 'utf8');

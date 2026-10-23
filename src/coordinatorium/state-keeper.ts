@@ -19,7 +19,15 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { acquireLock, type LockOptions } from './lock.js';
 import { StateCorruptedError, StateSchemaError, StateFileError } from './errors.js';
-import { readBoundedFileStable } from '../root/index.js';
+import {
+  SafeWriteError,
+  openParent,
+  projectBoundary,
+  readBoundedFileStable,
+  trustedDirectoryBoundary,
+  type WriteBoundary,
+  type WriteWarning,
+} from '../root/index.js';
 import {
   STATE_SCHEMA_VERSION,
   LEGACY_SCHEMA_VERSION_V1,
@@ -45,6 +53,77 @@ export function stateFilePath(stateDir: string): string {
 
 function lockFilePath(stateDir: string): string {
   return `${stateFilePath(stateDir)}.lock`;
+}
+
+/**
+ * Where a write may land (SEC-001B.2, ADR-012). There is no default and no
+ * plain-string form: the caller states which trust model applies.
+ *
+ *  - `project`: `projectRoot` is the boundary. `stateDir` must lie inside it and
+ *    no component below the root may be a symlink (even one that stays inside).
+ *  - `trusted-directory`: the caller asserts that `stateDir` AND ALL ITS
+ *    ANCESTORS are trusted. Nothing about the ancestors is checked (so a
+ *    symlinked `.monolith` is invisible in this mode); only what lies below
+ *    `stateDir` is. A missing `stateDir` is created.
+ *
+ * `onWarning` receives non-fatal findings reported after a successful publish
+ * (durability downgrade, platform note, ...). Without it they are only
+ * returned by `mutateState`.
+ */
+export type StateWriteTarget =
+  | { scope: 'project'; projectRoot: string; stateDir: string; onWarning?: (warning: WriteWarning) => void }
+  | { scope: 'trusted-directory'; stateDir: string; onWarning?: (warning: WriteWarning) => void };
+
+/** Project-scoped write target (the CLI always uses this). */
+export function projectTarget(
+  projectRoot: string,
+  stateDir: string,
+  onWarning?: (warning: WriteWarning) => void,
+): StateWriteTarget {
+  return { scope: 'project', projectRoot, stateDir, onWarning };
+}
+
+/** Trusted-directory write target: `stateDir` and its ancestors are asserted trusted by the caller. */
+export function trustedDirectoryTarget(stateDir: string, onWarning?: (warning: WriteWarning) => void): StateWriteTarget {
+  return { scope: 'trusted-directory', stateDir, onWarning };
+}
+
+function scopeRequired(fn: string, stateDir: unknown): SafeWriteError {
+  return new SafeWriteError(
+    `${fn} requires an explicit write scope. Replace ${fn}(dir, ...) with ` +
+      `${fn}({ scope: 'trusted-directory', stateDir: dir }, ...) when dir and its ancestors are trusted, or with ` +
+      `${fn}({ scope: 'project', projectRoot, stateDir }, ...) when acting on a project (ADR-012).`,
+    {
+      code: 'WRITE_SCOPE_REQUIRED',
+      phase: 'scope',
+      publication: 'NOT_PUBLISHED',
+      path: typeof stateDir === 'string' ? stateDir : '',
+    },
+  );
+}
+
+interface ResolvedTarget {
+  boundary: WriteBoundary;
+  stateDir: string;
+  onWarning?: (warning: WriteWarning) => void;
+}
+
+/** Validates the scope and builds the boundary. Throws SafeWriteError; touches nothing in `project` scope. */
+function resolveWriteTarget(target: unknown, fn: string): ResolvedTarget {
+  if (typeof target !== 'object' || target === null) throw scopeRequired(fn, target);
+  const t = target as Partial<StateWriteTarget> & { projectRoot?: unknown; stateDir?: unknown };
+  if (typeof t.stateDir !== 'string' || t.stateDir.length === 0) throw scopeRequired(fn, t.stateDir);
+  if (t.scope === 'project') {
+    if (typeof t.projectRoot !== 'string' || t.projectRoot.length === 0) throw scopeRequired(fn, t.stateDir);
+    return { boundary: projectBoundary(t.projectRoot), stateDir: t.stateDir, onWarning: t.onWarning };
+  }
+  if (t.scope === 'trusted-directory') {
+    // The caller vouches for the directory and its ancestors, so creating it
+    // (and any missing ancestors) is within the model they chose.
+    mkdirSync(t.stateDir, { recursive: true });
+    return { boundary: trustedDirectoryBoundary(t.stateDir), stateDir: t.stateDir, onWarning: t.onWarning };
+  }
+  throw scopeRequired(fn, t.stateDir);
 }
 
 const MISSION_STATUSES: readonly MissionStatus[] = ['in_progress', 'completed', 'failed', 'cancelled'];
@@ -267,15 +346,18 @@ async function atomicWriteState(stateDir: string, state: CoordinatoriumState): P
  * per successful call, after the mutator returns.
  */
 export async function mutateState<T>(
-  stateDir: string,
+  target: StateWriteTarget,
   mutator: (draft: CoordinatoriumState) => T,
   lockOptions?: LockOptions,
-): Promise<{ state: CoordinatoriumState; result: T }> {
+): Promise<{ state: CoordinatoriumState; result: T; warnings: WriteWarning[] }> {
+  const { boundary, stateDir, onWarning } = resolveWriteTarget(target, 'mutateState');
+  const warnings: WriteWarning[] = [];
   // The instance's state directory may not exist yet (e.g. an existing
   // project's first mission before any state.json has ever been written).
-  // Creating it here is the "safe, explicit initialization path" for that
-  // case — it never touches a state.json that already exists.
-  mkdirSync(stateDir, { recursive: true });
+  // Creating it here — component by component, refusing symlinks below the
+  // boundary — is the "safe, explicit initialization path" for that case; it
+  // never touches a state.json that already exists.
+  openParent(boundary, stateDir, { create: true });
   const release = await acquireLock(lockFilePath(stateDir), lockOptions);
   try {
     const current = await readState(stateDir);
@@ -283,7 +365,7 @@ export async function mutateState<T>(
     const result = mutator(draft);
     draft.revision = current.revision + 1;
     await atomicWriteState(stateDir, draft);
-    return { state: draft, result };
+    return { state: draft, result, warnings };
   } finally {
     release();
   }

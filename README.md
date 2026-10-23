@@ -100,7 +100,8 @@ mutation is **not supported** (TM-C, ADR-013). A trusted local project is
 supported with limitations; a static adversarial project is only **partially**
 supported: reads still follow symlinks that stay inside the project, so a
 hostile repository can make a managed path expose another private file in the
-project (strict read contract planned as SEC-001B.1-R, not implemented).
+project (a strict read contract, SEC-001B.1-R, is implemented on a separate
+branch but not yet reviewed or merged, so it does not apply here).
 
 A new `state.json` and the lock file are created `0600`; replacing an existing
 `state.json` keeps its mode. In a directory **shared between users or

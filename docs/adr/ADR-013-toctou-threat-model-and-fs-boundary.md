@@ -24,8 +24,9 @@ explicit-scope, exclusive and atomic per file. Each of them checks a path and
 then uses the path in a separate syscall. SEC-001B.3 asked whether that gap can
 be closed with what Node.js offers, and what closing it would cost.
 
-The SEC-001B.3 feasibility research concluded (results as summarized for this
-decision; the PoC sources are not part of this repository):
+The SEC-001B.3 feasibility research concluded (one research stand, figures in
+"Feasibility evidence"; the PoC sources are not part of this repository and the
+experiment was not repeated for this decision):
 
 - The dynamic TOCTOU was **reproduced**: a directory or symlink swapped
   concurrently with a command redirects the operation that follows the check.
@@ -60,6 +61,14 @@ ADR-012).
 TM-B is **not declared fully supported in advance.** Its status is to be
 re-evaluated after SEC-001B.1-R is integrated, on the basis of an independent
 security review; implementation alone does not change it.
+
+**State of SEC-001B.1-R at this revision (2026-10-23).** It is **implemented on a
+separate branch** (`fix/sec-001b1r-unified-safe-read`, `c520eb9`), has **not**
+passed an independent security review and is **not merged**. Neither this
+branch nor `main` contains it. Until both the review and the merge have happened,
+the Unified Safe Read Contract must not be described as integrated and TM-B
+stays PARTIALLY SUPPORTED. The expected change of status is recorded in
+section 6; it is an expectation, not a status.
 
 The current implementation does not provide TM-C and must not be described as
 doing so, in code comments, documentation, CLI output or reviews.
@@ -130,8 +139,10 @@ unverified; Windows best-effort and unverified.
 
 ### 3. DEC-READ-UNIFIED-001 — Single Strict Managed Read Contract
 
-**Target policy of SEC-001B.1-R. Not implemented.** Nothing in this ADR is
-evidence that it holds today; the code still follows ADR-009 / ADR-011 for reads.
+**Target policy of SEC-001B.1-R. Implemented on a separate branch; not reviewed,
+not integrated, not in force.** Nothing in this ADR is evidence that it holds
+today; the code on this branch and on `main` still follows ADR-009 / ADR-011 for
+reads.
 
 For every MONOLITH-managed file read (`state.json`, the lock record, `active.md`,
 the Markdown documents under `monolithRoot` that `brief` scans, and the root
@@ -157,11 +168,13 @@ directory must replace the link). Hardlink refusal on reads is new behaviour as
 well. A future `openat2` implementation must pass `RESOLVE_NO_SYMLINKS` (and
 should pass `RESOLVE_NO_MAGICLINKS`) so that it enforces this contract rather
 than only staying beneath the root. SEC-001B.1-R is where the ADR-009 / ADR-011
-amendments are made; no separate ADR is created for this decision.
+amendments are made.
 
-Reference: "Unified Safe Read Contract" is the name used in the SEC-001B.3 task;
-no document of that name exists in the repository, and this section is its
-record.
+The implementation record of this contract is the "Unified Safe Read Contract"
+ADR, **ADR-014** (section 6). This section states the policy as a decision input
+of the threat model; ADR-014 records how SEC-001B.1-R implements it. The two
+must agree; if they differ, the integration review resolves it and ADR-014
+describes the code.
 
 ### 4. Future architecture (direction, not a commitment)
 
@@ -225,26 +238,90 @@ The decision is **not** tied to any particular consumer, including the
 launch of SphynX or of the Mission Control UI (ADR-010). Any of the three
 conditions arising there triggers a review; their existence alone does not.
 
+### 6. ADR numbering, status transitions and integration dependencies
+
+**Numbering (fixed).**
+
+| ID | Subject | State |
+|---|---|---|
+| ADR-013 | Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3) — this document | accepted; documentation only |
+| ADR-014 | Unified Safe Read Contract (SEC-001B.1-R) | **reserved** for it; the document exists only on the SEC-001B.1-R branch, not reviewed, not merged |
+
+**Collision to resolve before integration.** The SEC-001B.1-R branch
+(`fix/sec-001b1r-unified-safe-read`) was written in parallel and currently names
+its document `docs/adr/ADR-013-unified-safe-read.md` with `id: ADR-013`. That
+branch was **not** changed by this revision (it is a separate worktree under
+independent review). The Core ADR must be renumbered to ADR-014 **before** it is
+integrated, otherwise two documents carry `id: ADR-013` (explicit identity
+resolution is first-document-wins, ADR-007) and the ADR index has two ADR-013
+rows. The renumbering is part of that branch's integration and covers, as counted
+by `git grep` at `c520eb9`, 13 lines in 7 files:
+
+- the file name, its frontmatter `id`, its title and its own text (2 lines);
+- `docs/adr/README.md` (1 line), `AGENTS.md` (4), `tech-debt.md` (1);
+- two code comments in `src/root/index.ts` (2);
+- `dist/root/index.js` and `dist/root/index.d.ts` (3, generated: rebuild, do not
+  hand-edit).
+
+Only the references that mean the **read contract** change; references that mean
+the TOCTOU decision (this ADR) stay ADR-013.
+
+**Status transitions.** Nothing below has happened.
+
+| Event | Documented consequence |
+|---|---|
+| Now | TM-A supported with limitations; TM-B **PARTIALLY SUPPORTED**; TM-C **UNSUPPORTED**. Unified Safe Reads: implemented on a branch, not reviewed, not integrated |
+| SEC-001B.1-R passes an independent security review **and** is merged (renumbered to ADR-014) | TM-B is re-evaluated. If the review supports it, TM-B is re-stated as supported **within the guarantees of section 2**, and Unified Safe Reads are described as integrated. Section 3 changes from "target" to "in force", and ADR-009 / ADR-011 / `AGENTS.md` / `README.md` / `tech-debt.md` / `decisions.md` lose their "not implemented" wording. Merge alone, or review with open findings, does not change the status |
+| In every case | TM-C stays **UNSUPPORTED**. The unified read contract does not close dynamic TOCTOU; TM-C changes only through section 5's revisit conditions and a new decision |
+
+**Merge-time conflicts to expect.** This branch and the SEC-001B.1-R branch both
+edit `AGENTS.md`, `tech-debt.md` (the SEC-001B.1-R row) and `docs/adr/README.md`.
+Resolve by keeping both changes and using the status wording of the table above.
+
 ## Feasibility evidence
 
 Recorded so that a later review knows what was and was not shown. **The PoC
 sources are not in this repository** and were deliberately not copied into Core;
 no production-ready native implementation exists.
 
-- **Method (directory-swap PoC).** The scenario, as stated for this decision: a reader/writer operating on a path under a
+- **Provenance.** The figures below are taken from the SEC-001B.3 research
+  report. **They were not reproduced in this branch:** no experiment was run
+  while preparing this revision, and the PoC sources are not in the repository.
+  They are recorded as reported, not as independently verified here.
+- **Stand.** One research stand: Linux 7.0, Node.js 24.19.0, `tmpfs`.
+- **Method (directory-swap PoC).** A reader or writer operated on a path under a
   boundary directory while a concurrent actor replaced a directory component with
-  a symlink to a location outside the boundary. The details of the harness
-  (language, iteration counts, timing, kernel and Node versions) are not recorded
-  in the repository and are not restated here; they belong with the research
-  author's report.
-- **Reads and writes.** The swap was reproduced for path-based operations: the
-  operation that followed the check was redirected. Stepwise `/proc/self/fd`
-  resolution and `openat2` were not redirected in the same scenario.
-- **Limits of the evidence.** The results are for Linux, for Node.js `fs`
-  (path-based calls) versus the researched alternatives, on `tmpfs`. They do not cover other filesystems, NFS/SMB, macOS/BSD or
-  Windows. A race that did not occur in a bounded number of runs is not a proof
-  of absence; the supporting argument for `openat2` and `/proc/self/fd` is the
-  kernel resolution semantics, not the absence of failures in the PoC.
+  a symlink to a location outside the boundary. A "boundary escape" is an
+  operation that ended up outside the boundary directory.
+- **Not recorded in the repository:** the harness code, the cadence and
+  mechanism of the swapper, CPU count and scheduling, run duration, and how the
+  "Directory-swap" and "Pure Node" harnesses differ.
+
+| Experiment (as named in the report) | Boundary escapes | Operations |
+|---|---:|---:|
+| Directory-swap, path-based reads | 17,347 | 300,000 reads |
+| Pure Node.js | 64,181 | 200,000 |
+| Stepwise `/proc/self/fd` | 0 | 200,000 |
+| Native `openat2` | 0 | 200,000 |
+| Path-based write | 1,655 | not reported |
+| Descriptor-relative write | 0 | 50,000 |
+
+How to read the table:
+
+- **One stand, one harness.** Every count depends on how aggressively the swapper
+  was driven and on that machine's scheduling. They are **not** an exploitation
+  probability and not a rate to expect in practice; no percentage is derived
+  from them, and the rows of different harnesses are not comparable with each
+  other.
+- **What the non-zero rows show:** the dynamic TOCTOU against path-based
+  operations is real and reproducible on this stand. That is the basis for
+  "pure Node.js path-based calls cannot provide TM-C".
+- **What the zero rows do not show.** "0 of N" is consistent with the design
+  and does not prove it safe. A race that did not occur in N runs is not a proof
+  of absence. The supporting argument for `openat2` and descriptor-relative
+  resolution is the kernel's resolution semantics, not the absence of failures.
+- **Coverage.** Linux, Node.js `fs` versus the researched alternatives, `tmpfs`.
+  Not covered: other filesystems, NFS/SMB, macOS/BSD, Windows.
 - **Not shown:** behaviour under production error paths, performance, packaging
   of a native addon, and behaviour in containers without `procfs`.
 
@@ -260,8 +337,12 @@ no production-ready native implementation exists.
 - Users who need TM-C today have no mitigation inside MONOLITH; the practical
   mitigation is operational: run it on a local filesystem on a tree that no
   untrusted process can write to.
+- ADR numbers are fixed: ADR-013 is this document, ADR-014 is reserved for the
+  Unified Safe Read Contract. The SEC-001B.1-R branch must renumber its ADR
+  before integration (section 6).
 - ADR-009 / ADR-011 read policy is **unchanged by this ADR**; SEC-001B.1-R is the
-  story that changes it (DEC-READ-UNIFIED-001). ADR-012's write contract is
+  story that changes it (DEC-READ-UNIFIED-001), and it is implemented on a
+  branch but neither reviewed nor merged. ADR-012's write contract is
   unchanged. ADR-012's
   "SEC-001B.2 / SEC-001B.3 boundary" section remains accurate and now points
   here.
@@ -289,3 +370,6 @@ no production-ready native implementation exists.
   FS-CLEAN-001, FS-PLAT-001
 - `AGENTS.md` — "File read contract (SEC-001B.1)", "File write contract
   (SEC-001B.2, ADR-012)"
+- ADR-014 (reserved) — Unified Safe Read Contract (SEC-001B.1-R); exists only on
+  branch `fix/sec-001b1r-unified-safe-read` under the provisional name
+  `ADR-013-unified-safe-read.md`

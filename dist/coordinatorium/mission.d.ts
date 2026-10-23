@@ -5,7 +5,7 @@
  * This module owns mission semantics (ID generation, valid transitions);
  * state-keeper.ts owns persistence and never knows what a mission is.
  */
-import { type StateWriteTarget } from './state-keeper.js';
+import { type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import type { Mission, MissionResult } from './types.js';
 export interface StartMissionInput {
     title: string;
@@ -17,8 +17,8 @@ export interface StartMissionInput {
  * from independent processes can never collide on an ID.
  */
 export declare function startMission(target: StateWriteTarget, input: StartMissionInput): Promise<Mission>;
-export declare function listMissions(stateDir: string): Promise<Mission[]>;
-export declare function getMission(stateDir: string, id: string): Promise<Mission>;
+export declare function listMissions(target: StateReadTarget): Promise<Mission[]>;
+export declare function getMission(target: StateReadTarget, id: string): Promise<Mission>;
 export interface FinishMissionInput {
     result: MissionResult;
     summary?: string | null;

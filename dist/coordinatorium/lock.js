@@ -55,7 +55,7 @@ import { writeSync, closeSync, unlinkSync, fchmodSync, fsyncSync, } from 'fs';
 import { basename, dirname } from 'path';
 import { randomBytes } from 'crypto';
 import { LockTimeoutError, LockUnsafeError, LockCreationError } from './errors.js';
-import { SafeWriteError, createExclusive, disposeOwned, openParent, publishLink, readBoundedFileStable, trustedDirectoryBoundary, } from '../root/index.js';
+import { SafeWriteError, createExclusive, disposeOwned, openParent, publishLink, readBoundedFileStable, boundaryPathOf, trustedDirectoryBoundary, } from '../root/index.js';
 /** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
 export const MAX_LOCK_BYTES = 256;
 const DEFAULT_OPTIONS = {
@@ -115,8 +115,10 @@ function parseLockRecord(raw) {
         return null;
     return { pid, nonce };
 }
-function inspectLock(path) {
-    const r = readBoundedFileStable(path, 'lock file', { maxBytes: MAX_LOCK_BYTES, allowEmpty: true }, true);
+function inspectLock(boundary, path) {
+    // Unified safe read (SEC-001B.1-R): the lock is read under the boundary its
+    // staging files are written under; a symlink or hardlinked lock is `structural`.
+    const r = readBoundedFileStable(path, 'lock file', { boundary, maxBytes: MAX_LOCK_BYTES, allowEmpty: true }, true);
     if (r.ok) {
         const record = 'content' in r ? parseLockRecord(r.content) : null;
         if (record)
@@ -131,8 +133,8 @@ function inspectLock(path) {
 }
 /** Valid record or null. `unsafe` is deliberately collapsed to null here for
  * the two callers that must merely refuse to act on it (invariant 2). */
-function readLockRecord(path) {
-    const i = inspectLock(path);
+function readLockRecord(boundary, path) {
+    const i = inspectLock(boundary, path);
     return i.kind === 'valid' ? i.record : null;
 }
 /** Write `buffer` to `fd` in full, looping on short writes (a single
@@ -241,7 +243,7 @@ async function createAndPublish(parent, lockPath, record, fsyncMetadata, testHoo
         if (!(err instanceof SafeWriteError))
             throw err;
         if (err.publication === 'UNKNOWN') {
-            const seen = readLockRecord(lockPath);
+            const seen = readLockRecord(boundaryPathOf(parent), lockPath);
             if (seen !== null && sameRecord(seen, record)) {
                 // The record at the lock path is exactly ours: the link did happen.
                 disposeOwned(parent, token, { ops: testHooks.fsOps });
@@ -275,8 +277,8 @@ async function createAndPublish(parent, lockPath, record, fsyncMetadata, testHoo
  * record we believe we own. Never clears a lock that has changed or is
  * already gone. This is used both for releasing a held primary lock and
  * for releasing the internal recovery mutex. */
-function releaseIfOwned(path, record) {
-    const current = readLockRecord(path);
+function releaseIfOwned(boundary, path, record) {
+    const current = readLockRecord(boundary, path);
     if (sameRecord(current, record)) {
         try {
             unlinkSync(path);
@@ -331,7 +333,7 @@ async function recoverDeadOwner(parent, lockPath, observed, fsyncMetadata, hooks
         // mutex — time has passed since the caller's own read, and this is
         // the check that actually matters: nothing but the mutex holder can
         // delete this specific stale record from here on.
-        const current = readLockRecord(lockPath);
+        const current = readLockRecord(boundaryPathOf(parent), lockPath);
         if (current === null || !sameRecord(current, observed)) {
             return 'aborted'; // changed or gone while we were acquiring the mutex
         }
@@ -348,7 +350,7 @@ async function recoverDeadOwner(parent, lockPath, observed, fsyncMetadata, hooks
         return 'recovered';
     }
     finally {
-        releaseIfOwned(mutexPath, mutexRecord);
+        releaseIfOwned(boundaryPathOf(parent), mutexPath, mutexRecord);
     }
 }
 /**
@@ -368,12 +370,12 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}, parent
     const own = makeOwnRecord();
     for (;;) {
         if ((await createAndPublish(parent, lockPath, own, opts.fsyncMetadata, testHooks)) === 'published') {
-            return () => releaseIfOwned(lockPath, own);
+            return () => releaseIfOwned(boundaryPathOf(parent), lockPath, own);
         }
         // 'lost-race': the canonical lock already exists — fall through to the
         // normal observe/wait/recover logic below, exactly as a plain EEXIST
         // did before.
-        const inspection = inspectLock(lockPath);
+        const inspection = inspectLock(boundaryPathOf(parent), lockPath);
         if (inspection.kind === 'unsafe' && inspection.class === 'structural') {
             // A FIFO / oversize / unreadable lock can never become a valid one:
             // refuse with a diagnostic instead of waiting out the timeout. The

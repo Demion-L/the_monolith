@@ -23,7 +23,7 @@ export type { ScriptoriumInput, ScriptoriumResult, ConceptCandidate, Relationshi
 export { compileMarkdownArtifact, isStructuralHeadingNoise } from './scriptorium/index.js';
 export type { GraphNode, GraphEdge, GraphDiagnostic, ExplicitRelationshipGraph, } from './graph/index.js';
 export { buildGraph, normalizeLabel, selectCanonicalLabel } from './graph/index.js';
-export type { CoordinatoriumState, Mission, MissionStatus, MissionResult, CoordinatoriumErrorCode, StartMissionInput, FinishMissionInput, StateWriteTarget, } from './coordinatorium/index.js';
+export type { CoordinatoriumState, Mission, MissionStatus, MissionResult, CoordinatoriumErrorCode, StartMissionInput, FinishMissionInput, StateWriteTarget, StateReadTarget, } from './coordinatorium/index.js';
 export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, MissionNotFoundError, InvalidTransitionError, ValidationError, readState, mutateState, projectTarget, trustedDirectoryTarget, startMission, listMissions, getMission, finishMission, } from './coordinatorium/index.js';
 export { SafeWriteError } from './root/index.js';
 export type { WriteErrorCode, WriteWarning, WriteWarningCode, PublicationState } from './root/index.js';

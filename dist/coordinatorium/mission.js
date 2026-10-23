@@ -50,12 +50,12 @@ export async function startMission(target, input) {
     });
     return result;
 }
-export async function listMissions(stateDir) {
-    const state = await readState(stateDir);
+export async function listMissions(target) {
+    const state = await readState(target);
     return Object.values(state.tactical.missions).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }
-export async function getMission(stateDir, id) {
-    const state = await readState(stateDir);
+export async function getMission(target, id) {
+    const state = await readState(target);
     const mission = state.tactical.missions[id];
     if (!mission)
         throw new MissionNotFoundError(id);

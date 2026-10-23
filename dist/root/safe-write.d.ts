@@ -145,6 +145,12 @@ export declare class ParentRef {
     /** @internal */
     static create(data: ParentData): ParentRef;
 }
+/**
+ * Absolute path of the boundary a verified parent lies below, for the READ side
+ * of the same trust decision (SEC-001B.1-R): a lock file is read under the
+ * boundary its staging files are written under. Not a handle; a path.
+ */
+export declare function boundaryPathOf(p: ParentRef): string;
 export interface OpenParentOptions extends InternalOptions {
     /** Create missing directories (one `mkdir` per component, never `recursive`). */
     create?: boolean;

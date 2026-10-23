@@ -16,8 +16,8 @@
  *  - Violations throw RootContainmentError — callers never fall back.
  *
  * This module only reads (lstat/realpath/open+read). It never creates
- * anything. Check-then-use (TOCTOU) races are NOT closed here; see ADR-009
- * and ADR-011.
+ * anything. Check-then-use (TOCTOU) races are NOT closed here; see ADR-009,
+ * ADR-011 and ADR-013 (the unified safe read contract implemented below).
  *
  * It also hosts the bounded project-file helpers (`checkProjectFile`,
  * `readProjectFile`, SEC-002) used for root-level files such as
@@ -25,7 +25,7 @@
  * live next to — not below — `monolithRoot`.
  */
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync } from 'fs';
-import { isAbsolute, join, relative, resolve, win32 } from 'path';
+import { isAbsolute, join, relative, resolve, sep, win32 } from 'path';
 export const DEFAULT_MONOLITH_ROOT = '.monolith';
 export const CONFIG_FILE_NAME = 'monolith.config.json';
 export class RootContainmentError extends Error {
@@ -189,85 +189,153 @@ export function checkContainedFile(root, relFromRoot) {
     }
 }
 // ---------------------------------------------------------------------------
-// Bounded project-file access (SEC-002, ADR-011)
+// Unified safe read contract (SEC-002, ADR-011; SEC-001B.1-R, ADR-013)
 // ---------------------------------------------------------------------------
 /** Upper bound for any file this module inspects or reads (1 MiB). */
 export const MAX_PROJECT_FILE_BYTES = 1024 * 1024;
 const READ_CHUNK_BYTES = 64 * 1024;
+/**
+ * Codes that mean "the file system layout is not what a MONOLITH-managed file
+ * must look like" — as opposed to missing, empty, oversized or a transient
+ * replacement. A caller may want to surface these differently from an I/O fault.
+ */
+export const READ_SECURITY_CODES = [
+    'FILE_OUTSIDE_PROJECT',
+    'FILE_SYMLINK',
+    'FILE_HARDLINKED',
+    'FILE_NOT_REGULAR',
+    'READ_BOUNDARY_INVALID',
+    'READ_UNSUPPORTED_PLATFORM',
+];
+export function isReadSecurityViolation(code) {
+    return READ_SECURITY_CODES.includes(code);
+}
 function fail(code, detail) {
     return { ok: false, code, detail };
 }
-/**
- * Shared implementation. Order matters:
- *  1. containment of every existing path component (realpath) — no I/O on the file;
- *  2. `stat` (follows links) and refusal of anything but a regular file BEFORE
- *     `open`, so a FIFO or device is never opened;
- *  3. `open` with O_NONBLOCK (a FIFO that slipped in after step 2 cannot block
- *     the open) and O_NOCTTY;
- *  4. `fstat` on the descriptor: still a regular file, same dev/ino as step 2,
- *     size within bounds — all before any content is read;
- *  5. optional read of at most `maxBytes + 1` bytes (the file may grow after
- *     fstat; the cap applies to bytes actually read);
- *  6. the descriptor is always closed.
- * Steps 1-2 and 3 are separate syscalls, so a local attacker racing a path
- * component swap is NOT stopped (TOCTOU, SEC-001B).
- */
-function openProjectFile(projectRoot, relPath, opts, wantContent) {
-    const root = resolve(projectRoot);
-    let rootReal;
-    try {
-        rootReal = realProjectRoot(root);
-        assertSegmentsContained(rootReal, relPath.split('/'), relPath);
-    }
-    catch (err) {
-        if (!(err instanceof RootContainmentError))
-            throw err;
-        return fail(err.code === 'ROOT_SYMLINK_ESCAPE' ? 'FILE_OUTSIDE_PROJECT' : 'FILE_UNRESOLVABLE', err.message);
-    }
-    return readBoundedFile(join(root, relPath), relPath, opts, wantContent);
+function errCode(err) {
+    return err?.code;
+}
+/** Segments of `abs` below `base`, or `null` when it is not strictly inside. */
+function segmentsBelow(base, abs) {
+    const rel = relative(base, abs);
+    if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel))
+        return null;
+    return rel.split(sep).filter((s) => s.length > 0);
 }
 /**
- * Steps 2-6 of `openProjectFile`, for a path whose containment the caller has
- * already established (or does not need to: e.g. a lock file next to
- * `state.json`, whose directory was resolved through `resolveMonolithRoot`).
- * `label` is only used in diagnostics. A file replaced between `stat` and
- * `open` is reported as FILE_CHANGED (transient, retryable), not as a fault.
+ * The unified safe read (SEC-001B.1-R). One policy for every MONOLITH-managed
+ * file; there is no permissive variant. Order matters:
+ *  1. platform capabilities (`O_NOFOLLOW`, `O_NONBLOCK`) — absent → fail closed;
+ *  2. explicit boundary: `abs` and `boundary` must be absolute (never the cwd),
+ *     the boundary must be a directory, `abs` must lie strictly below it;
+ *  3. `lstat` of EVERY component below the boundary: none may be a symlink
+ *     (inside the project or not, dangling or not); the last must be a regular
+ *     file with a single link — decided BEFORE `open`, so a FIFO/device/socket
+ *     is never opened;
+ *  4. `open` with `O_NOFOLLOW|O_NONBLOCK|O_NOCTTY`;
+ *  5. `fstat` on the descriptor: still a regular file, same `dev/ino` as step 3,
+ *     still one link, size within bounds — all before any content is read;
+ *  6. optional read of at most `maxBytes + 1` bytes (the cap applies to bytes
+ *     actually read); the descriptor is always closed.
+ * Steps 3 and 4 are separate syscalls: this does NOT defend against a local
+ * actor swapping a directory or file between them (dynamic TOCTOU, SEC-001B.3).
+ * The identity check detects a swap of the FILE only. `label` is for diagnostics.
+ * A file replaced between `lstat` and `open` is FILE_CHANGED (transient,
+ * retryable), not a fault.
  */
 export function readBoundedFile(abs, label, opts, wantContent) {
-    const maxBytes = opts.maxBytes ?? MAX_PROJECT_FILE_BYTES;
-    let before;
+    const noFollow = opts.platformFlags ? opts.platformFlags.noFollow : constants.O_NOFOLLOW;
+    const nonBlock = opts.platformFlags ? opts.platformFlags.nonBlock : constants.O_NONBLOCK;
+    if (typeof noFollow !== 'number' || noFollow === 0 || typeof nonBlock !== 'number' || nonBlock === 0) {
+        return fail('READ_UNSUPPORTED_PLATFORM', `${label}: this platform lacks O_NOFOLLOW/O_NONBLOCK, so a managed file cannot be read safely; refusing.`);
+    }
+    const boundary = opts.boundary;
+    if (typeof boundary !== 'string' || boundary.length === 0 || !isAbsolute(boundary)) {
+        return fail('READ_BOUNDARY_INVALID', `${label}: a read requires an explicit absolute boundary directory (never the cwd).`);
+    }
+    if (typeof abs !== 'string' || abs.length === 0 || !isAbsolute(abs)) {
+        return fail('READ_BOUNDARY_INVALID', `${label}: the path must be absolute (never resolved against the cwd).`);
+    }
+    const boundaryLexical = resolve(boundary);
+    let boundaryReal;
     try {
-        before = statSync(abs);
+        boundaryReal = realpathSync(boundaryLexical);
+        if (!statSync(boundaryReal).isDirectory())
+            throw new Error('not a directory');
     }
     catch (err) {
-        if (err.code === 'ENOENT')
-            return fail('FILE_MISSING', `${label} does not exist.`);
-        return fail('FILE_UNREADABLE', `${label} cannot be inspected: ${errMsg(err)}`);
+        return fail('READ_BOUNDARY_INVALID', `${label}: boundary "${boundaryLexical}" is not a usable directory: ${errMsg(err)}`);
     }
-    if (!before.isFile())
-        return fail('FILE_NOT_REGULAR', `${label} is not a regular file.`);
+    const target = resolve(abs);
+    let base = boundaryLexical;
+    let segs = segmentsBelow(boundaryLexical, target);
+    if (segs === null) {
+        base = boundaryReal;
+        segs = segmentsBelow(boundaryReal, target);
+    }
+    if (segs === null) {
+        return fail('FILE_OUTSIDE_PROJECT', `${label} is not strictly inside the read boundary "${boundaryLexical}".`);
+    }
+    let before;
+    let current = base;
+    for (let i = 0; i < segs.length; i++) {
+        current = join(current, segs[i]);
+        const last = i === segs.length - 1;
+        let st;
+        try {
+            st = lstatSync(current, { bigint: true });
+        }
+        catch (err) {
+            if (errCode(err) === 'ENOENT')
+                return fail('FILE_MISSING', `${label} does not exist.`);
+            return fail('FILE_UNRESOLVABLE', `${label} cannot be inspected at "${segs[i]}": ${errMsg(err)}`);
+        }
+        if (st.isSymbolicLink()) {
+            return fail('FILE_SYMLINK', `${label} passes through a symbolic link at "${segs[i]}"; managed files must not.`);
+        }
+        if (!last) {
+            if (!st.isDirectory())
+                return fail('FILE_UNRESOLVABLE', `${label} cannot be resolved: "${segs[i]}" is not a directory.`);
+            continue;
+        }
+        if (!st.isFile())
+            return fail('FILE_NOT_REGULAR', `${label} is not a regular file.`);
+        if (st.nlink > 1n)
+            return fail('FILE_HARDLINKED', `${label} has ${st.nlink} hard links; managed files must have exactly one.`);
+        before = st;
+    }
+    if (before === undefined)
+        return fail('READ_BOUNDARY_INVALID', `${label} is the boundary itself, not a file below it.`);
+    const maxBytes = opts.maxBytes ?? MAX_PROJECT_FILE_BYTES;
+    opts.afterInspect?.();
     let fd;
     try {
-        fd = openSync(abs, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOCTTY);
+        fd = openSync(current, constants.O_RDONLY | noFollow | nonBlock | constants.O_NOCTTY);
     }
     catch (err) {
-        if (err.code === 'ENOENT')
+        if (errCode(err) === 'ENOENT')
             return fail('FILE_MISSING', `${label} does not exist.`);
+        // O_NOFOLLOW on a symlink: the path became a link after the lstat.
+        if (errCode(err) === 'ELOOP')
+            return fail('FILE_SYMLINK', `${label} became a symbolic link while being opened.`);
         return fail('FILE_UNREADABLE', `${label} cannot be opened: ${errMsg(err)}`);
     }
     try {
-        const st = fstatSync(fd);
+        const st = fstatSync(fd, { bigint: true });
         if (!st.isFile())
             return fail('FILE_NOT_REGULAR', `${label} is not a regular file.`);
         if (st.dev !== before.dev || st.ino !== before.ino) {
             return fail('FILE_CHANGED', `${label} changed while it was being inspected.`);
         }
-        if (st.size === 0 && !opts.allowEmpty)
+        if (st.nlink > 1n)
+            return fail('FILE_HARDLINKED', `${label} has ${st.nlink} hard links; managed files must have exactly one.`);
+        if (st.size === 0n && !opts.allowEmpty)
             return fail('FILE_EMPTY', `${label} is empty.`);
-        if (st.size > maxBytes)
+        if (st.size > BigInt(maxBytes))
             return fail('FILE_TOO_LARGE', `${label} is ${st.size} bytes; the limit is ${maxBytes}.`);
         if (!wantContent)
-            return { ok: true, path: abs, size: st.size };
+            return { ok: true, path: abs, size: Number(st.size) };
         const chunks = [];
         let total = 0;
         for (;;) {
@@ -290,24 +358,51 @@ export function readBoundedFile(abs, label, opts, wantContent) {
     }
 }
 const CHANGED_RETRIES = 3;
+const LINKED_RETRIES = 5;
+const LINKED_RETRY_DELAY_MS = 2;
+function sleepMs(ms) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
 /**
- * `readBoundedFile`, retried while the file is atomically replaced under us
- * (FILE_CHANGED). For readers that race a rename-based writer or a lock
- * release/re-acquire: those are normal, not faults. After the retries it
- * still reports FILE_CHANGED rather than guessing.
+ * `readBoundedFile`, retried across the two states MONOLITH's own writers pass
+ * through (neither is a fault): the file is atomically replaced under us
+ * (FILE_CHANGED, `rename`), or it has a second link for an instant
+ * (FILE_HARDLINKED: a lock is published by `link()`ing its staging file and
+ * the staging name is removed right after, SEC-001B.2). After the retries the
+ * result is reported as it is — a link that stays is refused, never accepted.
+ * Same policy, same options.
  */
 export function readBoundedFileStable(abs, label, opts, wantContent) {
     let r = readBoundedFile(abs, label, opts, wantContent);
-    for (let i = 1; i < CHANGED_RETRIES && !r.ok && r.code === 'FILE_CHANGED'; i++) {
+    let changed = 1;
+    let linked = 1;
+    while (!r.ok) {
+        if (r.code === 'FILE_CHANGED' && changed < CHANGED_RETRIES) {
+            changed++;
+        }
+        else if (r.code === 'FILE_HARDLINKED' && linked < LINKED_RETRIES) {
+            linked++;
+            sleepMs(LINKED_RETRY_DELAY_MS);
+        }
+        else {
+            break;
+        }
         r = readBoundedFile(abs, label, opts, wantContent);
     }
     return r;
 }
+/** `projectRoot` is the explicit boundary; `relPath` is `/`-separated and must be trusted/fixed. */
+function openProjectFile(projectRoot, relPath, opts, wantContent) {
+    if (typeof projectRoot !== 'string' || projectRoot.length === 0 || !isAbsolute(projectRoot)) {
+        return fail('READ_BOUNDARY_INVALID', `${relPath}: the project root must be an explicit absolute path (never the cwd).`);
+    }
+    return readBoundedFile(join(projectRoot, relPath), relPath, { ...opts, boundary: projectRoot }, wantContent);
+}
 /**
- * Static check of a file below the PROJECT root (not `monolithRoot`): exists,
- * stays inside the project (symlinks that stay inside are allowed), is a
- * regular file, is non-empty (unless `allowEmpty`) and within `maxBytes`.
- * The content is never read. `relPath` is `/`-separated and must be trusted/fixed.
+ * Static check of a file below the PROJECT root (not `monolithRoot`) under the
+ * unified read policy: exists, no symlink in any component below the root,
+ * regular file with one link, non-empty (unless `allowEmpty`) and within
+ * `maxBytes`. The content is never read.
  */
 export function checkProjectFile(projectRoot, relPath, opts = {}) {
     return openProjectFile(projectRoot, relPath, opts, false);
@@ -319,5 +414,5 @@ export function readProjectFile(projectRoot, relPath, opts = {}) {
 // ---------------------------------------------------------------------------
 // Safe writes (SEC-001B.2, ADR-012)
 // ---------------------------------------------------------------------------
-export { SafeWriteError, WriteBoundary, ParentRef, projectBoundary, trustedDirectoryBoundary, openParent, probeTarget, createExclusive, disposeOwned, publishLink, createFile, replaceFile, detectPlatformCaps, reportWriteWarning, resetWriteWarningState, } from './safe-write.js';
+export { SafeWriteError, WriteBoundary, ParentRef, projectBoundary, trustedDirectoryBoundary, openParent, boundaryPathOf, probeTarget, createExclusive, disposeOwned, publishLink, createFile, replaceFile, detectPlatformCaps, reportWriteWarning, resetWriteWarningState, } from './safe-write.js';
 export { findWriteArtifacts, describeWriteArtifacts } from './write-artifacts.js';

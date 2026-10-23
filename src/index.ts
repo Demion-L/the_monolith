@@ -55,6 +55,7 @@ export type {
   CoordinatoriumErrorCode,
   StartMissionInput,
   FinishMissionInput,
+  StateWriteTarget,
 } from './coordinatorium/index.js';
 export {
   createInitialState,
@@ -67,8 +68,14 @@ export {
   ValidationError,
   readState,
   mutateState,
+  projectTarget,
+  trustedDirectoryTarget,
   startMission,
   listMissions,
   getMission,
   finishMission,
 } from './coordinatorium/index.js';
+
+// Safe writes — explicit write scope and publication states (SEC-001B.2, ADR-012)
+export { SafeWriteError } from './root/index.js';
+export type { WriteErrorCode, WriteWarning, WriteWarningCode, PublicationState } from './root/index.js';

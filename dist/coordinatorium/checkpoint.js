@@ -63,7 +63,7 @@ function nextCheckpointId(checkpoints, missionId) {
  * lose an update — a direct consequence of reusing mutateState, not new
  * concurrency design.
  */
-export async function createCheckpoint(stateDir, missionId, input) {
+export async function createCheckpoint(target, missionId, input) {
     const summary = requireBoundedString(input.summary, 'summary', MAX_SUMMARY_LENGTH);
     const remainingStepsRaw = input.remainingSteps ?? [];
     if (!Array.isArray(remainingStepsRaw)) {
@@ -77,7 +77,7 @@ export async function createCheckpoint(stateDir, missionId, input) {
     if (input.context !== undefined && input.context !== null) {
         context = requireBoundedString(input.context, 'context', MAX_CONTEXT_LENGTH);
     }
-    const { result } = await mutateState(stateDir, (draft) => {
+    const { result } = await mutateState(target, (draft) => {
         const mission = draft.tactical.missions[missionId];
         if (!mission)
             throw new MissionNotFoundError(missionId);

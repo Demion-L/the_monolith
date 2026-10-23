@@ -128,4 +128,8 @@ export declare function readBoundedFileStable(abs: string, label: string, opts: 
 export declare function checkProjectFile(projectRoot: string, relPath: string, opts?: ProjectFileOptions): ProjectFileCheck;
 /** `checkProjectFile` plus a bounded UTF-8 read of the content. */
 export declare function readProjectFile(projectRoot: string, relPath: string, opts?: ProjectFileOptions): ProjectFileRead;
+export { SafeWriteError, WriteBoundary, ParentRef, projectBoundary, trustedDirectoryBoundary, openParent, probeTarget, createExclusive, disposeOwned, publishLink, createFile, replaceFile, detectPlatformCaps, reportWriteWarning, resetWriteWarningState, } from './safe-write.js';
+export { findWriteArtifacts, describeWriteArtifacts } from './write-artifacts.js';
+export type { WriteArtifact, WriteArtifactKind } from './write-artifacts.js';
+export type { PublicationState, WriteErrorCode, WriteWarning, WriteWarningCode, WriteScopeMode, WriteOptions, WriteOutcome, DurabilityRequest, DurabilityReached, TargetProbe, OwnedToken, OwnedFile, DisposeResult, PlatformCaps, TempFileInfo, LinkPublishResult, FsOps, } from './safe-write.js';
 //# sourceMappingURL=index.d.ts.map

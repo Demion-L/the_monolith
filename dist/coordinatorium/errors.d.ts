@@ -59,6 +59,9 @@ export interface LockCreationErrorParams {
     cleanedUp: boolean;
     /** The original fs error (e.g. ENOSPC/EIO), or whatever else was thrown. */
     cause: unknown;
+    /** `UNKNOWN`: the publish step may or may not have created the lock (SEC-001B.2).
+     * Default `NOT_PUBLISHED`. */
+    publication?: 'NOT_PUBLISHED' | 'UNKNOWN';
 }
 /**
  * Thrown when a lock (the primary `state.json.lock` or the internal
@@ -75,6 +78,7 @@ export declare class LockCreationError extends CoordinatoriumError {
     readonly nonce: string;
     readonly timestamp: string;
     readonly cleanedUp: boolean;
+    readonly publication: 'NOT_PUBLISHED' | 'UNKNOWN';
     readonly cause: unknown;
     readonly causeCode: string | undefined;
     constructor(params: LockCreationErrorParams);

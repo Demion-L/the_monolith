@@ -24,7 +24,17 @@ export {
 } from './errors.js';
 export type { CoordinatoriumErrorCode } from './errors.js';
 
-export { readState, mutateState, validateState, stateFilePath, STATE_FILE_NAME, MAX_STATE_BYTES } from './state-keeper.js';
+export {
+  readState,
+  mutateState,
+  validateState,
+  stateFilePath,
+  STATE_FILE_NAME,
+  MAX_STATE_BYTES,
+  projectTarget,
+  trustedDirectoryTarget,
+} from './state-keeper.js';
+export type { StateWriteTarget } from './state-keeper.js';
 export { startMission, listMissions, getMission, finishMission } from './mission.js';
 export type { StartMissionInput, FinishMissionInput } from './mission.js';
 export { createCheckpoint, listCheckpoints, getCheckpoint } from './checkpoint.js';

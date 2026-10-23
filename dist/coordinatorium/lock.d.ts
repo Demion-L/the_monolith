@@ -41,7 +41,9 @@
  *   5. A lock is never published in a partially-written state.
  *      Metadata is written in full to a private staging file
  *      (`<lockPath>.creating.<pid>.<nonce>`, a name no other acquirer can
- *      ever guess or collide with) and only published — via `linkSync`,
+ *      ever guess or collide with; created `O_EXCL|O_NOFOLLOW` at mode `0600`
+ *      through the shared safe-write primitive, SEC-001B.2) and only
+ *      published — via `link()`,
  *      which is exactly as exclusive a create-if-absent primitive as
  *      `open(path, 'wx')` — once that write (and, if requested, an fsync)
  *      has fully succeeded. If anything fails first, the canonical path
@@ -49,6 +51,7 @@
  *      uniquely-named staging file is ever touched by its own cleanup. See
  *      `createAndPublish` below and ADR-008 for the full argument.
  */
+import { type FsOps, type ParentRef } from '../root/index.js';
 /** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
 export declare const MAX_LOCK_BYTES = 256;
 export interface LockOptions {
@@ -89,6 +92,10 @@ export interface LockTestHooks {
      * staging file — lets tests pause a failed creator at exactly the point
      * where only its own staging file exists on disk. */
     beforeStagingCleanupOnFailure?: () => void | Promise<void>;
+    /** Replaces individual filesystem calls made by the safe-write primitive
+     * while creating, publishing and removing staging files — fault injection
+     * for publication states. Never supplied by production code. */
+    fsOps?: Partial<FsOps>;
 }
 /**
  * Acquire `lockPath` exclusively. Waits up to `timeoutMs` for the current
@@ -97,5 +104,5 @@ export interface LockTestHooks {
  * function. `testHooks` exists solely to let tests force specific
  * interleavings deterministically — production callers must never pass it.
  */
-export declare function acquireLock(lockPath: string, options?: LockOptions, testHooks?: LockTestHooks): Promise<() => void>;
+export declare function acquireLock(lockPath: string, options?: LockOptions, testHooks?: LockTestHooks, parent?: ParentRef): Promise<() => void>;
 //# sourceMappingURL=lock.d.ts.map

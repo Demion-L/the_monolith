@@ -7,8 +7,9 @@
  * in mission.ts.
  */
 
-import { resolveMonolithRoot, assertContainedFile } from '../root/index.js';
-import { STATE_FILE_NAME } from './state-keeper.js';
+import { resolveMonolithRoot, assertContainedFile, reportWriteWarning, SafeWriteError } from '../root/index.js';
+import { LockCreationError } from './errors.js';
+import { STATE_FILE_NAME, projectTarget, type StateWriteTarget } from './state-keeper.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
 import type { Mission, MissionResult, Checkpoint } from './types.js';
@@ -22,6 +23,67 @@ function stateDirFor(targetDir: string): string {
   assertContainedFile(root, STATE_FILE_NAME);
   assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
   return root.rootAbs;
+}
+
+// Writes always use PROJECT scope (ADR-012): the project root is the boundary,
+// so a symlinked `monolithRoot` or intermediate directory is refused even when
+// it stays inside the project.
+function writeTargetFor(targetDir: string): StateWriteTarget {
+  const root = resolveMonolithRoot(targetDir);
+  assertContainedFile(root, STATE_FILE_NAME);
+  assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
+  return projectTarget(root.projectRoot, root.rootAbs, (w) => reportWriteWarning(w));
+}
+
+/**
+ * A write whose outcome is UNKNOWN (SEC-001B.2) was NOT retried and nothing was
+ * cleaned up. The wrapper keeps the machine-readable fields of the original
+ * error (`code`, `publication`, `phase`, `path`) and the error itself as
+ * `cause`; only the message gains guidance, which depends on WHAT is unknown:
+ *
+ *  - `state`: `state.json` may or may not have been replaced. Look at the
+ *    missions before repeating a command that is not idempotent (a second
+ *    `start` would register a second mission).
+ *  - `lock`: it is the creation of the lock file that is unknown; no state was
+ *    written. The mission list says nothing about it — inspect the lock and its
+ *    staging files, and remove nothing while another command may be running.
+ */
+export class UnknownWriteOutcomeError extends Error {
+  readonly code: string;
+  readonly publication = 'UNKNOWN' as const;
+  readonly phase: string;
+  readonly path: string;
+  readonly subject: 'state' | 'lock';
+  readonly cause: unknown;
+
+  constructor(original: SafeWriteError | LockCreationError) {
+    const lock = original instanceof LockCreationError;
+    const guidance = lock
+      ? `The outcome of creating the lock is UNKNOWN. It was not retried and nothing was removed; no state was written. ` +
+        `Inspect, read-only, "${original.lockPath}" and any "${original.lockPath}.creating.*" or "${original.lockPath}.recovery" ` +
+        'next to it. MONOLITH never deletes these automatically (FS-CLEAN-001); remove nothing while another monolith ' +
+        'command may be running.'
+      : 'The outcome of this write is UNKNOWN. It was not retried. Check the current state with ' +
+        '`monolith mission list` (and `monolith mission show <id>`) before running this command again.';
+    super(`${original.message}\n${guidance}`);
+    this.name = 'UnknownWriteOutcomeError';
+    this.code = original.code;
+    this.phase = original.phase;
+    this.path = lock ? original.lockPath : original.path;
+    this.subject = lock ? 'lock' : 'state';
+    this.cause = original;
+  }
+}
+
+export async function withWriteGuidance<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if ((err instanceof SafeWriteError || err instanceof LockCreationError) && err.publication === 'UNKNOWN') {
+      throw new UnknownWriteOutcomeError(err);
+    }
+    throw err;
+  }
 }
 
 function parseFlag(args: string[], name: string): string | undefined {
@@ -58,7 +120,7 @@ export async function runMissionStart(args: string[], targetDir = process.cwd())
   if (!title || !system) {
     throw new Error('Usage: monolith mission start --title "..." --system "..."');
   }
-  const mission = await startMission(stateDirFor(targetDir), { title, system });
+  const mission = await withWriteGuidance(() => startMission(writeTargetFor(targetDir), { title, system }));
   console.log(`Started mission ${mission.id} (${mission.status})`);
   console.log(formatMission(mission));
 }
@@ -119,11 +181,13 @@ export async function runMissionCheckpoint(args: string[], targetDir = process.c
   }
   const remainingSteps = parseRepeatedFlag(args, '--remaining');
   const context = parseFlag(args, '--context');
-  const checkpoint = await createCheckpoint(stateDirFor(targetDir), missionId, {
-    summary,
-    remainingSteps,
-    context: context ?? null,
-  });
+  const checkpoint = await withWriteGuidance(() =>
+    createCheckpoint(writeTargetFor(targetDir), missionId, {
+      summary,
+      remainingSteps,
+      context: context ?? null,
+    }),
+  );
   console.log(`Created checkpoint ${checkpoint.id} for mission ${checkpoint.missionId}`);
   console.log(formatCheckpoint(checkpoint));
 }
@@ -152,10 +216,12 @@ export async function runMissionFinish(args: string[], targetDir = process.cwd()
   if (!id || !result) {
     throw new Error('Usage: monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]');
   }
-  const mission = await finishMission(stateDirFor(targetDir), id, {
-    result: result as MissionResult,
-    summary: summary ?? undefined,
-  });
+  const mission = await withWriteGuidance(() =>
+    finishMission(writeTargetFor(targetDir), id, {
+      result: result as MissionResult,
+      summary: summary ?? undefined,
+    }),
+  );
   console.log(`Mission ${mission.id} finished as ${mission.status}`);
   console.log(formatMission(mission));
 }

@@ -30,10 +30,10 @@ function requireNonEmptyString(value, field) {
  * same locked critical section as the write, so concurrent `start` calls
  * from independent processes can never collide on an ID.
  */
-export async function startMission(stateDir, input) {
+export async function startMission(target, input) {
     const title = requireNonEmptyString(input.title, 'title');
     const system = requireNonEmptyString(input.system, 'system');
-    const { result } = await mutateState(stateDir, (draft) => {
+    const { result } = await mutateState(target, (draft) => {
         const id = nextMissionId(draft.tactical.missions);
         const now = new Date().toISOString();
         const mission = {
@@ -66,11 +66,11 @@ export async function getMission(stateDir, id) {
  * starting status (already completed/failed/cancelled) is rejected — once
  * terminal, a mission's lifecycle is closed.
  */
-export async function finishMission(stateDir, id, input) {
+export async function finishMission(target, id, input) {
     if (!MISSION_RESULTS.includes(input.result)) {
         throw new ValidationError(`"result" must be one of ${MISSION_RESULTS.join(', ')}, got "${String(input.result)}"`);
     }
-    const { result } = await mutateState(stateDir, (draft) => {
+    const { result } = await mutateState(target, (draft) => {
         const mission = draft.tactical.missions[id];
         if (!mission)
             throw new MissionNotFoundError(id);

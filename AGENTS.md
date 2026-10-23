@@ -133,6 +133,8 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + bounded project-file helpers `checkProjectFile()`/`readProjectFile()` (ADR-011) |
+| `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
+| `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
@@ -140,7 +142,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (374 tests passing, typecheck clean):
+What MONOLITH does today (711 tests passing, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -259,8 +261,40 @@ Over-limit is fail-closed — never truncated, compacted or auto-cleaned
 (in-project allowed, escaping/dangling/looping refused). Bounded reads do not
 close check-then-use races.
 
-Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) but
-check-then-use races remain (SEC-001B, OPEN — see
+`brief` adds a `WRITE_ARTIFACTS_PRESENT` **warning** when leftover write files
+are present in the instance directory (and `validate` prints a `Warning:` line);
+neither changes `Completeness` or an exit code, and nothing is deleted — a
+matching name does not prove a file is an orphan (FS-CLEAN-001).
+
+**File write contract (SEC-001B.2, ADR-012).** Every *publication* (creation or
+replacement) of `state.json`, the lock files and the `init` scaffold goes through
+`src/root/safe-write.ts`. Not everything that touches a file does: lock release
+and stale-lock recovery `unlink` the lock path directly, `trusted-directory`
+scope creates its directory with `mkdirSync`, and `src/scripts/dogfood-*.ts`
+write reports on their own:
+
+| Property | Contract |
+|---|---|
+| Scope | Explicit, no default: `project` (CLI, `init`; the project root is the boundary) or `trusted-directory` (the caller asserts the directory **and its ancestors** are trusted; they are not inspected). `mutateState` / `startMission` / `finishMission` take a `StateWriteTarget`; a plain string throws `WRITE_SCOPE_REQUIRED` |
+| Symlinks (W-SYM) | Refused for writes anywhere below the boundary — in the target or in a parent, dangling or not, **including links that stay inside the project**. Reads keep the ADR-009 policy |
+| Destination | Replaced only if absent or a regular file with one link; FIFO/special file, directory, symlink and `nlink > 1` (`WRITE_TARGET_HARDLINKED`) are refused |
+| Temp file | `O_CREAT\|O_EXCL\|O_NOFOLLOW`; `rename()` over the state file, `link()` for create-only files |
+| Modes | New `state.json` / lock: `0600`; an existing `state.json` keeps its mode; scaffold documents follow the umask |
+| Durability | create → write → `fchmod` → `fstat` verify → `fsync(file)` → `close` → publish → `fsync(directory)`; state uses all of it, scaffold fsyncs files only, lock fsync stays opt-in |
+| Publication | `NOT_PUBLISHED` / `PUBLISHED` / `UNKNOWN`, decided from the identity (`dev/ino`) of the destination and of the temp name after a failed `rename`/`link` — never from the error code, and for `link`+`EEXIST` never from a link count. `UNKNOWN` is never retried, never downgraded and nothing is deleted; the CLI asks the user to check the missions (state) or to inspect the lock and its staging files (lock). Failures after publication are warnings; `onWarning` runs after the lock is released |
+| Cleanup | The primitive removes only a temp file created by the current call, and only while its `dev/ino` still matches. Lock release removes only a lock holding this process's own record; stale recovery removes a confirmed-dead owner's lock under the recovery mutex. No cleanup by age, PID or name; leftovers are not deleted (FS-CLEAN-001) |
+| Lock | Ownership, backoff, liveness, stale recovery and record format unchanged; only staging creation uses the primitive |
+| Platform | Guarantees: POSIX. Windows best-effort and **unverified** (warning `PLATFORM_BEST_EFFORT`); macOS/BSD unverified; NFS/SMB outside |
+
+This does **not** defend against a local actor changing directories or
+symlinks concurrently with a command (SEC-001B.3): the parent-directory
+re-check is a tripwire, not protection, and removing the owned temp file is not
+conditional on the identity check. `init` is neither atomic nor coordinated
+between processes.
+
+Known limitations: `monolithRoot` is contained (ADR-009, SEC-001A) and
+file reads/writes are bounded and checked (SEC-001B.1 / .2), but
+check-then-use races remain (SEC-001B.3, OPEN — see
 `.monolith/memory/long-term/tech-debt.md`);
 `monolith context <topic>` and JSON output do not exist.
 
@@ -371,7 +405,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - [x] 374 total tests passing (brief 122), typecheck and build clean
 - [ ] `monolith context <topic>` (CONTEXT-001B) — not implemented
 - [x] SEC-001A (`monolithRoot` containment, corrupted config fails closed) — IMPLEMENTED on branch, ADR-009
-- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 and SEC-001B.3 OPEN
+- [ ] SEC-001B (TOCTOU / filesystem boundary) — OPEN; SEC-001B.1 (bounded reads) IMPLEMENTED / MERGED (`d006562`), SEC-001B.2 (safe writes, ADR-012) IMPLEMENTED on `fix/sec-001b2-safe-writes`, NOT merged; SEC-001B.3 OPEN
 
 **Candidate next stories (not decisions):**
 - CONTEXT-001B — `monolith context <topic>`

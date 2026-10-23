@@ -14,7 +14,14 @@
 import { existsSync } from 'fs';
 import { join, relative } from 'path';
 import { readBriefConfig } from './config.js';
-import { resolveMonolithRootValue, checkContainedFile, readBoundedFileStable, type ResolvedMonolithRoot } from '../root/index.js';
+import {
+  resolveMonolithRootValue,
+  checkContainedFile,
+  readBoundedFileStable,
+  findWriteArtifacts,
+  describeWriteArtifacts,
+  type ResolvedMonolithRoot,
+} from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import {
@@ -258,6 +265,19 @@ export async function collect(targetDir: string): Promise<BriefModel> {
       severity: 'warn',
       message: `No MONOLITH instance found at "${config.monolithRoot}" — nothing to summarize.`,
     });
+  }
+
+  if (monolithInitialized) {
+    // Read-only (SEC-001B.2): names only. A warning, never an error — it does
+    // not make the brief INCOMPLETE — and nothing is deleted or repaired.
+    const artifacts = findWriteArtifacts(monolithRootAbs);
+    if (artifacts.length > 0) {
+      diagnostics.push({
+        code: 'WRITE_ARTIFACTS_PRESENT',
+        severity: 'warn',
+        message: describeWriteArtifacts(artifacts, config.monolithRoot),
+      });
+    }
   }
 
   const identity = {

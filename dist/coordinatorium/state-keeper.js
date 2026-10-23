@@ -12,13 +12,11 @@
  * AI reports state; this module validates and persists it. It has no
  * knowledge of what a "mission" is — that belongs to mission.ts.
  */
-import { writeFile, rename, unlink } from 'fs/promises';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
-import { randomBytes } from 'crypto';
 import { acquireLock } from './lock.js';
 import { StateCorruptedError, StateSchemaError, StateFileError } from './errors.js';
-import { readBoundedFileStable } from '../root/index.js';
+import { SafeWriteError, openParent, projectBoundary, readBoundedFileStable, replaceFile, trustedDirectoryBoundary, } from '../root/index.js';
 import { STATE_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION_V1, createInitialState, } from './types.js';
 export const STATE_FILE_NAME = 'state.json';
 /**
@@ -32,6 +30,44 @@ export function stateFilePath(stateDir) {
 }
 function lockFilePath(stateDir) {
     return `${stateFilePath(stateDir)}.lock`;
+}
+/** Project-scoped write target (the CLI always uses this). */
+export function projectTarget(projectRoot, stateDir, onWarning) {
+    return { scope: 'project', projectRoot, stateDir, onWarning };
+}
+/** Trusted-directory write target: `stateDir` and its ancestors are asserted trusted by the caller. */
+export function trustedDirectoryTarget(stateDir, onWarning) {
+    return { scope: 'trusted-directory', stateDir, onWarning };
+}
+function scopeRequired(fn, stateDir) {
+    return new SafeWriteError(`${fn} requires an explicit write scope. Replace ${fn}(dir, ...) with ` +
+        `${fn}({ scope: 'trusted-directory', stateDir: dir }, ...) when dir and its ancestors are trusted, or with ` +
+        `${fn}({ scope: 'project', projectRoot, stateDir }, ...) when acting on a project (ADR-012).`, {
+        code: 'WRITE_SCOPE_REQUIRED',
+        phase: 'scope',
+        publication: 'NOT_PUBLISHED',
+        path: typeof stateDir === 'string' ? stateDir : '',
+    });
+}
+/** Validates the scope and builds the boundary. Throws SafeWriteError; touches nothing in `project` scope. */
+function resolveWriteTarget(target, fn) {
+    if (typeof target !== 'object' || target === null)
+        throw scopeRequired(fn, target);
+    const t = target;
+    if (typeof t.stateDir !== 'string' || t.stateDir.length === 0)
+        throw scopeRequired(fn, t.stateDir);
+    if (t.scope === 'project') {
+        if (typeof t.projectRoot !== 'string' || t.projectRoot.length === 0)
+            throw scopeRequired(fn, t.stateDir);
+        return { boundary: projectBoundary(t.projectRoot), stateDir: t.stateDir, onWarning: t.onWarning };
+    }
+    if (t.scope === 'trusted-directory') {
+        // The caller vouches for the directory and its ancestors, so creating it
+        // (and any missing ancestors) is within the model they chose.
+        mkdirSync(t.stateDir, { recursive: true });
+        return { boundary: trustedDirectoryBoundary(t.stateDir), stateDir: t.stateDir, onWarning: t.onWarning };
+    }
+    throw scopeRequired(fn, t.stateDir);
 }
 const MISSION_STATUSES = ['in_progress', 'completed', 'failed', 'cancelled'];
 function isPlainObject(v) {
@@ -214,8 +250,16 @@ export async function readState(stateDir) {
     }
     return validateState(parsed);
 }
-async function atomicWriteState(stateDir, state) {
-    const filePath = stateFilePath(stateDir);
+/**
+ * Persist `state` through the safe-write primitive (SEC-001B.2, ADR-012):
+ * temp file (`O_EXCL|O_NOFOLLOW`, `0600`) -> fsync -> `rename`, then fsync of
+ * the directory. A new `state.json` is `0600`; an existing one keeps its mode.
+ * A symlink, FIFO/special file or hardlinked file at the destination is
+ * refused (never replaced). Throws SafeWriteError with publication
+ * NOT_PUBLISHED or UNKNOWN; once published nothing throws — later findings are
+ * returned as warnings.
+ */
+function atomicWriteState(parent, filePath, state) {
     const serialized = `${JSON.stringify(state, null, 2)}\n`;
     // Refuse BEFORE creating the temp file: an oversized state.json would be
     // unreadable by readState, locking the project out of its own state. The
@@ -224,14 +268,24 @@ async function atomicWriteState(stateDir, state) {
     if (bytes > MAX_STATE_BYTES) {
         throw new StateFileError('FILE_TOO_LARGE', `refusing to write "${filePath}": ${bytes} bytes exceeds the ${MAX_STATE_BYTES}-byte limit (see STATE-001); state was not modified.`);
     }
-    const tmpPath = `${filePath}.tmp.${process.pid}.${randomBytes(4).toString('hex')}`;
-    await writeFile(tmpPath, serialized, 'utf8');
-    try {
-        await rename(tmpPath, filePath);
-    }
-    catch (err) {
-        await unlink(tmpPath).catch(() => undefined);
-        throw err;
+    return replaceFile(parent, STATE_FILE_NAME, serialized, {
+        mode: 0o600,
+        preserveMode: true,
+        durability: 'full',
+        maxBytes: MAX_STATE_BYTES,
+    }).warnings;
+}
+/** The write is already published; a throwing callback must not turn it into a failure. */
+function reportWarnings(warnings, onWarning) {
+    if (!onWarning)
+        return;
+    for (const w of warnings) {
+        try {
+            onWarning(w);
+        }
+        catch {
+            /* ignored on purpose */
+        }
     }
 }
 /**
@@ -241,22 +295,31 @@ async function atomicWriteState(stateDir, state) {
  * created) alongside the write. The revision is incremented exactly once
  * per successful call, after the mutator returns.
  */
-export async function mutateState(stateDir, mutator, lockOptions) {
+export async function mutateState(target, mutator, lockOptions) {
+    const { boundary, stateDir, onWarning } = resolveWriteTarget(target, 'mutateState');
+    const warnings = [];
     // The instance's state directory may not exist yet (e.g. an existing
     // project's first mission before any state.json has ever been written).
-    // Creating it here is the "safe, explicit initialization path" for that
-    // case — it never touches a state.json that already exists.
-    mkdirSync(stateDir, { recursive: true });
-    const release = await acquireLock(lockFilePath(stateDir), lockOptions);
+    // Creating it here — component by component, refusing symlinks below the
+    // boundary — is the "safe, explicit initialization path" for that case; it
+    // never touches a state.json that already exists.
+    const parent = openParent(boundary, stateDir, { create: true });
+    const release = await acquireLock(lockFilePath(stateDir), lockOptions, {}, parent);
+    let draft;
+    let result;
     try {
         const current = await readState(stateDir);
-        const draft = structuredClone(current);
-        const result = mutator(draft);
+        draft = structuredClone(current);
+        result = mutator(draft);
         draft.revision = current.revision + 1;
-        await atomicWriteState(stateDir, draft);
-        return { state: draft, result };
+        warnings.push(...atomicWriteState(parent, stateFilePath(stateDir), draft));
     }
     finally {
         release();
     }
+    // The write is published and the lock is released: caller code runs outside
+    // the critical section, so a slow or re-entrant callback cannot hold up (or
+    // deadlock against) other writers.
+    reportWarnings(warnings, onWarning);
+    return { state: draft, result, warnings };
 }

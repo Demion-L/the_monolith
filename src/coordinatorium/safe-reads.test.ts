@@ -14,7 +14,7 @@ import {
 import { execFileSync, spawnSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
-import { readState, mutateState, stateFilePath, MAX_STATE_BYTES } from './state-keeper.js';
+import { readState, mutateState, stateFilePath, trustedDirectoryTarget, MAX_STATE_BYTES } from './state-keeper.js';
 import { acquireLock, MAX_LOCK_BYTES } from './lock.js';
 import { createInitialState } from './types.js';
 import { StateFileError, LockUnsafeError, LockTimeoutError } from './errors.js';
@@ -220,7 +220,7 @@ describe('state.json size is enforced before the atomic write', () => {
   it('writes exactly 16 MiB, then refuses 16 MiB + 1 without touching state.json or leaving a temp file', async () => {
     const p = project();
     const exact = padFor(MAX_STATE_BYTES);
-    await mutateState(p.mon, (d) => {
+    await mutateState(trustedDirectoryTarget(p.mon), (d) => {
       (d.strategic.systems as Record<string, unknown>).pad = exact;
     });
     expect(statSync(p.state).size).toBe(MAX_STATE_BYTES);
@@ -228,7 +228,7 @@ describe('state.json size is enforced before the atomic write', () => {
 
     // next mutation: revision 2 serializes one byte longer than revision 1 only
     // if digits grow; use an explicit +1 pad instead of relying on that.
-    const err = await mutateState(p.mon, (d) => {
+    const err = await mutateState(trustedDirectoryTarget(p.mon), (d) => {
       (d.strategic.systems as Record<string, unknown>).pad = exact + 'x';
     }).catch((e) => e);
     expect(err).toBeInstanceOf(StateFileError);
@@ -239,7 +239,7 @@ describe('state.json size is enforced before the atomic write', () => {
 
   it('a refused first write creates no state.json at all', async () => {
     const p = project();
-    const err = await mutateState(p.mon, (d) => {
+    const err = await mutateState(trustedDirectoryTarget(p.mon), (d) => {
       (d.strategic.systems as Record<string, unknown>).pad = padFor(MAX_STATE_BYTES) + 'x';
     }).catch((e) => e);
     expect(err).toBeInstanceOf(StateFileError);

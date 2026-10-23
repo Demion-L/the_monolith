@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
+import { trustedDirectoryTarget } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
 import { runMissionStart, runMissionList, runMissionShow, runMissionFinish } from './cli.js';
 
@@ -24,7 +25,7 @@ afterEach(() => {
 describe('startMission', () => {
   it('registers a mission as in_progress with a generated id', async () => {
     const dir = makeTempDir();
-    const mission = await startMission(dir, { title: 'Implement State Keeper', system: 'coordinatorium' });
+    const mission = await startMission(trustedDirectoryTarget(dir), { title: 'Implement State Keeper', system: 'coordinatorium' });
     expect(mission.id).toBe('MIS-0001');
     expect(mission.status).toBe('in_progress');
     expect(mission.summary).toBeNull();
@@ -33,24 +34,24 @@ describe('startMission', () => {
 
   it('generates unique, incrementing ids across sequential calls', async () => {
     const dir = makeTempDir();
-    const a = await startMission(dir, { title: 'A', system: 's' });
-    const b = await startMission(dir, { title: 'B', system: 's' });
-    const c = await startMission(dir, { title: 'C', system: 's' });
+    const a = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const b = await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's' });
+    const c = await startMission(trustedDirectoryTarget(dir), { title: 'C', system: 's' });
     expect([a.id, b.id, c.id]).toEqual(['MIS-0001', 'MIS-0002', 'MIS-0003']);
   });
 
   it('allows multiple concurrent (in_progress) missions at once', async () => {
     const dir = makeTempDir();
-    await startMission(dir, { title: 'A', system: 's1' });
-    await startMission(dir, { title: 'B', system: 's2' });
+    await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's1' });
+    await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's2' });
     const all = await listMissions(dir);
     expect(all.filter((m) => m.status === 'in_progress')).toHaveLength(2);
   });
 
   it('rejects an empty title or system', async () => {
     const dir = makeTempDir();
-    await expect(startMission(dir, { title: '', system: 's' })).rejects.toBeInstanceOf(ValidationError);
-    await expect(startMission(dir, { title: 't', system: '   ' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(startMission(trustedDirectoryTarget(dir), { title: '', system: 's' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(startMission(trustedDirectoryTarget(dir), { title: 't', system: '   ' })).rejects.toBeInstanceOf(ValidationError);
   });
 });
 
@@ -62,9 +63,9 @@ describe('listMissions', () => {
 
   it('distinguishes active from finished missions', async () => {
     const dir = makeTempDir();
-    const a = await startMission(dir, { title: 'A', system: 's' });
-    const b = await startMission(dir, { title: 'B', system: 's' });
-    await finishMission(dir, a.id, { result: 'completed' });
+    const a = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const b = await startMission(trustedDirectoryTarget(dir), { title: 'B', system: 's' });
+    await finishMission(trustedDirectoryTarget(dir), a.id, { result: 'completed' });
 
     const all = await listMissions(dir);
     const active = all.filter((m) => m.status === 'in_progress');
@@ -77,7 +78,7 @@ describe('listMissions', () => {
 describe('getMission', () => {
   it('returns full mission details', async () => {
     const dir = makeTempDir();
-    const started = await startMission(dir, { title: 'A', system: 's' });
+    const started = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
     const fetched = await getMission(dir, started.id);
     expect(fetched).toEqual(started);
   });
@@ -91,43 +92,43 @@ describe('getMission', () => {
 describe('finishMission', () => {
   it('completes a mission', async () => {
     const dir = makeTempDir();
-    const m = await startMission(dir, { title: 'A', system: 's' });
-    const finished = await finishMission(dir, m.id, { result: 'completed', summary: 'done' });
+    const m = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const finished = await finishMission(trustedDirectoryTarget(dir), m.id, { result: 'completed', summary: 'done' });
     expect(finished.status).toBe('completed');
     expect(finished.summary).toBe('done');
   });
 
   it('fails a mission', async () => {
     const dir = makeTempDir();
-    const m = await startMission(dir, { title: 'A', system: 's' });
-    const finished = await finishMission(dir, m.id, { result: 'failed' });
+    const m = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const finished = await finishMission(trustedDirectoryTarget(dir), m.id, { result: 'failed' });
     expect(finished.status).toBe('failed');
   });
 
   it('cancels a mission', async () => {
     const dir = makeTempDir();
-    const m = await startMission(dir, { title: 'A', system: 's' });
-    const finished = await finishMission(dir, m.id, { result: 'cancelled' });
+    const m = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    const finished = await finishMission(trustedDirectoryTarget(dir), m.id, { result: 'cancelled' });
     expect(finished.status).toBe('cancelled');
   });
 
   it('rejects an invalid transition on an already-terminal mission', async () => {
     const dir = makeTempDir();
-    const m = await startMission(dir, { title: 'A', system: 's' });
-    await finishMission(dir, m.id, { result: 'completed' });
-    await expect(finishMission(dir, m.id, { result: 'failed' })).rejects.toBeInstanceOf(InvalidTransitionError);
+    const m = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
+    await finishMission(trustedDirectoryTarget(dir), m.id, { result: 'completed' });
+    await expect(finishMission(trustedDirectoryTarget(dir), m.id, { result: 'failed' })).rejects.toBeInstanceOf(InvalidTransitionError);
   });
 
   it('rejects an unknown mission id', async () => {
     const dir = makeTempDir();
-    await expect(finishMission(dir, 'MIS-9999', { result: 'completed' })).rejects.toBeInstanceOf(MissionNotFoundError);
+    await expect(finishMission(trustedDirectoryTarget(dir), 'MIS-9999', { result: 'completed' })).rejects.toBeInstanceOf(MissionNotFoundError);
   });
 
   it('rejects an invalid result value', async () => {
     const dir = makeTempDir();
-    const m = await startMission(dir, { title: 'A', system: 's' });
+    const m = await startMission(trustedDirectoryTarget(dir), { title: 'A', system: 's' });
     // @ts-expect-error — deliberately invalid at the runtime boundary
-    await expect(finishMission(dir, m.id, { result: 'bogus' })).rejects.toBeInstanceOf(ValidationError);
+    await expect(finishMission(trustedDirectoryTarget(dir), m.id, { result: 'bogus' })).rejects.toBeInstanceOf(ValidationError);
   });
 });
 

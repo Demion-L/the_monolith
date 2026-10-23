@@ -2,6 +2,7 @@
 import { resolve } from 'path';
 import { promptProjectConfig } from './prompts.js';
 import { scaffoldInstance, planScaffoldConflicts } from './scaffold.js';
+import { reportWriteWarning } from '../root/index.js';
 const CONFLICT_LIST_LIMIT = 20;
 /**
  * Thrown when `monolith init` would overwrite existing tracked files.
@@ -14,7 +15,7 @@ export class InitConflictError extends Error {
         const shown = conflicts.slice(0, CONFLICT_LIST_LIMIT);
         const more = conflicts.length - shown.length;
         const list = shown.map((c) => `    - ${c}`).join('\n');
-        super(`Refusing to initialize: ${conflicts.length} existing file(s) would be overwritten:\n` +
+        super(`Refusing to initialize: ${conflicts.length} existing or unsafe path(s) (already present, or a symlink / special file that must not be written through):\n` +
             `${list}\n` +
             (more > 0 ? `    ...and ${more} more\n` : '') +
             '\n' +
@@ -61,6 +62,8 @@ export async function runInit(options = { targetDir: process.cwd() }) {
     console.log('  Scaffolding instance...');
     console.log('');
     const result = await scaffoldInstance(targetDir, config);
+    for (const w of result.warnings)
+        reportWriteWarning(w);
     console.log('');
     console.log('  ✅ MONOLITH instance initialized!');
     console.log('');

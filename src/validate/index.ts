@@ -7,6 +7,8 @@ import {
   readProjectFile,
   resolveMonolithRoot,
   RootContainmentError,
+  findWriteArtifacts,
+  describeWriteArtifacts,
 } from '../root/index.js';
 
 export interface ValidateOptions {
@@ -188,8 +190,11 @@ export async function runValidate(options: ValidateOptions): Promise<void> {
   // Containment failures are reported by checkConfiguration; the instance
   // and template checks must not touch a root that failed resolution.
   let monolithRoot: string | null = null;
+  let rootAbs: string | null = null;
   try {
-    monolithRoot = resolveMonolithRoot(targetDir).monolithRoot;
+    const resolved = resolveMonolithRoot(targetDir);
+    monolithRoot = resolved.monolithRoot;
+    rootAbs = resolved.rootAbs;
   } catch (err) {
     if (!(err instanceof RootContainmentError)) throw err;
   }
@@ -223,6 +228,11 @@ export async function runValidate(options: ValidateOptions): Promise<void> {
     console.log('');
     console.log(`Result: ${passed ? 'PASS' : 'FAIL'}`);
     if (configResult.passed && configResult.note) console.log(`Note: ${configResult.note}`);
+    // Read-only warning (SEC-001B.2): never affects the result or the exit code.
+    const artifacts = rootAbs === null || monolithRoot === null ? [] : findWriteArtifacts(rootAbs);
+    if (artifacts.length > 0 && monolithRoot !== null) {
+      console.log(`Warning: ${describeWriteArtifacts(artifacts, monolithRoot)}`);
+    }
     console.log('');
   }
 

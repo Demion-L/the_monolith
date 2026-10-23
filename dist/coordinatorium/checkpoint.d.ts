@@ -11,6 +11,7 @@
  * `listCheckpoints`, `getCheckpoint`. There is no update or delete path —
  * once written, a checkpoint record never changes.
  */
+import { type StateWriteTarget } from './state-keeper.js';
 import type { Checkpoint } from './types.js';
 export interface CreateCheckpointInput {
     summary: string;
@@ -26,7 +27,7 @@ export interface CreateCheckpointInput {
  * lose an update — a direct consequence of reusing mutateState, not new
  * concurrency design.
  */
-export declare function createCheckpoint(stateDir: string, missionId: string, input: CreateCheckpointInput): Promise<Checkpoint>;
+export declare function createCheckpoint(target: StateWriteTarget, missionId: string, input: CreateCheckpointInput): Promise<Checkpoint>;
 /**
  * List a mission's checkpoints, oldest first. Never throws for an unknown
  * or checkpoint-less mission — returns `[]`, consistent with a purely

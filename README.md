@@ -95,7 +95,12 @@ best-effort and unverified** — dangerous objects the checks can still see are
 refused, but no guarantee is made, and a `PLATFORM_BEST_EFFORT` warning is
 printed once. Network filesystems (NFS/SMB) are outside the guarantees.
 Nothing defends against another local process that swaps directories or
-symlinks while a command runs (SEC-001B.3, open).
+symlinks while a command runs (SEC-001B.3, open): concurrent adversarial
+mutation is **not supported** (TM-C, ADR-013). A trusted local project is
+supported with limitations; a static adversarial project is only **partially**
+supported: reads still follow symlinks that stay inside the project, so a
+hostile repository can make a managed path expose another private file in the
+project (strict read contract planned as SEC-001B.1-R, not implemented).
 
 A new `state.json` and the lock file are created `0600`; replacing an existing
 `state.json` keeps its mode. In a directory **shared between users or

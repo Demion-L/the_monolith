@@ -663,6 +663,15 @@ function transpileCoordinatoriumTo(destDir: string): void {
     ts.transpileModule(readFileSync(join(__dirname, '..', 'root', 'index.ts'), 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
       fileName: 'index.ts',
+    }).outputText.split(`'./safe-write.js'`).join(`'./safe-write.mjs'`),
+    'utf8',
+  );
+  // root/index.ts re-exports the safe-write primitive (SEC-001B.2).
+  writeFileSync(
+    join(destDir, 'safe-write.mjs'),
+    ts.transpileModule(readFileSync(join(__dirname, '..', 'root', 'safe-write.ts'), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+      fileName: 'safe-write.ts',
     }).outputText,
     'utf8',
   );

@@ -316,3 +316,7 @@ export function checkProjectFile(projectRoot, relPath, opts = {}) {
 export function readProjectFile(projectRoot, relPath, opts = {}) {
     return openProjectFile(projectRoot, relPath, opts, true);
 }
+// ---------------------------------------------------------------------------
+// Safe writes (SEC-001B.2, ADR-012)
+// ---------------------------------------------------------------------------
+export { SafeWriteError, WriteBoundary, ParentRef, projectBoundary, trustedDirectoryBoundary, openParent, probeTarget, createExclusive, disposeOwned, publishLink, createFile, replaceFile, detectPlatformCaps, } from './safe-write.js';

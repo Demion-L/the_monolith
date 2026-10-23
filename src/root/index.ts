@@ -400,3 +400,41 @@ export function checkProjectFile(projectRoot: string, relPath: string, opts: Pro
 export function readProjectFile(projectRoot: string, relPath: string, opts: ProjectFileOptions = {}): ProjectFileRead {
   return openProjectFile(projectRoot, relPath, opts, true) as ProjectFileRead;
 }
+
+// ---------------------------------------------------------------------------
+// Safe writes (SEC-001B.2, ADR-012)
+// ---------------------------------------------------------------------------
+
+export {
+  SafeWriteError,
+  WriteBoundary,
+  ParentRef,
+  projectBoundary,
+  trustedDirectoryBoundary,
+  openParent,
+  probeTarget,
+  createExclusive,
+  disposeOwned,
+  publishLink,
+  createFile,
+  replaceFile,
+  detectPlatformCaps,
+} from './safe-write.js';
+export type {
+  PublicationState,
+  WriteErrorCode,
+  WriteWarning,
+  WriteWarningCode,
+  WriteScopeMode,
+  WriteOptions,
+  WriteOutcome,
+  DurabilityRequest,
+  DurabilityReached,
+  TargetProbe,
+  OwnedToken,
+  OwnedFile,
+  DisposeResult,
+  PlatformCaps,
+  TempFileInfo,
+  LinkPublishResult,
+} from './safe-write.js';

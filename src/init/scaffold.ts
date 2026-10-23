@@ -1,9 +1,18 @@
 /* eslint-disable no-console */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
-import { join, dirname, resolve, relative } from 'path';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { join, dirname, resolve, relative, basename } from 'path';
 import { fileURLToPath } from 'url';
 import type { ProjectConfig } from './types.js';
-import { resolveMonolithRootValue } from '../root/index.js';
+import {
+  SafeWriteError,
+  createFile,
+  openParent,
+  probeTarget,
+  projectBoundary,
+  resolveMonolithRootValue,
+  type WriteBoundary,
+  type WriteWarning,
+} from '../root/index.js';
 
 const INSTRUCTION_FILE_MAP: Partial<Record<ProjectConfig['aiTool'], string>> = {
   claude: 'CLAUDE.md',
@@ -23,22 +32,42 @@ function substitute(content: string, vars: Vars): string {
   return content.replace(/\{\{([A-Z_]+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
 }
 
-function ensureDir(dirPath: string): void {
-  mkdirSync(dirPath, { recursive: true });
-}
-
-function writeFile(filePath: string, content: string): void {
-  ensureDir(dirname(filePath));
-  writeFileSync(filePath, content, 'utf8');
-}
-
 function stripTemplateSuffix(p: string): string {
   return p.endsWith('.template') ? p.slice(0, -'.template'.length) : p;
 }
 
-function copyTemplate(templatePath: string, targetPath: string, vars: Vars): void {
-  const content = readFileSync(templatePath, 'utf8');
-  writeFile(targetPath, substitute(content, vars));
+/**
+ * Everything init writes goes through the safe-write primitive (SEC-001B.2,
+ * ADR-012), against a PROJECT boundary: `targetDir` is the project root, every
+ * component below it must be a real directory (a symlink is refused even when
+ * it stays inside the project), and a file is created without overwriting
+ * anything — a symlink (also a dangling one), FIFO or file at the target is
+ * refused. Each file becomes visible only once completely written. Init as a
+ * whole is NOT atomic and NOT coordinated between processes (SEC-001B.3).
+ */
+interface Writer {
+  boundary: WriteBoundary;
+  warnings: WriteWarning[];
+  /** Every file published (templates and .gitkeep placeholders). */
+  created: number;
+  /** Template files only — what `filesCreated` has always counted. */
+  templates: number;
+}
+
+/** Documents follow the umask (as before); the runtime state file is owner-only. */
+function writeNew(w: Writer, targetPath: string, content: string, asState: boolean): void {
+  const parent = openParent(w.boundary, dirname(targetPath), { create: true });
+  const outcome = createFile(parent, basename(targetPath), content, {
+    ...(asState ? { mode: 0o600 } : { mode: 0o666, exactMode: false }),
+    durability: 'file',
+  });
+  w.warnings.push(...outcome.warnings);
+  w.created++;
+}
+
+function copyTemplate(w: Writer, templatePath: string, targetPath: string, vars: Vars, asState = false): void {
+  writeNew(w, targetPath, substitute(readFileSync(templatePath, 'utf8'), vars), asState);
+  w.templates++;
 }
 
 function walkDir(dir: string): string[] {
@@ -100,47 +129,57 @@ function gitkeepTargets(r: string): string[] {
   return GITKEEP_DIRS.map((rel) => `${r}/${rel}/.gitkeep`);
 }
 
-function createEmptyDirs(targetRoot: string, r: string): void {
+function createEmptyDirs(w: Writer, targetRoot: string, r: string): void {
   for (const rel of GITKEEP_DIRS) {
     const full = join(targetRoot, r, rel);
-    ensureDir(full);
-    const gitkeepPath = join(full, '.gitkeep');
     // An existing .gitkeep (possibly user-authored, non-empty) must never be
     // overwritten. planScaffoldConflicts() is expected to have already
-    // refused the run in this case; this is a second, cheap guard at the
-    // actual write site, not a substitute for that preflight check.
-    if (!existsSync(gitkeepPath)) {
-      writeFileSync(gitkeepPath, '', 'utf8');
-    }
+    // refused the run in this case; this is the authoritative second guard:
+    // creation is exclusive, so an existing entry of any kind is an error.
+    writeNew(w, join(full, '.gitkeep'), '', false);
   }
 }
 
 export interface ScaffoldResult {
   filesCreated: number;
   dirsCreated: string[];
+  /** Non-fatal write findings (e.g. best-effort platform). */
+  warnings: WriteWarning[];
 }
 
 /**
  * Preflight: compute every tracked template target path scaffoldInstance
- * would write, and return the ones that already exist on disk. Must be
- * called — and found empty — before scaffoldInstance runs, so a conflict
- * is caught before any file is written (no half-scaffolded instance).
+ * would write, and return the ones that already exist on disk — or that cannot
+ * be written safely (a symlink, including a dangling one, at the target or in
+ * a parent component; a FIFO or other special file). Must be called — and
+ * found empty — before scaffoldInstance runs, so a conflict is caught before
+ * any file is written (no half-scaffolded instance). This is advice for a
+ * clean error message; the exclusive creation in scaffoldInstance is the
+ * authoritative check.
  *
- * `state.json` is intentionally excluded: scaffoldInstance never overwrites
- * it (mutable Coordinatorium runtime data, ADR-008), so its presence is not
- * a conflict.
+ * `state.json` is intentionally excluded when it is a regular file:
+ * scaffoldInstance never overwrites it (mutable Coordinatorium runtime data,
+ * ADR-008), so its presence is not a conflict. A symlink there still is.
  */
 export function planScaffoldConflicts(targetDir: string, config: ProjectConfig): string[] {
   // SEC-001A: the programmatic API enforces the same root policy as the CLI.
   const r = resolveMonolithRootValue(targetDir, config.monolithRoot).monolithRoot;
   const conflicts: string[] = [];
 
+  const boundary = projectBoundary(targetDir);
+  const check = (targetPath: string, regularFileIsFine = false): void => {
+    const probe = probeTarget(boundary, targetPath);
+    if (probe.state === 'free') return;
+    if (probe.state === 'exists' && regularFileIsFine) return;
+    const rel = relative(targetDir, probe.path);
+    if (!conflicts.includes(rel)) conflicts.push(rel);
+  };
+
   const projectrootTemplates = join(TEMPLATES_ROOT, 'projectroot');
   if (existsSync(projectrootTemplates)) {
     for (const tplFile of walkDir(projectrootTemplates)) {
       const relPath = relative(projectrootTemplates, tplFile);
-      const targetPath = join(targetDir, stripTemplateSuffix(relPath));
-      if (existsSync(targetPath)) conflicts.push(relative(targetDir, targetPath));
+      check(join(targetDir, stripTemplateSuffix(relPath)));
     }
   }
 
@@ -149,22 +188,14 @@ export function planScaffoldConflicts(targetDir: string, config: ProjectConfig):
     for (const tplFile of walkDir(monolithTemplates)) {
       const relPath = relative(monolithTemplates, tplFile);
       const strippedRelPath = stripTemplateSuffix(relPath);
-      if (strippedRelPath === 'state.json') continue;
-      const targetPath = join(targetDir, r, strippedRelPath);
-      if (existsSync(targetPath)) conflicts.push(relative(targetDir, targetPath));
+      check(join(targetDir, r, strippedRelPath), strippedRelPath === 'state.json');
     }
   }
 
   const instructionFileName = INSTRUCTION_FILE_MAP[config.aiTool];
-  if (instructionFileName) {
-    const targetPath = join(targetDir, instructionFileName);
-    if (existsSync(targetPath)) conflicts.push(relative(targetDir, targetPath));
-  }
+  if (instructionFileName) check(join(targetDir, instructionFileName));
 
-  for (const rel of gitkeepTargets(r)) {
-    const targetPath = join(targetDir, rel);
-    if (existsSync(targetPath)) conflicts.push(relative(targetDir, targetPath));
-  }
+  for (const rel of gitkeepTargets(r)) check(join(targetDir, rel));
 
   return conflicts;
 }
@@ -176,52 +207,60 @@ export async function scaffoldInstance(
   // SEC-001A: validate before any write; throws RootContainmentError.
   const r = resolveMonolithRootValue(targetDir, config.monolithRoot).monolithRoot;
   const vars = buildVars({ ...config, monolithRoot: r });
-  let filesCreated = 0;
   const dirsCreated: string[] = [];
 
-  // --- Project root files ---
-  const projectrootTemplates = join(TEMPLATES_ROOT, 'projectroot');
-  if (existsSync(projectrootTemplates)) {
-    for (const tplFile of walkDir(projectrootTemplates)) {
-      const relPath = relative(projectrootTemplates, tplFile);
-      const targetPath = join(targetDir, stripTemplateSuffix(relPath));
-      copyTemplate(tplFile, targetPath, vars);
-      filesCreated++;
-    }
-  }
+  // `targetDir` is the project root the user pointed init at (it must exist,
+  // as resolveMonolithRootValue already requires). Everything below it is checked.
+  const w: Writer = { boundary: projectBoundary(targetDir), warnings: [], created: 0, templates: 0 };
 
-  // --- Monolith instance files ---
-  const monolithTemplates = join(TEMPLATES_ROOT, 'monolith');
-  if (existsSync(monolithTemplates)) {
-    for (const tplFile of walkDir(monolithTemplates)) {
-      const relPath = relative(monolithTemplates, tplFile);
-      const strippedRelPath = stripTemplateSuffix(relPath);
-      const targetPath = join(targetDir, r, strippedRelPath);
-
-      // Coordinatorium state (ADR-008) is mutable runtime data, not a
-      // document template — re-running init must never clobber missions
-      // an existing instance has already recorded.
-      if (strippedRelPath === 'state.json' && existsSync(targetPath)) {
-        continue;
+  try {
+    // --- Project root files ---
+    const projectrootTemplates = join(TEMPLATES_ROOT, 'projectroot');
+    if (existsSync(projectrootTemplates)) {
+      for (const tplFile of walkDir(projectrootTemplates)) {
+        const relPath = relative(projectrootTemplates, tplFile);
+        copyTemplate(w, tplFile, join(targetDir, stripTemplateSuffix(relPath)), vars);
       }
-
-      copyTemplate(tplFile, targetPath, vars);
-      filesCreated++;
     }
-  }
 
-  // --- AI tool instruction file (CLAUDE.md / .cursorrules / .windsurfrules) ---
-  const instructionFileName = INSTRUCTION_FILE_MAP[config.aiTool];
-  if (instructionFileName) {
-    const tplPath = join(TEMPLATES_ROOT, 'instruction', instructionFileName);
-    if (existsSync(tplPath)) {
-      copyTemplate(tplPath, join(targetDir, instructionFileName), vars);
-      filesCreated++;
+    // --- Monolith instance files ---
+    const monolithTemplates = join(TEMPLATES_ROOT, 'monolith');
+    if (existsSync(monolithTemplates)) {
+      for (const tplFile of walkDir(monolithTemplates)) {
+        const relPath = relative(monolithTemplates, tplFile);
+        const strippedRelPath = stripTemplateSuffix(relPath);
+        const targetPath = join(targetDir, r, strippedRelPath);
+        const isState = strippedRelPath === 'state.json';
+
+        // Coordinatorium state (ADR-008) is mutable runtime data, not a
+        // document template — re-running init must never clobber missions
+        // an existing instance has already recorded. Only a regular file is
+        // left alone; a symlink or special file there is still refused.
+        if (isState && probeTarget(w.boundary, targetPath).state === 'exists') continue;
+
+        copyTemplate(w, tplFile, targetPath, vars, isState);
+      }
     }
-  }
 
-  // --- Empty dirs + .gitkeep ---
-  createEmptyDirs(targetDir, r);
+    // --- AI tool instruction file (CLAUDE.md / .cursorrules / .windsurfrules) ---
+    const instructionFileName = INSTRUCTION_FILE_MAP[config.aiTool];
+    if (instructionFileName) {
+      const tplPath = join(TEMPLATES_ROOT, 'instruction', instructionFileName);
+      if (existsSync(tplPath)) copyTemplate(w, tplPath, join(targetDir, instructionFileName), vars);
+    }
+
+    // --- Empty dirs + .gitkeep ---
+    createEmptyDirs(w, targetDir, r);
+  } catch (err) {
+    if (err instanceof SafeWriteError && w.created > 0) {
+      throw new SafeWriteError(
+        `${err.message} ${w.created} file(s) had already been created before this failure; ` +
+          'init is not transactional and does not roll them back.',
+        { code: err.code, phase: err.phase, publication: err.publication, path: err.path, tmp: err.tmp, cause: err.cause },
+      );
+    }
+    throw err;
+  }
 
   // Track dirs created
   dirsCreated.push(
@@ -236,8 +275,8 @@ export async function scaffoldInstance(
     `${r}/adr`,
   );
 
-  console.log(`  ✓ ${filesCreated} files generated`);
+  console.log(`  ✓ ${w.templates} files generated`);
   console.log(`  ✓ ${dirsCreated.length + 11} directories created`);
 
-  return { filesCreated, dirsCreated };
+  return { filesCreated: w.templates, dirsCreated, warnings: w.warnings };
 }

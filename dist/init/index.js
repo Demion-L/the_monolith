@@ -14,7 +14,7 @@ export class InitConflictError extends Error {
         const shown = conflicts.slice(0, CONFLICT_LIST_LIMIT);
         const more = conflicts.length - shown.length;
         const list = shown.map((c) => `    - ${c}`).join('\n');
-        super(`Refusing to initialize: ${conflicts.length} existing file(s) would be overwritten:\n` +
+        super(`Refusing to initialize: ${conflicts.length} existing or unsafe path(s) (already present, or a symlink / special file that must not be written through):\n` +
             `${list}\n` +
             (more > 0 ? `    ...and ${more} more\n` : '') +
             '\n' +

@@ -317,7 +317,8 @@ write reports on their own:
 | Platform | Guarantees: POSIX. Windows best-effort and **unverified** (warning `PLATFORM_BEST_EFFORT`); macOS/BSD unverified; NFS/SMB outside |
 
 This does **not** defend against a local actor changing directories or
-symlinks concurrently with a command (SEC-001B.3): the parent-directory
+symlinks concurrently with a command (SEC-001B.3; threat model TM-C is
+**unsupported**, native filesystem layer deferred — ADR-013): the parent-directory
 re-check is a tripwire, not protection, and removing the owned temp file is not
 conditional on the identity check. `init` is neither atomic nor coordinated
 between processes.

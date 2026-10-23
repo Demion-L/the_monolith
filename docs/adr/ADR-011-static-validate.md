@@ -79,6 +79,10 @@ without limit, and a symlink could point outside the project.
   syscalls. A local attacker who can swap a path component or the file
   between them is not stopped; the dev/ino comparison only narrows the window.
   `O_NOFOLLOW` is not used because internal symlinks are allowed (ADR-009).
+  Update (ADR-013, 2026-10-23): forbidding internal symlinks and `nlink > 1` for
+  managed reads is the target policy of SEC-001B.1-R (DEC-READ-UNIFIED-001); it
+  is implemented on a separate branch (ADR-014; first review approved with
+  notes, **re-review and merge pending**), and the policy above is still in force.
 - An unreadable directory inside the instance tree still makes the placeholder
   walk (`readdirSync`) throw; this is a robustness gap, not a hang or a read
   outside the project.

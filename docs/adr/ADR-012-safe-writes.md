@@ -249,6 +249,9 @@ operation afterwards resolves the path again. Replacing its internals with a
 directory-descriptor design, scaffold transactionality, `init` coordination and
 instance-tree hardening are SEC-001B.3.
 
+The threat models (TM-A/B/C), the statement that TM-C is not supported, and the
+deferral of a native descriptor-relative layer are recorded in ADR-013.
+
 ## Alternatives considered
 
 - *String overload defaulting to `trusted-directory`.* Rejected: a hidden choice

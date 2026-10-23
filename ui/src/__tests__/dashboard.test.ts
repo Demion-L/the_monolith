@@ -65,4 +65,52 @@ describe('dashboard', () => {
     expect(w.text()).toContain('historical record as of this checkpoint, not the current plan');
     expect(w.text()).toContain('Validate offset ranges');
   });
+
+  it('shows "Roadmap is empty." for an empty roadmap', () => {
+    const w = mount(RoadmapPanel, { props: { text: '' } });
+    expect(w.text()).toContain('Roadmap is empty.');
+    expect(w.find('[data-testid="roadmap-text"]').exists()).toBe(false);
+  });
+
+  it('shows "None recorded." for empty remainingSteps', () => {
+    const checkpoints = [{ ...normalScenario.checkpoints[0], remainingSteps: [] }];
+    const w = mount(CheckpointsPanel, { props: { checkpoints } });
+    expect(w.text()).toContain('None recorded.');
+    expect(w.text()).not.toContain('UNKNOWN');
+  });
+
+  it('leaves no stale data when switching normal -> partial -> empty -> normal', async () => {
+    const w = mount(App);
+    const select = w.get('[data-testid="scenario-select"]');
+    const diagnostics = () => w.findAll('[data-testid="diagnostic"]').map((d) => d.text());
+
+    expect(w.text()).toContain('MIS-0003');
+    expect(diagnostics().join('|')).toContain('Fixture "normal" loaded.');
+
+    await select.setValue('partial');
+    expect(w.text()).toContain('MIS-0007');
+    expect(w.text()).not.toContain('MIS-0003');
+    expect(w.text()).not.toContain('Validate offset ranges');
+    expect(w.text()).not.toContain('Tidewatch roadmap');
+    expect(diagnostics().join('|')).toContain('Fixture "partial" loaded.');
+    expect(diagnostics().join('|')).not.toContain('Fixture "normal" loaded.');
+    expect(w.get('[data-testid="missing"]').text()).toContain('overview.description');
+
+    await select.setValue('empty');
+    expect(w.text()).not.toContain('MIS-0007');
+    expect(w.findAll('[data-testid="mission"]')).toHaveLength(0);
+    expect(w.findAll('[data-testid="checkpoint"]')).toHaveLength(0);
+    expect(w.text()).toContain('Roadmap is empty.');
+    expect(diagnostics()).toEqual(['info Fixture "empty" loaded.']);
+    expect(w.find('[data-testid="missing"]').exists()).toBe(false);
+    expect(w.find('.unknown').exists()).toBe(false);
+
+    await select.setValue('normal');
+    expect(w.findAll('[data-testid="mission"]')).toHaveLength(2);
+    expect(w.text()).toContain('MIS-0003');
+    expect(w.text()).not.toContain('MIS-0007');
+    expect(w.text()).not.toContain('Roadmap is empty.');
+    expect(diagnostics().join('|')).toContain('Fixture "normal" loaded.');
+    expect(diagnostics().join('|')).not.toContain('Fixture "empty" loaded.');
+  });
 });

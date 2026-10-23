@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import { existsSync, readdirSync } from 'fs';
-import { join, resolve, relative, sep } from 'path';
+import { isAbsolute, join, resolve, relative, sep } from 'path';
 import {
   checkProjectFile,
   readConfigFile,
@@ -104,9 +104,12 @@ function walkFiles(dir: string): string[] {
   const results: string[] = [];
   if (!existsSync(dir)) return results;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isSymbolicLink()) continue; // never follow links out of the instance (SEC-001A)
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
+    // A link is never descended into; it is listed so the reader refuses it by name
+    // (FILE_SYMLINK) instead of the instance silently passing (SEC-001B.1-R).
+    if (entry.isSymbolicLink()) {
+      results.push(full);
+    } else if (entry.isDirectory()) {
       results.push(...walkFiles(full));
     } else {
       results.push(full);
@@ -184,8 +187,15 @@ function formatRow(result: CheckResult): string {
 }
 
 export async function runValidate(options: ValidateOptions): Promise<void> {
-  const targetDir = resolve(options.targetDir);
   const quiet = options.quiet ?? false;
+  // SEC-001B.1-R: the project root is the read boundary and is never inferred
+  // from the cwd; the CLI passes `process.cwd()` explicitly.
+  if (typeof options.targetDir !== 'string' || options.targetDir.length === 0 || !isAbsolute(options.targetDir)) {
+    console.log(formatRow({ label: 'Configuration', passed: false, error: 'targetDir must be an explicit absolute path (the cwd is never assumed)' }));
+    process.exit(1);
+    return;
+  }
+  const targetDir = resolve(options.targetDir);
 
   // Containment failures are reported by checkConfiguration; the instance
   // and template checks must not touch a root that failed resolution.

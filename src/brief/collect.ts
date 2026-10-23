@@ -75,7 +75,12 @@ async function readStateForBrief(
   // Rule (section 4, #1): existence is established by the same bounded,
   // non-blocking open that reads the file (SEC-001B.1) — a FIFO or an
   // over-limit file is rejected before any content is read.
-  const read = readBoundedFileStable(filePath, provenance.source, { maxBytes: MAX_STATE_BYTES, allowEmpty: true }, true);
+  const read = readBoundedFileStable(
+    filePath,
+    provenance.source,
+    { boundary: targetDir, maxBytes: MAX_STATE_BYTES, allowEmpty: true },
+    true,
+  );
   if (!read.ok && read.code === 'FILE_MISSING') {
     diagnostics.push({
       code: 'STATE_NOT_INITIALIZED',
@@ -219,7 +224,12 @@ function collectStory(
     return { fileExists: false, hasCurrentStorySection: false, excerpt: null, lineRange: null, provenance: null };
   }
 
-  const read = readBoundedFileStable(activeMdAbs, relPath, { maxBytes: MAX_ACTIVE_CONTEXT_BYTES, allowEmpty: true }, true);
+  const read = readBoundedFileStable(
+    activeMdAbs,
+    relPath,
+    { boundary: targetDir, maxBytes: MAX_ACTIVE_CONTEXT_BYTES, allowEmpty: true },
+    true,
+  );
   if (!read.ok) {
     diagnostics.push({
       code: 'ACTIVE_MD_MISSING',

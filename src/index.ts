@@ -56,6 +56,7 @@ export type {
   StartMissionInput,
   FinishMissionInput,
   StateWriteTarget,
+  StateReadTarget,
 } from './coordinatorium/index.js';
 export {
   createInitialState,

@@ -12,7 +12,7 @@
  * once written, a checkpoint record never changes.
  */
 
-import { mutateState, readState, type StateWriteTarget } from './state-keeper.js';
+import { mutateState, readState, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, MissionNotActiveError, CheckpointNotFoundError, ValidationError } from './errors.js';
 import type { CoordinatoriumState, Checkpoint } from './types.js';
 
@@ -128,8 +128,8 @@ export async function createCheckpoint(
  * "no missions yet" behavior). Remains available for a finished mission —
  * only *creation* is gated on mission status.
  */
-export async function listCheckpoints(stateDir: string, missionId: string): Promise<Checkpoint[]> {
-  const state = await readState(stateDir);
+export async function listCheckpoints(target: StateReadTarget, missionId: string): Promise<Checkpoint[]> {
+  const state = await readState(target);
   return Object.values(state.tactical.checkpoints)
     .filter((c) => c.missionId === missionId)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
@@ -139,8 +139,8 @@ export async function listCheckpoints(stateDir: string, missionId: string): Prom
  * Fetch a single checkpoint by id, regardless of its mission's current
  * status — reading history never stops working for a finished mission.
  */
-export async function getCheckpoint(stateDir: string, id: string): Promise<Checkpoint> {
-  const state = await readState(stateDir);
+export async function getCheckpoint(target: StateReadTarget, id: string): Promise<Checkpoint> {
+  const state = await readState(target);
   const checkpoint = state.tactical.checkpoints[id];
   if (!checkpoint) throw new CheckpointNotFoundError(id);
   return checkpoint;

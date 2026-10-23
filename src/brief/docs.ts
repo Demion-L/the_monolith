@@ -169,7 +169,7 @@ function parseDoc(absPath: string, targetDir: string, diagnostics: BriefDiagnost
   const read = readBoundedFileStable(
     absPath,
     `"${relative(targetDir, absPath)}"`,
-    { maxBytes: MAX_MARKDOWN_DOC_BYTES, allowEmpty: true },
+    { boundary: targetDir, maxBytes: MAX_MARKDOWN_DOC_BYTES, allowEmpty: true },
     true,
   );
   if (!read.ok) {

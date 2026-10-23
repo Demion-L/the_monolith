@@ -57,7 +57,7 @@ internal `createCheckpoint`) take a `StateWriteTarget`
 trust model. Calling without a scope throws `WRITE_SCOPE_REQUIRED`. Read
 functions (`readState`, `listMissions`, `getMission`, `listCheckpoints`,
 `getCheckpoint`) keep a plain `stateDir`; they do not write.
-`mutateState` additionally returns `warnings`. The package is `0.1.0-alpha`, so
+`mutateState` additionally returns `warnings`; `onWarning` is called once per warning **after** the state lock is released, and an exception it throws is ignored. The package is `0.1.0-alpha`, so
 no deprecation period is provided. `scaffoldInstance` is project-scoped by
 construction (`targetDir` is the project root) and is not exported from the
 package entrypoint.
@@ -72,13 +72,24 @@ start|finish|checkpoint` or `init` will write.
 
 ### Single primitive
 
-`src/root/safe-write.ts` is the only code path that creates, replaces or removes
-project files:
+`src/root/safe-write.ts` is the one code path that **publishes** project files —
+creates a new file or replaces an existing one:
 
 - `createFile` — temp file, then `link()` to the final name; refuses to
   overwrite anything (a symlink, FIFO or file at the name yields `EEXIST`).
 - `replaceFile` — temp file, then `rename()` over a regular, single-link file.
-- `createExclusive` / `disposeOwned` — used by lock staging.
+- `createExclusive` / `publishLink` / `disposeOwned` — used by lock staging.
+
+This is a statement about *publication*, not about every filesystem mutation in
+the repository. Mutations that do **not** go through the primitive:
+
+| Mutation | Where | Notes |
+|---|---|---|
+| Lock release | `lock.ts` `releaseIfOwned` | `unlinkSync` of the lock path, only if the record read back is this process's own `pid:nonce`; path-based, so a name swapped between the read and the `unlink` is a residual race (SEC-001B.3) |
+| Stale-lock recovery | `lock.ts` `recoverDeadOwner` | `unlinkSync` of the lock path of a confirmed-dead owner, under the recovery mutex (ADR-008); same residual race |
+| Recovery mutex release | `lock.ts` `releaseIfOwned` | as lock release |
+| `trusted-directory` directory creation | `state-keeper.ts` | `mkdirSync(stateDir, { recursive: true })`: the caller asserts the directory and its ancestors are trusted, so nothing about them is checked |
+| Developer scripts | `src/scripts/dogfood-*.ts` | write reports under `docs/`; not part of the CLI or the package API, not covered |
 
 The temp file is always opened `O_CREAT|O_EXCL|O_NOFOLLOW` (where the platform
 has `O_NOFOLLOW`; the constant is checked with `typeof`, because on Windows it
@@ -101,11 +112,16 @@ preserved across `rename`.
 
 ### DEC-B2-02 — orphan files
 
-Nothing is deleted automatically except the temp file created by the **current
-call**, and only when ownership is verified (below). No cleanup by age, PID or
-file-name pattern. A crash leaves unowned residue (`*.tmp.*`, `*.creating.*`,
-`*.recovery`) which is surfaced by read-only diagnostics only. Safe cleanup is
-registered as FS-CLEAN-001 (backlog, not decided).
+No file is removed *as an orphan*. The only deletions are: (a) the temp file
+created by the **current call**, and only when ownership is verified (below);
+(b) a lock a process releases, only if it still holds that process's own
+`pid:nonce`; (c) a dead owner's lock during stale-lock recovery under the
+recovery mutex (ADR-008, unchanged). (b) and (c) are lock-protocol operations,
+not safe-write publication, and are path-based (see "Single primitive"). No
+cleanup by age, PID or file-name pattern. A crash leaves unowned residue
+(`*.tmp.*`, `*.creating.*`, `*.recovery`) which is surfaced by read-only
+diagnostics only. Safe cleanup is registered as FS-CLEAN-001 (backlog, not
+decided).
 
 ### DEC-B2-03 — scaffold
 
@@ -138,21 +154,39 @@ returned with every write; the CLI prints it once per process.
 Every failed write reports `publication: 'NOT_PUBLISHED' | 'UNKNOWN'`; a write
 that reached the final name is `PUBLISHED` and never throws.
 
-- `rename`/`link` errors in a fixed allowlist (`EACCES`, `EPERM`, `EROFS`,
-  `ENOENT`, `ENOTDIR`, `EISDIR`, `EXDEV`, `EBUSY`, `ETXTBSY`, `ELOOP`,
-  `ENAMETOOLONG`, `EINVAL`, `EMLINK`, `ENOSPC`, `EDQUOT`, `ENOTEMPTY`) leave the
-  destination untouched: `NOT_PUBLISHED`.
-- `link` reporting `EEXIST` is checked: link count of the temp file `2` means our
-  link succeeded (a lost reply on a network filesystem) — `PUBLISHED`; `1` means
-  someone else owns the name — `NOT_PUBLISHED`.
-- Any other error (`EIO`, `ESTALE`, unknown) is `UNKNOWN`. One read-only
-  verification compares the destination's `dev/ino` with the identity recorded
-  from the descriptor. If it cannot decide, the call throws with
-  `publication: 'UNKNOWN'`. `UNKNOWN` is **never** converted to `NOT_PUBLISHED`
-  automatically, the publish step is **never** retried, and nothing is deleted.
-- After a successful publish, a failing staging unlink or directory fsync is a
-  **warning**, not an error: throwing would invite a retry of a non-idempotent
-  command (a second mission).
+**No errno is evidence about the destination.** An error can be reported for an
+operation that took effect (a reply lost on the way back), and which errors can
+follow success depends on the filesystem. After `rename`/`link` fails — with any
+error code, including `ENOENT`, `EBUSY`, `EXDEV`, `EPERM` or `EEXIST` — the
+outcome is decided by one read-only inspection of identity (`dev/ino` recorded
+from the descriptor of the temp file), never by the code:
+
+| Destination | Temp name | Result |
+|---|---|---|
+| is our file | — | `PUBLISHED`, with a `PUBLICATION_VERIFIED_AFTER_ERROR` warning |
+| is not our file (or absent) | still our file | `NOT_PUBLISHED` (temp file removed, as ownership is verified). `link`+`EEXIST`: a lost race, the name belongs to someone else |
+| anything else, or an inspection fails | gone / not ours / undecidable | `UNKNOWN` |
+
+For `link`+`EEXIST` the **link count of the temp file is not evidence**: a second
+hard link to the temp name (a backup tool, another local actor) would make a
+foreign destination look like ours. Only the identity of the destination counts.
+
+`UNKNOWN` is **never** converted to `NOT_PUBLISHED` automatically, the publish
+step is **never** retried, and nothing is deleted — in particular a temp name
+that no longer shows our identity is left alone. After a successful publish, a
+failing staging unlink or directory fsync is a **warning**, not an error:
+throwing would invite a retry of a non-idempotent command (a second mission).
+
+This classification is made from what one inspection shows. It makes no claim
+about network filesystems (NFS/SMB, outside the guarantees), where lookups can
+themselves be stale; there the answer degrades towards `UNKNOWN`, which is the
+safe direction.
+
+The CLI words `UNKNOWN` differently for the two things that can be unknown:
+for `state.json` it asks the user to check the missions; for the lock it states
+that no state was written and points at the lock and its staging files
+(read-only inspection, nothing removed automatically). The machine-readable
+`code`, `publication`, `phase`, `path` and the original error (`cause`) are kept.
 
 ### Ownership and cleanup
 

@@ -134,7 +134,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + bounded project-file helpers `checkProjectFile()`/`readProjectFile()` (ADR-011) |
 | `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
-| `src/root/safe-write.ts`          | The single safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile`, publication states, identity-checked cleanup |
+| `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
@@ -266,8 +266,12 @@ are present in the instance directory (and `validate` prints a `Warning:` line);
 neither changes `Completeness` or an exit code, and nothing is deleted — a
 matching name does not prove a file is an orphan (FS-CLEAN-001).
 
-**File write contract (SEC-001B.2, ADR-012).** Every write of `state.json`, the
-lock files and the `init` scaffold goes through `src/root/safe-write.ts`:
+**File write contract (SEC-001B.2, ADR-012).** Every *publication* (creation or
+replacement) of `state.json`, the lock files and the `init` scaffold goes through
+`src/root/safe-write.ts`. Not everything that touches a file does: lock release
+and stale-lock recovery `unlink` the lock path directly, `trusted-directory`
+scope creates its directory with `mkdirSync`, and `src/scripts/dogfood-*.ts`
+write reports on their own:
 
 | Property | Contract |
 |---|---|
@@ -277,8 +281,8 @@ lock files and the `init` scaffold goes through `src/root/safe-write.ts`:
 | Temp file | `O_CREAT\|O_EXCL\|O_NOFOLLOW`; `rename()` over the state file, `link()` for create-only files |
 | Modes | New `state.json` / lock: `0600`; an existing `state.json` keeps its mode; scaffold documents follow the umask |
 | Durability | create → write → `fchmod` → `fstat` verify → `fsync(file)` → `close` → publish → `fsync(directory)`; state uses all of it, scaffold fsyncs files only, lock fsync stays opt-in |
-| Publication | `NOT_PUBLISHED` / `PUBLISHED` / `UNKNOWN`. `UNKNOWN` is never retried, never downgraded and nothing is deleted; the CLI tells the user to check state first. Failures after publication are warnings |
-| Cleanup | Only a temp file created by the current call, and only while its `dev/ino` still matches. No cleanup by age, PID or name; leftovers are not deleted (FS-CLEAN-001) |
+| Publication | `NOT_PUBLISHED` / `PUBLISHED` / `UNKNOWN`, decided from the identity (`dev/ino`) of the destination and of the temp name after a failed `rename`/`link` — never from the error code, and for `link`+`EEXIST` never from a link count. `UNKNOWN` is never retried, never downgraded and nothing is deleted; the CLI asks the user to check the missions (state) or to inspect the lock and its staging files (lock). Failures after publication are warnings; `onWarning` runs after the lock is released |
+| Cleanup | The primitive removes only a temp file created by the current call, and only while its `dev/ino` still matches. Lock release removes only a lock holding this process's own record; stale recovery removes a confirmed-dead owner's lock under the recovery mutex. No cleanup by age, PID or name; leftovers are not deleted (FS-CLEAN-001) |
 | Lock | Ownership, backoff, liveness, stale recovery and record format unchanged; only staging creation uses the primitive |
 | Platform | Guarantees: POSIX. Windows best-effort and **unverified** (warning `PLATFORM_BEST_EFFORT`); macOS/BSD unverified; NFS/SMB outside |
 

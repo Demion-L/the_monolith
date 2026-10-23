@@ -1,8 +1,8 @@
 /**
  * Safe write primitive (SEC-001B.2, ADR-012).
  *
- * The one code path that creates, replaces or removes project files. It adds,
- * for every write:
+ * The one code path that PUBLISHES project files (creates a new one or replaces
+ * an existing one). It adds, for every write:
  *
  *  - an explicit WRITE BOUNDARY (`projectBoundary` / `trustedDirectoryBoundary`);
  *    there is no boundary-less write;
@@ -13,10 +13,16 @@
  *    `O_NOFOLLOW`) and published atomically: `rename()` over a regular file
  *    (`replaceFile`) or `link()` to a name that must not exist (`createFile`);
  *  - explicit PUBLICATION STATES. A failed write is NOT_PUBLISHED or UNKNOWN; a
- *    write that reached the final name is PUBLISHED and never throws. UNKNOWN is
- *    never retried and never silently downgraded;
+ *    write that reached the final name is PUBLISHED and never throws. The state
+ *    is decided from the identity (`dev/ino`) of the destination and of the
+ *    temp name, never from an error code. UNKNOWN is never retried and never
+ *    silently downgraded;
  *  - identity-checked cleanup: only a temp file THIS call created, and only if
  *    the name still shows the `dev/ino` recorded from the descriptor.
+ *
+ * Not routed through here: lock release and stale-lock recovery (`lock.ts`)
+ * unlink the lock path directly, and `trusted-directory` scope creates its
+ * directory with `mkdirSync`; see ADR-012 "Single primitive".
  *
  * What this module does NOT do — and must not be described as doing: it does
  * not defend against a local actor who swaps directories or symlinks

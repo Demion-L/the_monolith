@@ -4,9 +4,9 @@
  * of the current MONOLITH instance (`<monolithRoot>/durable`).
  *
  *   monolith durable list [--status active|completed|failed|cancelled]
- *   monolith durable show <taskId>
+ *   monolith durable show <taskId> [--reveal-tokens]
  *   monolith durable assess <taskId>
- *   monolith durable packet <taskId>
+ *   monolith durable packet <taskId> [--reveal-tokens]
  *   monolith durable verify [taskId]
  *   monolith durable retention --retain-days N [--compact-after N] [--apply]
  *
@@ -21,6 +21,23 @@ import { FsEventStore } from './fs-store.js';
 import { DurableTasks } from './runtime.js';
 export const DURABLE_DIR_NAME = 'durable';
 const STATUSES = ['active', 'completed', 'failed', 'cancelled'];
+/**
+ * Await tokens are capabilities: whoever holds one can deliver a result to the task. The CLI output ends up in
+ * terminals, logs and tickets, so the secret part (the nonce) is replaced there; `--reveal-tokens` prints it.
+ * The programmatic API (`getState`, `resumePacket`) is unchanged: a worker needs the real token to send it out.
+ */
+function redactTokens(v) {
+    if (Array.isArray(v))
+        return v.map(redactTokens);
+    if (v !== null && typeof v === 'object') {
+        const out = {};
+        for (const [k, x] of Object.entries(v)) {
+            out[k] = k === 'token' && typeof x === 'string' ? x.replace(/\.[0-9a-f]{32}$/, '.<redacted>') : redactTokens(x);
+        }
+        return out;
+    }
+    return v;
+}
 function flag(args, name) {
     const i = args.indexOf(name);
     return i >= 0 ? args[i + 1] : undefined;
@@ -36,7 +53,8 @@ export function openDurable(cwd) {
 /** Returns the process exit code: 0 ok, 1 usage/error, 2 verification found a problem. */
 export async function runDurable(args, io) {
     const [sub, ...rest] = args;
-    const json = (v) => io.out(JSON.stringify(v, null, 2));
+    const reveal = rest.includes('--reveal-tokens');
+    const json = (v) => io.out(JSON.stringify(reveal ? v : redactTokens(v), null, 2));
     try {
         const rt = openDurable(io.cwd);
         switch (sub) {

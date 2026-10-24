@@ -10,7 +10,7 @@ export { MemoryEventStore } from './memory-store.js';
 export { assessTask, diffStates, leaseIsLive } from './assess.js';
 export type { Assessment, AssessOptions, ResumeMode, Reason, ReasonCode, AssumptionChange, ResultToConsume, StateChange } from './assess.js';
 export { planRetention } from './retention.js';
-export type { RetentionPolicy, RetentionDecision, RetentionAction } from './retention.js';
+export type { RetentionPolicy, RetentionDecision, RetentionAction, InterruptedWork } from './retention.js';
 export { foldEvents, foldUntil, applyEvent } from './projection.js';
 export { MAX_EVENT_BYTES } from './log.js';
 export { toJson, canonicalize, fingerprintOf } from './canonical.js';

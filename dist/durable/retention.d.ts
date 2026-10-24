@@ -38,5 +38,12 @@ export interface RetentionDecision {
 export declare const DEFAULT_COMPACT_AFTER_EVENTS = 1000;
 export declare const DEFAULT_KEEP_TAIL_EVENTS = 100;
 export declare const DEFAULT_MIN_COMPACT_BATCH = 100;
-export declare function planRetention(states: readonly TaskState[], compactedThrough: ReadonlyMap<string, number>, policy: RetentionPolicy, now: Date): RetentionDecision[];
+/** Work left over by an interrupted run; finishing it is always safe because both operations are marker-first. */
+export interface InterruptedWork {
+    /** Tasks whose loose events are still on disk although a segment covers them. */
+    compactions?: ReadonlySet<string>;
+    /** Pruned tasks (tombstone present) whose data files are still on disk. */
+    prunes?: readonly string[];
+}
+export declare function planRetention(states: readonly TaskState[], compactedThrough: ReadonlyMap<string, number>, policy: RetentionPolicy, now: Date, interrupted?: InterruptedWork): RetentionDecision[];
 //# sourceMappingURL=retention.d.ts.map

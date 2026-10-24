@@ -28,12 +28,12 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import { hostname } from 'os';
 import { canonicalize, fingerprintOf, toJson } from './canonical.js';
 import { assessTask, diffStates, leaseIsLive } from './assess.js';
-import { ContentionError, EffectFailedError, EffectInDoubtError, LeaseHeldError, LogCorruptError, LogTooLargeError, RetentionRefusedError, StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskPrunedError, ValidationError, } from './errors.js';
+import { ContentionError, EffectConflictError, EffectFailedError, EffectInDoubtError, EffectNotExecutedError, LeaseHeldError, LogCorruptError, LogTooLargeError, RetentionRefusedError, StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskPrunedError, ValidationError, } from './errors.js';
 import { AppendOutcomeUnknownError } from './fs-store.js';
 import { assertId, assertNonEmpty, stampEvent, verifyChain } from './log.js';
 import { applyEvent, cloneState, deliveryKey, foldEvents, foldUntil, planProblem } from './projection.js';
 import { planRetention } from './retention.js';
-import { GENESIS_HASH, } from './types.js';
+import { GENESIS_HASH, TERMINAL_EVENT_TYPES, } from './types.js';
 import { sha256Hex } from './canonical.js';
 const KIND_MAX = 100;
 const GOAL_MAX = 4000;
@@ -41,6 +41,15 @@ const TEXT_MAX = 4000;
 const KEY_MAX = 200;
 const MAX_TIMELINE = 500;
 const COMPACT_CHUNK_BYTES = 4 * 1024 * 1024;
+const DEFAULT_TERMINAL_RESERVE = 16;
+/** How long a creator / pruner waits for a transient tombstone (a prune that is about to be withdrawn) to settle. */
+const SETTLE_ATTEMPTS = 40;
+const SETTLE_STEP_MS = 25;
+/** Conflicting deliveries kept in the log per await and per task; more are answered but not stored. */
+const MAX_REJECTED_PER_AWAIT = 8;
+const MAX_REJECTED_PER_TASK = 64;
+/** A stored rejected payload larger than this is replaced by its size and digest. */
+const REJECTED_PAYLOAD_MAX_BYTES = 4096;
 function draft(type, actor, data) {
     return { type, actor, data };
 }
@@ -50,6 +59,19 @@ function sleep(ms) {
 /** A unique, human-readable worker identity: host, pid, random suffix. Use one per process incarnation. */
 export function newOwnerId() {
     return `${hostname().replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 24)}-${process.pid}-${randomBytes(3).toString('hex')}`;
+}
+/** The payload as stored with a rejected delivery: verbatim when small, else its size and SHA-256. */
+function boundedPayload(body) {
+    const text = canonicalize(body);
+    const bytes = Buffer.byteLength(text, 'utf8');
+    return bytes <= REJECTED_PAYLOAD_MAX_BYTES ? body : { $truncated: true, bytes, sha256: sha256Hex(text) };
+}
+function defaultClassify(err) {
+    return err instanceof EffectNotExecutedError ? 'not-executed' : 'unknown';
+}
+/** What a compare-and-set on an effect compares: its state and the announcement it belongs to. */
+function effectIdentity(e) {
+    return e ? `${e.status}@${e.intendedAtSeq}` : 'none';
 }
 const TOKEN_PREFIX = 'dsc1';
 export function parseToken(token) {
@@ -76,8 +98,12 @@ export class DurableTasks {
     maxEvents;
     maxAttempts;
     maxCached;
+    terminalReserve;
+    referenceGraceMs;
     /** Validated, incrementally extended view per task. A cache of the log, never an authority. */
     cache = new Map();
+    /** Effect executions running in this runtime, so concurrent calls with one identity share one `fn` call. */
+    inflight = new Map();
     constructor(opts) {
         this.store = opts.store;
         this.now = opts.now ?? (() => new Date());
@@ -86,6 +112,8 @@ export class DurableTasks {
         this.maxEvents = opts.maxEventsPerTask ?? 50_000;
         this.maxAttempts = opts.maxAppendAttempts ?? 100;
         this.maxCached = opts.maxCachedTasks ?? 256;
+        this.terminalReserve = Math.max(0, Math.floor(opts.terminalReserveEvents ?? DEFAULT_TERMINAL_RESERVE));
+        this.referenceGraceMs = opts.referenceGraceMs ?? 10 * 60_000;
     }
     remember(taskId, state) {
         this.cache.delete(taskId); // re-insert: Map order is recency order
@@ -159,10 +187,10 @@ export class DurableTasks {
             const p = plan(state);
             if (p.draft === null)
                 return p.result(null, state);
-            if (state.eventCount >= this.maxEvents)
+            if (state.eventCount >= this.eventLimitFor(p.draft.type))
                 throw new LogTooLargeError(taskId, this.maxEvents);
             const event = stampEvent(taskId, state.headSeq + 1, this.now().toISOString(), state.headHash, p.draft);
-            const next = applyEvent(cloneState(state), event); // rejects a rule violation before anything is stored
+            const next = this.precheck(state, event);
             let outcome;
             try {
                 outcome = await this.store.append(event);
@@ -180,6 +208,33 @@ export class DurableTasks {
                 await sleep(Math.floor(Math.random() * Math.min(2 ** attempt, 40)));
         }
         throw new ContentionError(taskId, this.maxAttempts);
+    }
+    /**
+     * How many events a task may hold before `type` is refused. Ordinary events stop at `maxEvents`; lease changes
+     * may use the reserve except its last slot; terminal events may use all of it. See `terminalReserveEvents`.
+     */
+    eventLimitFor(type) {
+        if (TERMINAL_EVENT_TYPES.includes(type))
+            return this.maxEvents + this.terminalReserve;
+        if (type === 'run.claimed' || type === 'run.released')
+            return this.maxEvents + Math.max(0, this.terminalReserve - 1);
+        return this.maxEvents;
+    }
+    /**
+     * Runs a proposed event through the fold before anything is stored. A violation here means the *caller's*
+     * request does not fit the task's current state (the stored log was just verified and is fine), so it is
+     * a `ValidationError`, never a `LogCorruptError`: corruption is reserved for stored data that fails verification.
+     */
+    precheck(state, event) {
+        try {
+            return applyEvent(cloneState(state), event);
+        }
+        catch (err) {
+            if (err instanceof LogCorruptError) {
+                throw new ValidationError(`${event.type} is not allowed in the current state of task "${event.taskId}": ${err.reason}.`);
+            }
+            throw err;
+        }
     }
     /** After an unknown publication outcome: is *our* event (same hash) the one in the slot? */
     async resolveUnknown(event) {
@@ -214,14 +269,17 @@ export class DurableTasks {
             labels: { ...labels },
         };
         for (const r of refs) {
-            try {
-                await this.refresh(r);
-            }
-            catch (err) {
-                if (err instanceof TaskNotFoundError || err instanceof TaskPrunedError) {
+            if (!(await this.referenceIsLive(r)))
+                throw new ValidationError(`referenced task "${r}" does not exist (or was pruned).`);
+        }
+        // Pin every reference BEFORE publishing the task, so a concurrent prune of a referenced task sees this task
+        // (or this call sees its tombstone). Stores without pins keep the old, weaker check above.
+        const pinnedAtMs = this.now().getTime();
+        if (this.store.pinReference) {
+            for (const r of refs) {
+                const pinned = await this.store.pinReference(r, taskId, this.now().toISOString());
+                if (pinned !== 'pinned')
                     throw new ValidationError(`referenced task "${r}" does not exist (or was pruned).`);
-                }
-                throw err;
             }
         }
         const event = stampEvent(taskId, 1, this.now().toISOString(), GENESIS_HASH, draft('task.created', null, data));
@@ -237,6 +295,7 @@ export class DurableTasks {
         if (outcome === 'appended') {
             const state = applyEvent(null, event);
             this.remember(taskId, state);
+            await this.assertReferencesSurvived(taskId, refs, pinnedAtMs);
             return { taskId, created: true, state: cloneState(state) };
         }
         // The id is taken: the same request repeated is fine, a different one is an error.
@@ -248,6 +307,85 @@ export class DurableTasks {
         if (!same)
             throw new TaskExistsError(taskId);
         return { taskId, created: false, state: cloneState(existing) };
+    }
+    /**
+     * True when `taskId` exists and is not pruned. A tombstone may be transient (a prune that found a referrer
+     * withdraws it right away), so a pruned answer is re-checked for a short while before it is believed.
+     */
+    async referenceIsLive(taskId) {
+        for (let i = 0; i < SETTLE_ATTEMPTS; i++) {
+            try {
+                await this.refresh(taskId);
+                return true;
+            }
+            catch (err) {
+                if (err instanceof TaskNotFoundError)
+                    return false;
+                if (!(err instanceof TaskPrunedError))
+                    throw err;
+            }
+            await sleep(SETTLE_STEP_MS);
+        }
+        return false;
+    }
+    /**
+     * Backstop for the one interleaving the pins cannot cover: a creator that stayed longer than `referenceGraceMs`
+     * between pinning and publishing, so a prune was entitled to ignore its pin. Only then is a pruned reference
+     * believed and the new task cancelled (a task that depends on nothing it can read must not stay active).
+     * Within the grace period a tombstone seen here is transient: the prune that published it will find this
+     * task's pin and withdraw it, so cancelling would be wrong.
+     */
+    async assertReferencesSurvived(taskId, refs, pinnedAtMs) {
+        if (!this.store.pinReference)
+            return;
+        if (this.now().getTime() - pinnedAtMs < this.referenceGraceMs)
+            return;
+        for (const r of refs) {
+            if (await this.referenceIsLive(r))
+                continue;
+            await this.cancel(taskId, `referenced task "${r}" was pruned while this task was being created`, 'durable');
+            throw new ValidationError(`referenced task "${r}" was pruned while task "${taskId}" was being created; the new task was cancelled.`);
+        }
+    }
+    /**
+     * An active task that refers to `taskId`: either published (`parentTaskId` / `dependsOn`) or being created
+     * (a recent pin with no task behind it yet). `null` if nothing needs `taskId` any more.
+     */
+    async activeReferrer(taskId) {
+        for (const other of await this.store.listTaskIds()) {
+            if (other === taskId)
+                continue;
+            let o;
+            try {
+                o = (await this.loadFull(other)).state;
+            }
+            catch (err) {
+                if (err instanceof TaskPrunedError || err instanceof TaskNotFoundError)
+                    continue;
+                throw err;
+            }
+            if (o.status === 'active' && (o.parentTaskId === taskId || o.dependsOn.includes(taskId)))
+                return other;
+        }
+        for (const pin of (await this.store.listReferences?.(taskId)) ?? []) {
+            let child;
+            try {
+                child = await this.refresh(pin.childId);
+            }
+            catch (err) {
+                if (err instanceof TaskNotFoundError) {
+                    if (this.now().getTime() - Date.parse(pin.at) < this.referenceGraceMs)
+                        return pin.childId; // creation in progress
+                    continue; // abandoned
+                }
+                if (err instanceof TaskPrunedError)
+                    continue;
+                throw err;
+            }
+            if (child.status === 'active')
+                return pin.childId;
+        }
+        return null;
     }
     async getState(taskId) {
         return cloneState(await this.refresh(taskId));
@@ -491,54 +629,107 @@ export class DurableTasks {
      *  - completed before: returns the recorded result, `fn` is not called;
      *  - intent recorded but no outcome (crash in between): calls `reconcile` if
      *    given, else throws `EffectInDoubtError` — it will not guess;
-     *  - failed before as retryable: runs again; non-retryable: `EffectFailedError`.
+     *  - failed before and PROVABLY not executed (`EffectNotExecutedError` / `classifyError`): runs again
+     *    if retryable (default), else `EffectFailedError`;
+     *  - `fn` threw anything else: an exception does not prove the remote side did nothing (a timeout after
+     *    the request was sent is the typical case), so the outcome is recorded as unknown and treated like an
+     *    announced effect without outcome: `reconcile` or `EffectInDoubtError`, never an automatic re-run.
+     *    This is "at most once as far as the log can tell", not exactly-once: only an idempotency key honoured
+     *    by the external system (use `key` for it) makes a repeated call harmless.
+     *
+     * Concurrency. Calls with the same (fence, key) inside one runtime share a single execution: the
+     * later callers wait for it and receive its result (`replayed: true`) or its error. Between runtimes
+     * and processes the guarantee comes from the log: the announcement (`effect.intended`) is appended
+     * only if the effect is still exactly as this call found it, so of N callers that decided on the same
+     * state only one announces and runs `fn`; the others get `EffectConflictError` and `fn` is not
+     * called. A different owner finds the unfinished effect in doubt (its epoch is no longer current).
+     * A fence belongs to one worker; sharing one fence between processes is outside the contract
+     * (the compare-and-set still keeps `fn` single, but `reconcile` cannot tell a live peer from a dead one).
      */
     async runEffect(f, key, fn, opts) {
         assertNonEmpty('effect key', key, KEY_MAX);
         assertNonEmpty('description', opts.description, TEXT_MAX);
         const params = opts.params === undefined ? null : toJson(opts.params, 'effect params');
+        // No await between the lookup and the registration: two callers cannot both miss the map.
+        const slot = `${f.taskId}\u0000${f.owner}\u0000${f.epoch}\u0000${key}`;
+        const running = this.inflight.get(slot);
+        if (running) {
+            const shared = await running;
+            return { result: shared.result, replayed: true };
+        }
+        const run = this.executeEffect(f, key, fn, opts, params);
+        this.inflight.set(slot, run);
+        try {
+            return await run;
+        }
+        finally {
+            if (this.inflight.get(slot) === run)
+                this.inflight.delete(slot);
+        }
+    }
+    async executeEffect(f, key, fn, opts, params) {
         const taskId = f.taskId;
         const state = await this.getState(taskId);
         this.assertFence(state, f);
         const prior = state.effects[key];
         if (prior?.status === 'completed')
             return { result: prior.result, replayed: true };
-        if (prior?.status === 'failed' && !prior.retryable)
+        if (prior?.status === 'failed' && !prior.uncertain && !prior.retryable)
             throw new EffectFailedError(taskId, key, prior.error ?? 'unknown');
-        if (prior?.status === 'intended') {
+        // Announced without a recorded outcome, or failed with an unknown outcome: the external operation may have happened.
+        if (prior?.status === 'intended' || (prior?.status === 'failed' && prior.uncertain)) {
             if (!opts.reconcile)
                 throw new EffectInDoubtError(taskId, key);
             const verdict = await opts.reconcile(prior);
             if (verdict.status === 'completed') {
                 const res = toJson(verdict.result, 'reconciled result');
-                await this.fenced(f, () => ({ draft: draft('effect.completed', f.owner, { key, result: res }), result: () => undefined }));
-                return { result: verdict.result, replayed: true };
+                const recorded = await this.fenced(f, (s) => {
+                    const cur = s.effects[key];
+                    if (cur?.status === 'completed')
+                        return { draft: null, result: () => cur.result };
+                    if (effectIdentity(cur) !== effectIdentity(prior))
+                        throw new EffectConflictError(taskId, key);
+                    return { draft: draft('effect.completed', f.owner, { key, result: res }), result: () => res };
+                });
+                return { result: recorded, replayed: true };
             }
             // not executed: fall through and run it, re-announcing the intent under our epoch.
         }
-        await this.fenced(f, (s) => {
+        // Announce. The append succeeds only if the effect is still as we found it.
+        const announced = await this.fenced(f, (s) => {
             const cur = s.effects[key];
             if (cur?.status === 'completed')
-                return { draft: null, result: () => undefined };
-            return { draft: draft('effect.intended', f.owner, { key, description: opts.description, params, epoch: f.epoch }), result: () => undefined };
+                return { draft: null, result: () => ({ replay: cur.result }) };
+            if (effectIdentity(cur) !== effectIdentity(prior))
+                throw new EffectConflictError(taskId, key);
+            return {
+                draft: draft('effect.intended', f.owner, { key, description: opts.description, params, epoch: f.epoch }),
+                result: () => ({ replay: undefined }),
+            };
         });
-        const afterIntent = (await this.getState(taskId)).effects[key];
-        if (afterIntent?.status === 'completed')
-            return { result: afterIntent.result, replayed: true };
+        if (announced.replay !== undefined)
+            return { result: announced.replay, replayed: true };
         let result;
         try {
             result = await fn();
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
+            const certain = (opts.classifyError ?? defaultClassify)(err) === 'not-executed';
             await this.fenced(f, () => ({
-                draft: draft('effect.failed', f.owner, { key, error: message.slice(0, TEXT_MAX), retryable: opts.retryable ?? true }),
+                // An unknown outcome is also written as `retryable: false`, so a reader that predates `uncertain` stays safe.
+                draft: draft('effect.failed', f.owner, {
+                    key, error: message.slice(0, TEXT_MAX), retryable: certain ? (opts.retryable ?? true) : false, ...(certain ? {} : { uncertain: true }),
+                }),
                 result: () => undefined,
             }));
             throw err;
         }
         const res = toJson(result, 'effect result');
-        await this.fenced(f, () => ({ draft: draft('effect.completed', f.owner, { key, result: res }), result: () => undefined }));
+        await this.fenced(f, (s) => ({
+            draft: s.effects[key]?.status === 'completed' ? null : draft('effect.completed', f.owner, { key, result: res }),
+            result: () => undefined,
+        }));
         return { result, replayed: false };
     }
     // =========================================================================
@@ -612,9 +803,17 @@ export class DurableTasks {
                 if (s.status !== 'active')
                     return { draft: null, result: () => ({ kind: 'ignored', reason: 'task-closed', taskId }) };
                 if (a.status === 'resolved') {
+                    // Every distinct idempotency key would otherwise cost one stored event with a full payload. Keep the
+                    // first few (bounded in size), then answer without writing: the caller learns it conflicts, the log stays bounded.
+                    const rejectedInTask = Object.values(s.awaits).reduce((n, x) => n + x.rejectedDeliveries, 0);
+                    if (a.rejectedDeliveries >= MAX_REJECTED_PER_AWAIT || rejectedInTask >= MAX_REJECTED_PER_TASK) {
+                        return { draft: null, result: () => ({ kind: 'conflict', taskId, awaitId, seq: a.resolvedAtSeq, recorded: false }) };
+                    }
                     return {
-                        draft: draft('await.delivery_rejected', opts.source ?? null, { awaitId, idempotencyKey: opts.idempotencyKey, reason: 'already-resolved', payload: body }),
-                        result: (e) => ({ kind: 'conflict', taskId, awaitId, seq: e.seq }),
+                        draft: draft('await.delivery_rejected', opts.source ?? null, {
+                            awaitId, idempotencyKey: opts.idempotencyKey, reason: 'already-resolved', payload: boundedPayload(body),
+                        }),
+                        result: (e) => ({ kind: 'conflict', taskId, awaitId, seq: e.seq, recorded: true }),
                     };
                 }
                 return {
@@ -801,21 +1000,31 @@ export class DurableTasks {
     async planRetention(policy) {
         const states = [];
         const compacted = new Map();
+        const interrupted = { compactions: new Set(), prunes: [] };
         for (const id of await this.store.listTaskIds()) {
             try {
                 const l = await this.loadFull(id);
                 states.push(l.state);
                 compacted.set(id, l.compactedThrough);
+                if (l.diagnostics.some((d) => d.code === 'LOOSE_COPY_OF_COMPACTED_EVENT'))
+                    interrupted.compactions.add(id);
             }
             catch (err) {
-                if (err instanceof TaskPrunedError || err instanceof TaskNotFoundError)
+                if (err instanceof TaskPrunedError) {
+                    // A tombstone with data still on disk is an interrupted prune; a finished one needs nothing.
+                    const head = await this.store.readLog(id, { afterSeq: Number.MAX_SAFE_INTEGER });
+                    if (head.diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE'))
+                        interrupted.prunes.push(id);
+                    continue;
+                }
+                if (err instanceof TaskNotFoundError)
                     continue;
                 if (err instanceof LogCorruptError)
                     continue;
                 throw err;
             }
         }
-        return planRetention(states, compacted, policy, this.now());
+        return planRetention(states, compacted, policy, this.now(), interrupted);
     }
     /** Executes a plan. Every destructive step re-checks its precondition against the live log. */
     async applyRetention(policy) {
@@ -840,9 +1049,15 @@ export class DurableTasks {
         }
         return { decisions, applied };
     }
-    /** Packs events up to `throughSeq` into verified segments. Returns the number of events packed. */
+    /**
+     * Packs events up to `throughSeq` into verified segments. Returns the number of events packed.
+     * Also finishes an interrupted earlier compaction: loose copies that a published segment already covers
+     * are removed (only if byte-identical to the segment), even when there is nothing new to pack.
+     */
     async compact(taskId, opts) {
-        const { state, events, compactedThrough } = await this.loadFull(taskId);
+        const { state, events, diagnostics, compactedThrough } = await this.loadFull(taskId);
+        if (diagnostics.some((d) => d.code === 'LOOSE_COPY_OF_COMPACTED_EVENT'))
+            await this.store.sweepCompacted?.(taskId);
         const through = Math.min(opts.throughSeq, state.headSeq - 1);
         if (through <= compactedThrough)
             return 0;
@@ -874,36 +1089,60 @@ export class DurableTasks {
      * checked now, against the live log, not against an earlier plan.
      */
     async pruneTask(taskId, policy) {
+        // A tombstone means an earlier call already decided (terminal, past retention, unreferenced) and published
+        // that decision before removing anything. Finishing is therefore safe without deciding again, and it is
+        // the only way to complete a prune that was interrupted. `store.prune` is idempotent and removes nothing
+        // but event/segment/staging files of this task. One question is asked again, though: a task that started
+        // referring to it in the meantime (see the pins) must not be left pointing at deleted data.
+        const marker = await this.store.readLog(taskId, { afterSeq: Number.MAX_SAFE_INTEGER });
+        if (marker.tombstone) {
+            const holder = await this.activeReferrer(taskId);
+            if (holder !== null)
+                await this.refuseAfterTombstone(marker.tombstone, holder);
+            await this.store.prune(marker.tombstone);
+            this.cache.delete(taskId);
+            return marker.tombstone;
+        }
         const { state } = await this.loadFull(taskId);
         if (state.status === 'active')
             throw new RetentionRefusedError(taskId, 'the task is still active');
         const age = this.now().getTime() - Date.parse(state.closedAt);
         if (age < policy.terminalRetentionMs)
             throw new RetentionRefusedError(taskId, 'the task is within its retention period');
-        for (const other of await this.store.listTaskIds()) {
-            if (other === taskId)
-                continue;
-            let o;
-            try {
-                o = (await this.loadFull(other)).state;
-            }
-            catch (err) {
-                if (err instanceof TaskPrunedError || err instanceof TaskNotFoundError)
-                    continue;
-                throw err;
-            }
-            if (o.status === 'active' && (o.parentTaskId === taskId || o.dependsOn.includes(taskId))) {
-                throw new RetentionRefusedError(taskId, `active task "${other}" refers to it`);
-            }
-        }
+        const early = await this.activeReferrer(taskId);
+        if (early !== null)
+            throw new RetentionRefusedError(taskId, `active task "${early}" refers to it`);
         const outcome = state.status === 'completed' ? state.result : { error: state.error };
         const tomb = {
             v: 1, taskId, kind: state.kind, finalStatus: state.status, createdAt: state.createdAt, closedAt: state.closedAt,
             prunedAt: this.now().toISOString(), headSeq: state.headSeq, headHash: state.headHash,
             outcomeDigest: sha256Hex(canonicalize((outcome ?? null))),
         };
+        // The check above can be overtaken: another process may create a task that refers to this one between the
+        // check and the removal. So publish the tombstone first (new creations now refuse), then look again
+        // (creations that pinned before the tombstone are visible), and take the tombstone back if one is found.
+        if (this.store.markPruned && this.store.withdrawTombstone) {
+            await this.store.markPruned(tomb);
+            const late = await this.activeReferrer(taskId);
+            if (late !== null)
+                await this.refuseAfterTombstone(tomb, late);
+        }
         await this.store.prune(tomb);
         this.cache.delete(taskId);
         return tomb;
+    }
+    /** A referrer showed up after the tombstone was published: undo the prune if the data is still complete. */
+    async refuseAfterTombstone(tomb, holder) {
+        try {
+            await this.store.withdrawTombstone?.(tomb);
+        }
+        catch (err) {
+            if (!(err instanceof LogCorruptError))
+                throw err;
+            this.cache.delete(tomb.taskId);
+            throw new RetentionRefusedError(tomb.taskId, `active task "${holder}" refers to it, but its data was already partly removed; restore it from a backup or cancel "${holder}"`);
+        }
+        this.cache.delete(tomb.taskId);
+        throw new RetentionRefusedError(tomb.taskId, `active task "${holder}" refers to it`);
     }
 }

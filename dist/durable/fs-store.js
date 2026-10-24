@@ -32,12 +32,14 @@ import * as fs from 'fs';
 import { dirname, join } from 'path';
 import { sha256Hex } from './canonical.js';
 import { LogCorruptError, StoreIoError, StoreSecurityError, TaskPrunedError, } from './errors.js';
-import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent } from './log.js';
+import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent, verifyChain } from './log.js';
+import { GENESIS_HASH } from './types.js';
 import { SafeWriteError, createFile, openParent, projectBoundary, readBoundedFile, trustedDirectoryBoundary, } from '../root/index.js';
 /** Packed segments stay well below this; it is the reader's ceiling. */
 export const MAX_SEGMENT_BYTES = 16 * 1024 * 1024;
 const EVENT_NAME = /^(\d{9})\.json$/;
 const SEGMENT_NAME = /^S(\d{9})-(\d{9})\.jsonl$/;
+const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.json$/;
 const TMP_NAME = /^(.+)\.tmp\.\d+\.[0-9a-f]{16}$/;
 const TOMBSTONE_NAME = 'tombstone.json';
 const MAX_TOMBSTONE_BYTES = 4096;
@@ -249,6 +251,10 @@ export class FsEventStore {
             .sort();
     }
     async readLog(taskId, opts = {}) {
+        return this.readLogImpl(taskId, opts, false);
+    }
+    /** `ignoreTombstone`: read the data as it is, even though the task is marked pruned (used to prove it is intact). */
+    readLogImpl(taskId, opts, ignoreTombstone) {
         const after = opts.afterSeq ?? 0;
         const taskDir = this.taskDir(taskId);
         // Segments are immutable: once parsed in this call they are not parsed again on a retry.
@@ -257,9 +263,18 @@ export class FsEventStore {
             const diagnostics = [];
             if (!this.existingDir(taskDir))
                 return { exists: false, tombstone: null, events: [], compactedThrough: 0, diagnostics };
-            const tomb = this.readTombstone(taskId, diagnostics);
-            if (tomb)
+            const tomb = ignoreTombstone ? null : this.readTombstone(taskId, diagnostics);
+            if (tomb) {
+                // The tombstone is published BEFORE the data is removed; data still present means the prune was interrupted.
+                for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId)]) {
+                    for (const e of this.listDir(dir) ?? []) {
+                        if (e.isFile() && (EVENT_NAME.test(e.name) || SEGMENT_NAME.test(e.name) || TMP_NAME.test(e.name))) {
+                            diagnostics.push({ code: 'PRUNE_INCOMPLETE', taskId, name: e.name });
+                        }
+                    }
+                }
                 return { exists: true, tombstone: tomb, events: [], compactedThrough: 0, diagnostics };
+            }
             // ORDER MATTERS. Compaction publishes a segment BEFORE it removes the loose files it covers. So if the
             // loose files are listed first and the segments second, an event missing from the first listing was
             // removed before it, hence its segment was already published and appears in the second. Listing in the
@@ -485,29 +500,66 @@ export class FsEventStore {
         if (back === null || sha256Hex(back) !== sha256Hex(data)) {
             throw new LogCorruptError(taskId, first.seq, `segment ${name} does not read back as written; loose events are kept`);
         }
-        // The segment is published and verified: only now are the loose copies redundant.
+        // The segment is published and verified: only now are the loose copies of THESE events redundant. A loose
+        // file is removed only if it is byte-identical to the event just packed; copies of earlier ranges are
+        // handled by `sweepCompacted`, which proves them against the segments they belong to.
+        const lineBySeq = new Map(events.map((e, i) => [e.seq, lines[i]]));
         let removed = 0;
-        const evEntries = this.listDir(this.eventsDir(taskId)) ?? [];
-        for (const e of evEntries) {
+        for (const e of this.listDir(this.eventsDir(taskId)) ?? []) {
             const m = EVENT_NAME.exec(e.name);
             if (!m || !e.isFile())
                 continue;
             const seq = Number(m[1]);
-            if (seq > last.seq)
+            const want = lineBySeq.get(seq);
+            if (want === undefined)
                 continue;
-            try {
-                fs.unlinkSync(join(this.eventsDir(taskId), e.name));
+            if (this.removeLooseIfIdentical(taskId, e.name, want))
                 removed++;
-            }
-            catch (err) {
-                if (errno(err) !== 'ENOENT')
-                    throw new StoreIoError(`cannot remove ${e.name}: ${err.message}`, err);
-            }
         }
         this.fsyncDir(this.eventsDir(taskId));
         return { segment: name, packedEvents: events.length, removedFiles: removed };
     }
-    async prune(tombstone) {
+    /** Removes the loose event file `name` iff its content is exactly `line`. `true` if it was removed. */
+    removeLooseIfIdentical(taskId, name, line) {
+        const abs = join(this.eventsDir(taskId), name);
+        const content = this.readManaged(abs, `event ${name}`, MAX_EVENT_BYTES + 4096, taskId);
+        if (content === null || content.trim() !== line)
+            return false;
+        try {
+            fs.unlinkSync(abs);
+            return true;
+        }
+        catch (err) {
+            if (errno(err) === 'ENOENT')
+                return false;
+            throw new StoreIoError(`cannot remove ${name}: ${err.message}`, err);
+        }
+    }
+    async sweepCompacted(taskId) {
+        if (this.fileExists(join(this.taskDir(taskId), TOMBSTONE_NAME)))
+            throw new TaskPrunedError(taskId);
+        const log = await this.readLog(taskId); // verified view; events up to `compactedThrough` come from the segments
+        if (log.compactedThrough === 0)
+            return { removedFiles: 0, keptFiles: 0 };
+        const lineBySeq = new Map(log.events.filter((e) => e.seq <= log.compactedThrough).map((e) => [e.seq, serializeEvent(e)]));
+        let removedFiles = 0;
+        let keptFiles = 0;
+        for (const e of this.listDir(this.eventsDir(taskId)) ?? []) {
+            const m = EVENT_NAME.exec(e.name);
+            if (!m || !e.isFile())
+                continue;
+            const want = lineBySeq.get(Number(m[1]));
+            if (want === undefined)
+                continue; // newer than the segments: a live event, not ours to touch
+            if (this.removeLooseIfIdentical(taskId, e.name, want))
+                removedFiles++;
+            else if (this.fileExists(join(this.eventsDir(taskId), e.name)))
+                keptFiles++; // differs: possibly a paused writer's file or foreign data
+        }
+        this.fsyncDir(this.eventsDir(taskId));
+        return { removedFiles, keptFiles };
+    }
+    async markPruned(tombstone) {
         const taskId = tombstone.taskId;
         const taskDir = this.taskDir(taskId);
         if (!this.existingDir(taskDir))
@@ -527,15 +579,111 @@ export class FsEventStore {
                 throw new LogCorruptError(taskId, null, 'a different tombstone already exists');
             }
         }
+    }
+    async withdrawTombstone(tombstone) {
+        const taskId = tombstone.taskId;
+        const abs = join(this.taskDir(taskId), TOMBSTONE_NAME);
+        const existing = this.readTombstone(taskId, []);
+        if (!existing)
+            return; // already withdrawn
+        if (existing.headHash !== tombstone.headHash)
+            throw new LogCorruptError(taskId, null, 'a different tombstone exists; refusing to withdraw it');
+        // Only while nothing has been removed: the data must still be the complete log the tombstone describes.
+        const log = this.readLogImpl(taskId, {}, true);
+        const last = log.events[log.events.length - 1];
+        if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
+            throw new LogCorruptError(taskId, null, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+        }
+        verifyChain(taskId, log.events, 0, GENESIS_HASH);
+        try {
+            fs.unlinkSync(abs);
+        }
+        catch (err) {
+            if (errno(err) !== 'ENOENT')
+                throw new StoreIoError(`cannot remove the tombstone: ${err.message}`, err);
+        }
+        this.fsyncDir(this.taskDir(taskId));
+    }
+    refsDir(taskId) {
+        return join(this.taskDir(taskId), 'refs');
+    }
+    async pinReference(parentId, childId, at) {
+        if (!ID_PATTERN.test(childId))
+            throw new StoreSecurityError(`invalid task id "${childId}".`, 'BAD_ID');
+        const taskDir = this.taskDir(parentId);
+        const tomb = join(taskDir, TOMBSTONE_NAME);
+        if (!this.existingDir(taskDir))
+            return 'parent-missing';
+        if (this.fileExists(tomb))
+            return 'parent-pruned';
+        const name = `${childId}.json`;
+        try {
+            const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.refsDir(parentId), { create: true, ops: this.opts.ops }));
+            const out = createFile(parent, name, `${JSON.stringify({ v: 1, childId, at })}\n`, {
+                mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: 1024, ops: this.opts.ops,
+            });
+            for (const w of out.warnings)
+                this.opts.onWarning?.(w);
+        }
+        catch (err) {
+            if (err instanceof SafeWriteError && err.code === 'WRITE_TARGET_EXISTS') {
+                /* pinned before (a retry of the same creation) */
+            }
+            else if (err instanceof SafeWriteError && (err.code === 'WRITE_PARENT_CHANGED' || err.code === 'WRITE_PARENT_MISSING') && this.fileExists(tomb)) {
+                return 'parent-pruned';
+            }
+            else {
+                throw this.mapWriteError(err);
+            }
+        }
+        this.fsyncChain(this.refsDir(parentId));
+        // The pin is visible now. Looking at the tombstone only AFTER publishing the pin is what makes this safe:
+        // a prune that published its tombstone before this point is seen here; one that publishes it later will see the pin.
+        if (this.fileExists(tomb)) {
+            try {
+                fs.unlinkSync(join(this.refsDir(parentId), name));
+            }
+            catch {
+                /* a leftover pin of a child that was never created is harmless: it expires (see referenceGraceMs) */
+            }
+            return 'parent-pruned';
+        }
+        return 'pinned';
+    }
+    async listReferences(parentId) {
+        const out = [];
+        for (const e of this.listDir(this.refsDir(parentId)) ?? []) {
+            const m = /^([A-Za-z0-9][A-Za-z0-9_-]{0,63})\.json$/.exec(e.name);
+            if (!m || !e.isFile())
+                continue;
+            const content = this.readManaged(join(this.refsDir(parentId), e.name), `reference ${e.name}`, 1024 + 4096, parentId);
+            if (content === null)
+                continue;
+            let at = new Date(0).toISOString(); // unreadable: counts as old, so only an existing active child still blocks
+            try {
+                const o = JSON.parse(content);
+                if (typeof o.at === 'string' && Number.isFinite(Date.parse(o.at)))
+                    at = o.at;
+            }
+            catch {
+                /* keep the default */
+            }
+            out.push({ childId: m[1], at });
+        }
+        return out.sort((a, b) => (a.childId < b.childId ? -1 : 1));
+    }
+    async prune(tombstone) {
+        const taskId = tombstone.taskId;
+        await this.markPruned(tombstone);
         // Tombstone is durable: removal below is idempotent and may be repeated after a crash.
         let removed = 0;
-        for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId)]) {
+        for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId), this.refsDir(taskId)]) {
             const entries = this.listDir(dir);
             if (!entries)
                 continue;
             let leftovers = 0;
             for (const e of entries) {
-                if (!(e.isFile() && (EVENT_NAME.test(e.name) || SEGMENT_NAME.test(e.name) || TMP_NAME.test(e.name)))) {
+                if (!(e.isFile() && (EVENT_NAME.test(e.name) || SEGMENT_NAME.test(e.name) || REF_NAME.test(e.name) || TMP_NAME.test(e.name)))) {
                     leftovers++;
                     continue;
                 }

@@ -15,6 +15,24 @@ import { GENESIS_HASH } from './types.js';
 export function deliveryKey(awaitId, idempotencyKey) {
     return `${awaitId}:${idempotencyKey}`;
 }
+/**
+ * A string-keyed dictionary that does not inherit from `Object.prototype`.
+ *
+ * Keys of these dictionaries are application data (assumption keys, effect keys, await ids, labels).
+ * On a plain object `d['__proto__'] = x` replaces the prototype instead of storing an entry, and
+ * `d['constructor']` / `d['toString']` read an inherited function for a key that was never written.
+ * A null-prototype object has neither problem; it serializes exactly like a plain one (JSON, canonical
+ * form, `Object.keys/values/entries`), so stored events and the public `Record<string, T>` types are unchanged.
+ */
+export function newDict(from) {
+    const out = Object.create(null);
+    if (from) {
+        // defineProperty, not assignment: an own "__proto__" key of `from` must stay an entry.
+        for (const k of Object.keys(from))
+            Object.defineProperty(out, k, { value: from[k], enumerable: true, writable: true, configurable: true });
+    }
+    return out;
+}
 function corrupt(taskId, seq, reason) {
     throw new LogCorruptError(taskId, seq, reason);
 }
@@ -65,7 +83,7 @@ export function applyEvent(prevState, e) {
             input: d.input,
             parentTaskId: d.parentTaskId,
             dependsOn: [...d.dependsOn],
-            labels: { ...d.labels },
+            labels: newDict(d.labels),
             status: 'active',
             createdAt: e.at,
             updatedAt: e.at,
@@ -78,11 +96,11 @@ export function applyEvent(prevState, e) {
             lease: null,
             plan: null,
             decisions: [],
-            assumptions: {},
-            observations: {},
-            effects: {},
-            awaits: {},
-            deliveryKeys: {},
+            assumptions: newDict(),
+            observations: newDict(),
+            effects: newDict(),
+            awaits: newDict(),
+            deliveryKeys: newDict(),
             eventCount: 1,
         };
     }
@@ -184,7 +202,7 @@ export function applyEvent(prevState, e) {
                 corrupt(t, e.seq, `effect "${d.key}" is already completed`);
             s.effects[d.key] = {
                 key: d.key, description: d.description, params: d.params, status: 'intended', intendedAtSeq: e.seq,
-                intendedEpoch: d.epoch, result: null, error: null, retryable: true,
+                intendedEpoch: d.epoch, result: null, error: null, retryable: true, uncertain: false,
             };
             break;
         }
@@ -195,6 +213,7 @@ export function applyEvent(prevState, e) {
             x.status = 'completed';
             x.result = e.data.result;
             x.error = null;
+            x.uncertain = false;
             break;
         }
         case 'effect.failed': {
@@ -204,6 +223,7 @@ export function applyEvent(prevState, e) {
             x.status = 'failed';
             x.error = e.data.error;
             x.retryable = e.data.retryable;
+            x.uncertain = e.data.uncertain === true;
             break;
         }
         case 'await.registered': {
@@ -294,7 +314,15 @@ export function foldEvents(events, from = null) {
 export function foldUntil(events, seq) {
     return foldEvents(events.filter((e) => e.seq <= seq));
 }
+/** Deep copy. `structuredClone` alone would turn the null-prototype dictionaries back into plain objects. */
 export function cloneState(s) {
-    return structuredClone(s);
+    const c = structuredClone(s);
+    c.labels = newDict(c.labels);
+    c.assumptions = newDict(c.assumptions);
+    c.observations = newDict(c.observations);
+    c.effects = newDict(c.effects);
+    c.awaits = newDict(c.awaits);
+    c.deliveryKeys = newDict(c.deliveryKeys);
+    return c;
 }
 export { GENESIS_HASH };

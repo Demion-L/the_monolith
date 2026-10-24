@@ -126,17 +126,22 @@ export function assessTask(state, events, opts) {
     }
     // --- effects whose outcome is unknown --------------------------------------
     const unresolvedEffects = Object.values(state.effects)
-        .filter((x) => x.status === 'intended')
+        .filter((x) => x.status === 'intended' || (x.status === 'failed' && x.uncertain))
         .sort((a, b) => a.intendedAtSeq - b.intendedAtSeq)
         .map((x) => ({
         key: x.key, description: x.description, intendedAtSeq: x.intendedAtSeq,
-        // In flight (not in doubt) only while its own epoch still holds a live lease.
-        inDoubt: !(live && state.lease !== null && x.intendedEpoch === state.lease.epoch),
+        // In flight (not in doubt) only while its own epoch still holds a live lease. A call that already
+        // failed with an unknown outcome is not in flight: nobody is going to record a result for it.
+        inDoubt: x.status === 'failed' || !(live && state.lease !== null && x.intendedEpoch === state.lease.epoch),
+        uncertainFailure: x.status === 'failed',
     }));
     for (const x of unresolvedEffects.filter((u) => u.inDoubt)) {
         reasons.push({
             code: 'EFFECT_IN_DOUBT', severity: 'recovery',
-            detail: `effect "${x.key}" (${x.description}) was started but its outcome was never recorded`, refs: [x.key],
+            detail: x.uncertainFailure
+                ? `effect "${x.key}" (${x.description}) failed with an unknown outcome: the external operation may have taken effect`
+                : `effect "${x.key}" (${x.description}) was started but its outcome was never recorded`,
+            refs: [x.key],
         });
     }
     // --- awaits that did not deliver -------------------------------------------
@@ -212,13 +217,13 @@ export function diffStates(before, after) {
     const out = [];
     const cmp = (section, a, b) => {
         for (const k of Object.keys(b).sort()) {
-            if (!(k in a))
+            if (!Object.hasOwn(a, k))
                 out.push({ section, key: k, change: 'added' });
             else if (!sameJson(a[k], b[k]))
                 out.push({ section, key: k, change: 'changed' });
         }
         for (const k of Object.keys(a).sort())
-            if (!(k in b))
+            if (!Object.hasOwn(b, k))
                 out.push({ section, key: k, change: 'removed' });
     };
     const byId = (xs) => Object.fromEntries((xs ?? []).map((x) => [x.id, x]));

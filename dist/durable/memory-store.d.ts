@@ -14,6 +14,13 @@ export declare class MemoryEventStore implements EventStore {
     listTaskIds(): Promise<string[]>;
     /** Nothing to pack in memory; verifies the events are the stored ones so the contract is still exercised. */
     compact(taskId: string, throughSeq: number, events: TaskEvent[]): Promise<CompactionResult>;
+    markPruned(tombstone: Tombstone): Promise<void>;
+    withdrawTombstone(tombstone: Tombstone): Promise<void>;
+    pinReference(parentId: string, childId: string, at: string): Promise<'pinned' | 'parent-pruned' | 'parent-missing'>;
+    listReferences(parentId: string): Promise<Array<{
+        childId: string;
+        at: string;
+    }>>;
     prune(tombstone: Tombstone): Promise<{
         removedFiles: number;
     }>;

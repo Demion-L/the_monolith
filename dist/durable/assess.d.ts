@@ -76,6 +76,7 @@ export interface Assessment {
         description: string;
         intendedAtSeq: number;
         inDoubt: boolean;
+        uncertainFailure: boolean;
     }>;
     /** Events by someone other than the sender, after the oldest unconsumed result's request was sent. */
     sinceSend: Array<{

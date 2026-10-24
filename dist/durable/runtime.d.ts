@@ -38,6 +38,18 @@ export interface DurableTasksOptions {
     maxAppendAttempts?: number;
     /** Tasks kept in the in-memory read cache (least recently used are dropped). Default 256. */
     maxCachedTasks?: number;
+    /**
+     * Event slots above `maxEventsPerTask` that only lease changes (`claim`, `release`) and terminal events
+     * (`complete`, `fail`, `cancel`) may use, so a task that exhausted its ordinary budget can always be closed.
+     * The last slot is for a terminal event only. Default 16; 0 restores the strict ceiling.
+     */
+    terminalReserveEvents?: number;
+    /**
+     * How long a reference pinned by a task that is being created counts as "creation in progress" when nothing
+     * of that task was published yet. A creator that died between pinning and publishing must not block the
+     * referenced task's pruning forever. Default 10 minutes.
+     */
+    referenceGraceMs?: number;
 }
 /** Proof of the right to act on a task as its current worker. */
 export interface Fence {
@@ -86,7 +98,13 @@ export type DeliveryResult = {
     kind: 'conflict';
     taskId: string;
     awaitId: string;
+    /** The stored `await.delivery_rejected` event, or - when `recorded` is false - the event that resolved the await. */
     seq: number;
+    /**
+     * False when the per-await / per-task cap on stored rejections was reached: the delivery was answered
+     * but, to keep the log bounded, not written.
+     */
+    recorded: boolean;
 } | {
     kind: 'ignored';
     reason: 'task-closed' | 'task-pruned';
@@ -108,7 +126,17 @@ export interface EffectOptions<T extends Json> {
     } | {
         status: 'not-executed';
     }>;
-    /** Whether a thrown error leaves the effect retryable (default true). */
+    /**
+     * Says what an exception thrown by `fn` proves. `'not-executed'`: the external operation certainly did not
+     * take effect. `'unknown'`: it may have (a timeout, a dropped connection, any error after the request left).
+     * Default: only `EffectNotExecutedError` is `'not-executed'`; everything else is `'unknown'`, because an
+     * exception is not evidence that the remote side did nothing.
+     */
+    classifyError?: (err: unknown) => 'not-executed' | 'unknown';
+    /**
+     * Whether a failure classified `'not-executed'` may be run again (default true). It has no effect on an
+     * `'unknown'` failure: that one is never run again blindly, whatever this says — it needs `reconcile`.
+     */
     retryable?: boolean;
 }
 export interface EffectOutcome<T> {
@@ -184,8 +212,12 @@ export declare class DurableTasks {
     private readonly maxEvents;
     private readonly maxAttempts;
     private readonly maxCached;
+    private readonly terminalReserve;
+    private readonly referenceGraceMs;
     /** Validated, incrementally extended view per task. A cache of the log, never an authority. */
     private readonly cache;
+    /** Effect executions running in this runtime, so concurrent calls with one identity share one `fn` call. */
+    private readonly inflight;
     constructor(opts: DurableTasksOptions);
     private remember;
     /** Brings the cached state up to the head of the log. Throws if the task is missing or pruned. */
@@ -197,6 +229,17 @@ export declare class DurableTasks {
      * against fresh state after every lost race.
      */
     private mutate;
+    /**
+     * How many events a task may hold before `type` is refused. Ordinary events stop at `maxEvents`; lease changes
+     * may use the reserve except its last slot; terminal events may use all of it. See `terminalReserveEvents`.
+     */
+    private eventLimitFor;
+    /**
+     * Runs a proposed event through the fold before anything is stored. A violation here means the *caller's*
+     * request does not fit the task's current state (the stored log was just verified and is fine), so it is
+     * a `ValidationError`, never a `LogCorruptError`: corruption is reserved for stored data that fails verification.
+     */
+    private precheck;
     /** After an unknown publication outcome: is *our* event (same hash) the one in the slot? */
     private resolveUnknown;
     createTask(input: CreateTaskInput): Promise<{
@@ -204,6 +247,24 @@ export declare class DurableTasks {
         created: boolean;
         state: TaskState;
     }>;
+    /**
+     * True when `taskId` exists and is not pruned. A tombstone may be transient (a prune that found a referrer
+     * withdraws it right away), so a pruned answer is re-checked for a short while before it is believed.
+     */
+    private referenceIsLive;
+    /**
+     * Backstop for the one interleaving the pins cannot cover: a creator that stayed longer than `referenceGraceMs`
+     * between pinning and publishing, so a prune was entitled to ignore its pin. Only then is a pruned reference
+     * believed and the new task cancelled (a task that depends on nothing it can read must not stay active).
+     * Within the grace period a tombstone seen here is transient: the prune that published it will find this
+     * task's pin and withdraw it, so cancelling would be wrong.
+     */
+    private assertReferencesSurvived;
+    /**
+     * An active task that refers to `taskId`: either published (`parentTaskId` / `dependsOn`) or being created
+     * (a recent pin with no task behind it yet). `null` if nothing needs `taskId` any more.
+     */
+    private activeReferrer;
     getState(taskId: string): Promise<TaskState>;
     /** The state when the log had `seq` events. */
     getStateAt(taskId: string, seq: number): Promise<TaskState>;
@@ -286,9 +347,25 @@ export declare class DurableTasks {
      *  - completed before: returns the recorded result, `fn` is not called;
      *  - intent recorded but no outcome (crash in between): calls `reconcile` if
      *    given, else throws `EffectInDoubtError` — it will not guess;
-     *  - failed before as retryable: runs again; non-retryable: `EffectFailedError`.
+     *  - failed before and PROVABLY not executed (`EffectNotExecutedError` / `classifyError`): runs again
+     *    if retryable (default), else `EffectFailedError`;
+     *  - `fn` threw anything else: an exception does not prove the remote side did nothing (a timeout after
+     *    the request was sent is the typical case), so the outcome is recorded as unknown and treated like an
+     *    announced effect without outcome: `reconcile` or `EffectInDoubtError`, never an automatic re-run.
+     *    This is "at most once as far as the log can tell", not exactly-once: only an idempotency key honoured
+     *    by the external system (use `key` for it) makes a repeated call harmless.
+     *
+     * Concurrency. Calls with the same (fence, key) inside one runtime share a single execution: the
+     * later callers wait for it and receive its result (`replayed: true`) or its error. Between runtimes
+     * and processes the guarantee comes from the log: the announcement (`effect.intended`) is appended
+     * only if the effect is still exactly as this call found it, so of N callers that decided on the same
+     * state only one announces and runs `fn`; the others get `EffectConflictError` and `fn` is not
+     * called. A different owner finds the unfinished effect in doubt (its epoch is no longer current).
+     * A fence belongs to one worker; sharing one fence between processes is outside the contract
+     * (the compare-and-set still keeps `fn` single, but `reconcile` cannot tell a live peer from a dead one).
      */
     runEffect<T extends Json>(f: Fence, key: string, fn: () => Promise<T>, opts: EffectOptions<T>): Promise<EffectOutcome<T>>;
+    private executeEffect;
     /**
      * Announces that an answer is expected and returns the token the answer must
      * carry. Idempotent per `awaitId`: a restarted worker that registers the same
@@ -358,7 +435,11 @@ export declare class DurableTasks {
     planRetention(policy: RetentionPolicy): Promise<RetentionDecision[]>;
     /** Executes a plan. Every destructive step re-checks its precondition against the live log. */
     applyRetention(policy: RetentionPolicy): Promise<RetentionReport>;
-    /** Packs events up to `throughSeq` into verified segments. Returns the number of events packed. */
+    /**
+     * Packs events up to `throughSeq` into verified segments. Returns the number of events packed.
+     * Also finishes an interrupted earlier compaction: loose copies that a published segment already covers
+     * are removed (only if byte-identical to the segment), even when there is nothing new to pack.
+     */
     compact(taskId: string, opts: {
         throughSeq: number;
     }): Promise<number>;
@@ -368,5 +449,7 @@ export declare class DurableTasks {
      * checked now, against the live log, not against an earlier plan.
      */
     pruneTask(taskId: string, policy: Pick<RetentionPolicy, 'terminalRetentionMs'>): Promise<Tombstone>;
+    /** A referrer showed up after the tombstone was published: undo the prune if the data is still complete. */
+    private refuseAfterTombstone;
 }
 //# sourceMappingURL=runtime.d.ts.map

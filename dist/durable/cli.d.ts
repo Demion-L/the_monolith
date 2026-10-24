@@ -3,9 +3,9 @@
  * of the current MONOLITH instance (`<monolithRoot>/durable`).
  *
  *   monolith durable list [--status active|completed|failed|cancelled]
- *   monolith durable show <taskId>
+ *   monolith durable show <taskId> [--reveal-tokens]
  *   monolith durable assess <taskId>
- *   monolith durable packet <taskId>
+ *   monolith durable packet <taskId> [--reveal-tokens]
  *   monolith durable verify [taskId]
  *   monolith durable retention --retain-days N [--compact-after N] [--apply]
  *

@@ -86,6 +86,9 @@ const SCHEMA = {
     'task.failed': { error: isStr, detail: isAny },
     'task.cancelled': { reason: isStr },
 };
+const OPTIONAL_FIELDS = {
+    'effect.failed': { uncertain: isBool },
+};
 /**
  * Parses and verifies one serialized event: envelope shape, known format and
  * type (an unknown one is `LogUnsupportedError`, never skipped), payload shape
@@ -122,6 +125,11 @@ export function parseEvent(raw, expectedTaskId, hintSeq) {
         throw new LogCorruptError(expectedTaskId, s, 'event data is not an object');
     for (const [field, check] of Object.entries(schema)) {
         if (!(field in data) || !check(data[field]))
+            throw new LogCorruptError(expectedTaskId, s, `payload field "${field}" of ${type} is invalid`);
+    }
+    // Fields added after format v1 was fixed: may be absent (older logs), must be well-formed when present.
+    for (const [field, check] of Object.entries(OPTIONAL_FIELDS[type] ?? {})) {
+        if (field in data && !check(data[field]))
             throw new LogCorruptError(expectedTaskId, s, `payload field "${field}" of ${type} is invalid`);
     }
     const { hash, ...rest } = parsed;

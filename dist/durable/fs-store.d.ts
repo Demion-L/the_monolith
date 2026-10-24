@@ -91,6 +91,8 @@ export declare class FsEventStore implements EventStore {
     readLog(taskId: string, opts?: {
         afterSeq?: number;
     }): Promise<LogRead>;
+    /** `ignoreTombstone`: read the data as it is, even though the task is marked pruned (used to prove it is intact). */
+    private readLogImpl;
     private readTombstone;
     append(event: TaskEvent): Promise<'appended' | 'conflict'>;
     private fileExists;
@@ -98,6 +100,20 @@ export declare class FsEventStore implements EventStore {
     /** Removes `name` only if its bytes are exactly `event` (our own publication). */
     private removeOwnLooseFile;
     compact(taskId: string, throughSeq: number, events: TaskEvent[]): Promise<CompactionResult>;
+    /** Removes the loose event file `name` iff its content is exactly `line`. `true` if it was removed. */
+    private removeLooseIfIdentical;
+    sweepCompacted(taskId: string): Promise<{
+        removedFiles: number;
+        keptFiles: number;
+    }>;
+    markPruned(tombstone: Tombstone): Promise<void>;
+    withdrawTombstone(tombstone: Tombstone): Promise<void>;
+    private refsDir;
+    pinReference(parentId: string, childId: string, at: string): Promise<'pinned' | 'parent-pruned' | 'parent-missing'>;
+    listReferences(parentId: string): Promise<Array<{
+        childId: string;
+        at: string;
+    }>>;
     prune(tombstone: Tombstone): Promise<{
         removedFiles: number;
     }>;

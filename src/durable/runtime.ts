@@ -1091,18 +1091,26 @@ export class DurableTasks {
   async planRetention(policy: RetentionPolicy): Promise<RetentionDecision[]> {
     const states: TaskState[] = [];
     const compacted = new Map<string, number>();
+    const interrupted = { compactions: new Set<string>(), prunes: [] as string[] };
     for (const id of await this.store.listTaskIds()) {
       try {
         const l = await this.loadFull(id);
         states.push(l.state);
         compacted.set(id, l.compactedThrough);
+        if (l.diagnostics.some((d) => d.code === 'LOOSE_COPY_OF_COMPACTED_EVENT')) interrupted.compactions.add(id);
       } catch (err) {
-        if (err instanceof TaskPrunedError || err instanceof TaskNotFoundError) continue;
+        if (err instanceof TaskPrunedError) {
+          // A tombstone with data still on disk is an interrupted prune; a finished one needs nothing.
+          const head = await this.store.readLog(id, { afterSeq: Number.MAX_SAFE_INTEGER });
+          if (head.diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE')) interrupted.prunes.push(id);
+          continue;
+        }
+        if (err instanceof TaskNotFoundError) continue;
         if (err instanceof LogCorruptError) continue;
         throw err;
       }
     }
-    return planRetention(states, compacted, policy, this.now());
+    return planRetention(states, compacted, policy, this.now(), interrupted);
   }
 
   /** Executes a plan. Every destructive step re-checks its precondition against the live log. */
@@ -1126,9 +1134,14 @@ export class DurableTasks {
     return { decisions, applied };
   }
 
-  /** Packs events up to `throughSeq` into verified segments. Returns the number of events packed. */
+  /**
+   * Packs events up to `throughSeq` into verified segments. Returns the number of events packed.
+   * Also finishes an interrupted earlier compaction: loose copies that a published segment already covers
+   * are removed (only if byte-identical to the segment), even when there is nothing new to pack.
+   */
   async compact(taskId: string, opts: { throughSeq: number }): Promise<number> {
-    const { state, events, compactedThrough } = await this.loadFull(taskId);
+    const { state, events, diagnostics, compactedThrough } = await this.loadFull(taskId);
+    if (diagnostics.some((d) => d.code === 'LOOSE_COPY_OF_COMPACTED_EVENT')) await this.store.sweepCompacted?.(taskId);
     const through = Math.min(opts.throughSeq, state.headSeq - 1);
     if (through <= compactedThrough) return 0;
     const todo = events.filter((e) => e.seq > compactedThrough && e.seq <= through);
@@ -1158,6 +1171,16 @@ export class DurableTasks {
    * checked now, against the live log, not against an earlier plan.
    */
   async pruneTask(taskId: string, policy: Pick<RetentionPolicy, 'terminalRetentionMs'>): Promise<Tombstone> {
+    // A tombstone means an earlier call already decided (terminal, past retention, unreferenced) and published
+    // that decision before removing anything. Finishing is therefore safe without deciding again, and it is
+    // the only way to complete a prune that was interrupted. `store.prune` is idempotent and removes nothing
+    // but event/segment/staging files of this task.
+    const marker = await this.store.readLog(taskId, { afterSeq: Number.MAX_SAFE_INTEGER });
+    if (marker.tombstone) {
+      await this.store.prune(marker.tombstone);
+      this.cache.delete(taskId);
+      return marker.tombstone;
+    }
     const { state } = await this.loadFull(taskId);
     if (state.status === 'active') throw new RetentionRefusedError(taskId, 'the task is still active');
     const age = this.now().getTime() - Date.parse(state.closedAt as string);

@@ -272,7 +272,13 @@ export interface Tombstone {
 }
 
 export interface StoreDiagnostic {
-  code: 'LOOSE_COPY_OF_COMPACTED_EVENT' | 'STAGING_RESIDUE_REPAIRED' | 'STAGING_FILE_PRESENT' | 'UNKNOWN_ENTRY';
+  code:
+    | 'LOOSE_COPY_OF_COMPACTED_EVENT'
+    | 'STAGING_RESIDUE_REPAIRED'
+    | 'STAGING_FILE_PRESENT'
+    | 'UNKNOWN_ENTRY'
+    /** A tombstone exists but event/segment files of the pruned task are still on disk: an interrupted prune. */
+    | 'PRUNE_INCOMPLETE';
   taskId: string;
   name: string;
 }
@@ -309,4 +315,10 @@ export interface EventStore {
   compact(taskId: string, throughSeq: number, events: TaskEvent[]): Promise<CompactionResult>;
   /** Write the tombstone, then remove the task's data. Idempotent: a second call finishes an interrupted one. */
   prune(tombstone: Tombstone): Promise<{ removedFiles: number }>;
+  /**
+   * Optional. Finish an interrupted compaction: remove loose event copies that a verified segment already covers.
+   * A copy is removed only if it is byte-identical to the event in the segment; anything else is kept (`keptFiles`)
+   * because it cannot be proven redundant. Idempotent; safe to run concurrently with readers, writers and itself.
+   */
+  sweepCompacted?(taskId: string): Promise<{ removedFiles: number; keptFiles: number }>;
 }

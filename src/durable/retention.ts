@@ -44,11 +44,20 @@ export const DEFAULT_COMPACT_AFTER_EVENTS = 1000;
 export const DEFAULT_KEEP_TAIL_EVENTS = 100;
 export const DEFAULT_MIN_COMPACT_BATCH = 100;
 
+/** Work left over by an interrupted run; finishing it is always safe because both operations are marker-first. */
+export interface InterruptedWork {
+  /** Tasks whose loose events are still on disk although a segment covers them. */
+  compactions?: ReadonlySet<string>;
+  /** Pruned tasks (tombstone present) whose data files are still on disk. */
+  prunes?: readonly string[];
+}
+
 export function planRetention(
   states: readonly TaskState[],
   compactedThrough: ReadonlyMap<string, number>,
   policy: RetentionPolicy,
   now: Date,
+  interrupted: InterruptedWork = {},
 ): RetentionDecision[] {
   const referencedBy = new Map<string, string[]>();
   for (const s of states) {
@@ -61,7 +70,12 @@ export function planRetention(
   const keepTail = policy.keepTailEvents ?? DEFAULT_KEEP_TAIL_EVENTS;
   const minBatch = policy.minCompactBatch ?? DEFAULT_MIN_COMPACT_BATCH;
 
-  return [...states]
+  // Finishing an interrupted compaction only removes copies a segment already covers: no policy threshold applies.
+  const finishCompaction = (s: TaskState): RetentionDecision => ({
+    taskId: s.taskId, action: 'compact', reason: 'finish interrupted compaction', throughSeq: compactedThrough.get(s.taskId) ?? 0,
+  });
+
+  const decisions = [...states]
     .sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0))
     .map((s): RetentionDecision => {
       if (s.status === 'active') {
@@ -69,11 +83,11 @@ export function planRetention(
         if (s.eventCount > compactAfter && through - (compactedThrough.get(s.taskId) ?? 0) >= minBatch) {
           return { taskId: s.taskId, action: 'compact', reason: `${s.eventCount} events (> ${compactAfter})`, throughSeq: through };
         }
-        return { taskId: s.taskId, action: 'keep', reason: 'active' };
+        return interrupted.compactions?.has(s.taskId) ? finishCompaction(s) : { taskId: s.taskId, action: 'keep', reason: 'active' };
       }
       const closedAt = Date.parse(s.closedAt as string);
       if (now.getTime() - closedAt < policy.terminalRetentionMs) {
-        return { taskId: s.taskId, action: 'keep', reason: 'within retention period' };
+        return interrupted.compactions?.has(s.taskId) ? finishCompaction(s) : { taskId: s.taskId, action: 'keep', reason: 'within retention period' };
       }
       const holders = referencedBy.get(s.taskId);
       if (holders && holders.length > 0) {
@@ -81,4 +95,8 @@ export function planRetention(
       }
       return { taskId: s.taskId, action: 'prune', reason: `${s.status} and past retention` };
     });
+  for (const taskId of interrupted.prunes ?? []) {
+    decisions.push({ taskId, action: 'prune', reason: 'finish interrupted prune (tombstone present, data still on disk)' });
+  }
+  return decisions.sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0));
 }

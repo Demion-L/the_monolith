@@ -289,7 +289,17 @@ export class FsEventStore implements EventStore {
       if (!this.existingDir(taskDir)) return { exists: false, tombstone: null, events: [], compactedThrough: 0, diagnostics };
 
       const tomb = this.readTombstone(taskId, diagnostics);
-      if (tomb) return { exists: true, tombstone: tomb, events: [], compactedThrough: 0, diagnostics };
+      if (tomb) {
+        // The tombstone is published BEFORE the data is removed; data still present means the prune was interrupted.
+        for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId)]) {
+          for (const e of this.listDir(dir) ?? []) {
+            if (e.isFile() && (EVENT_NAME.test(e.name) || SEGMENT_NAME.test(e.name) || TMP_NAME.test(e.name))) {
+              diagnostics.push({ code: 'PRUNE_INCOMPLETE', taskId, name: e.name });
+            }
+          }
+        }
+        return { exists: true, tombstone: tomb, events: [], compactedThrough: 0, diagnostics };
+      }
 
       // ORDER MATTERS. Compaction publishes a segment BEFORE it removes the loose files it covers. So if the
       // loose files are listed first and the segments second, an event missing from the first listing was
@@ -497,23 +507,54 @@ export class FsEventStore implements EventStore {
       throw new LogCorruptError(taskId, first.seq, `segment ${name} does not read back as written; loose events are kept`);
     }
 
-    // The segment is published and verified: only now are the loose copies redundant.
+    // The segment is published and verified: only now are the loose copies of THESE events redundant. A loose
+    // file is removed only if it is byte-identical to the event just packed; copies of earlier ranges are
+    // handled by `sweepCompacted`, which proves them against the segments they belong to.
+    const lineBySeq = new Map<number, string>(events.map((e, i) => [e.seq, lines[i] as string]));
     let removed = 0;
-    const evEntries = this.listDir(this.eventsDir(taskId)) ?? [];
-    for (const e of evEntries) {
+    for (const e of this.listDir(this.eventsDir(taskId)) ?? []) {
       const m = EVENT_NAME.exec(e.name);
       if (!m || !e.isFile()) continue;
       const seq = Number(m[1]);
-      if (seq > last.seq) continue;
-      try {
-        fs.unlinkSync(join(this.eventsDir(taskId), e.name));
-        removed++;
-      } catch (err) {
-        if (errno(err) !== 'ENOENT') throw new StoreIoError(`cannot remove ${e.name}: ${(err as Error).message}`, err);
-      }
+      const want = lineBySeq.get(seq);
+      if (want === undefined) continue;
+      if (this.removeLooseIfIdentical(taskId, e.name, want)) removed++;
     }
     this.fsyncDir(this.eventsDir(taskId));
     return { segment: name, packedEvents: events.length, removedFiles: removed };
+  }
+
+  /** Removes the loose event file `name` iff its content is exactly `line`. `true` if it was removed. */
+  private removeLooseIfIdentical(taskId: string, name: string, line: string): boolean {
+    const abs = join(this.eventsDir(taskId), name);
+    const content = this.readManaged(abs, `event ${name}`, MAX_EVENT_BYTES + 4096, taskId);
+    if (content === null || content.trim() !== line) return false;
+    try {
+      fs.unlinkSync(abs);
+      return true;
+    } catch (err) {
+      if (errno(err) === 'ENOENT') return false;
+      throw new StoreIoError(`cannot remove ${name}: ${(err as Error).message}`, err);
+    }
+  }
+
+  async sweepCompacted(taskId: string): Promise<{ removedFiles: number; keptFiles: number }> {
+    if (this.fileExists(join(this.taskDir(taskId), TOMBSTONE_NAME))) throw new TaskPrunedError(taskId);
+    const log = await this.readLog(taskId); // verified view; events up to `compactedThrough` come from the segments
+    if (log.compactedThrough === 0) return { removedFiles: 0, keptFiles: 0 };
+    const lineBySeq = new Map<number, string>(log.events.filter((e) => e.seq <= log.compactedThrough).map((e) => [e.seq, serializeEvent(e)]));
+    let removedFiles = 0;
+    let keptFiles = 0;
+    for (const e of this.listDir(this.eventsDir(taskId)) ?? []) {
+      const m = EVENT_NAME.exec(e.name);
+      if (!m || !e.isFile()) continue;
+      const want = lineBySeq.get(Number(m[1]));
+      if (want === undefined) continue; // newer than the segments: a live event, not ours to touch
+      if (this.removeLooseIfIdentical(taskId, e.name, want)) removedFiles++;
+      else if (this.fileExists(join(this.eventsDir(taskId), e.name))) keptFiles++; // differs: possibly a paused writer's file or foreign data
+    }
+    this.fsyncDir(this.eventsDir(taskId));
+    return { removedFiles, keptFiles };
   }
 
   async prune(tombstone: Tombstone): Promise<{ removedFiles: number }> {

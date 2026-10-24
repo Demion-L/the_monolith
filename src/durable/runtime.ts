@@ -31,6 +31,7 @@ import { canonicalize, fingerprintOf, toJson, type Json } from './canonical.js';
 import { assessTask, diffStates, leaseIsLive, type AssessOptions, type Assessment, type StateChange } from './assess.js';
 import {
   ContentionError,
+  EffectConflictError,
   EffectFailedError,
   EffectInDoubtError,
   LeaseHeldError,
@@ -193,6 +194,11 @@ export function newOwnerId(): string {
   return `${hostname().replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 24)}-${process.pid}-${randomBytes(3).toString('hex')}`;
 }
 
+/** What a compare-and-set on an effect compares: its state and the announcement it belongs to. */
+function effectIdentity(e: EffectState | undefined): string {
+  return e ? `${e.status}@${e.intendedAtSeq}` : 'none';
+}
+
 const TOKEN_PREFIX = 'dsc1';
 
 export function parseToken(token: unknown): { taskId: string; awaitId: string; nonce: string } | null {
@@ -219,6 +225,8 @@ export class DurableTasks {
   private readonly maxCached: number;
   /** Validated, incrementally extended view per task. A cache of the log, never an authority. */
   private readonly cache = new Map<string, TaskState>();
+  /** Effect executions running in this runtime, so concurrent calls with one identity share one `fn` call. */
+  private readonly inflight = new Map<string, Promise<EffectOutcome<Json>>>();
 
   constructor(opts: DurableTasksOptions) {
     this.store = opts.store;
@@ -669,13 +677,39 @@ export class DurableTasks {
    *  - intent recorded but no outcome (crash in between): calls `reconcile` if
    *    given, else throws `EffectInDoubtError` — it will not guess;
    *  - failed before as retryable: runs again; non-retryable: `EffectFailedError`.
+   *
+   * Concurrency. Calls with the same (fence, key) inside one runtime share a single execution: the
+   * later callers wait for it and receive its result (`replayed: true`) or its error. Between runtimes
+   * and processes the guarantee comes from the log: the announcement (`effect.intended`) is appended
+   * only if the effect is still exactly as this call found it, so of N callers that decided on the same
+   * state only one announces and runs `fn`; the others get `EffectConflictError` and `fn` is not
+   * called. A different owner finds the unfinished effect in doubt (its epoch is no longer current).
+   * A fence belongs to one worker; sharing one fence between processes is outside the contract
+   * (the compare-and-set still keeps `fn` single, but `reconcile` cannot tell a live peer from a dead one).
    */
   async runEffect<T extends Json>(f: Fence, key: string, fn: () => Promise<T>, opts: EffectOptions<T>): Promise<EffectOutcome<T>> {
     assertNonEmpty('effect key', key, KEY_MAX);
     assertNonEmpty('description', opts.description, TEXT_MAX);
     const params = opts.params === undefined ? null : toJson(opts.params, 'effect params');
-    const taskId = f.taskId;
 
+    // No await between the lookup and the registration: two callers cannot both miss the map.
+    const slot = `${f.taskId}\u0000${f.owner}\u0000${f.epoch}\u0000${key}`;
+    const running = this.inflight.get(slot);
+    if (running) {
+      const shared = await running;
+      return { result: shared.result as T, replayed: true };
+    }
+    const run = this.executeEffect(f, key, fn, opts, params);
+    this.inflight.set(slot, run as Promise<EffectOutcome<Json>>);
+    try {
+      return await run;
+    } finally {
+      if (this.inflight.get(slot) === run) this.inflight.delete(slot);
+    }
+  }
+
+  private async executeEffect<T extends Json>(f: Fence, key: string, fn: () => Promise<T>, opts: EffectOptions<T>, params: Json | null): Promise<EffectOutcome<T>> {
+    const taskId = f.taskId;
     const state = await this.getState(taskId);
     this.assertFence(state, f);
     const prior = state.effects[key];
@@ -686,19 +720,28 @@ export class DurableTasks {
       const verdict = await opts.reconcile(prior);
       if (verdict.status === 'completed') {
         const res = toJson(verdict.result, 'reconciled result');
-        await this.fenced(f, () => ({ draft: draft('effect.completed', f.owner, { key, result: res }), result: () => undefined }));
-        return { result: verdict.result, replayed: true };
+        const recorded = await this.fenced<Json>(f, (s) => {
+          const cur = s.effects[key];
+          if (cur?.status === 'completed') return { draft: null, result: () => cur.result };
+          if (effectIdentity(cur) !== effectIdentity(prior)) throw new EffectConflictError(taskId, key);
+          return { draft: draft('effect.completed', f.owner, { key, result: res }), result: () => res };
+        });
+        return { result: recorded as T, replayed: true };
       }
       // not executed: fall through and run it, re-announcing the intent under our epoch.
     }
 
-    await this.fenced(f, (s) => {
+    // Announce. The append succeeds only if the effect is still as we found it.
+    const announced = await this.fenced<{ replay: Json | undefined }>(f, (s) => {
       const cur = s.effects[key];
-      if (cur?.status === 'completed') return { draft: null, result: () => undefined };
-      return { draft: draft('effect.intended', f.owner, { key, description: opts.description, params, epoch: f.epoch }), result: () => undefined };
+      if (cur?.status === 'completed') return { draft: null, result: () => ({ replay: cur.result }) };
+      if (effectIdentity(cur) !== effectIdentity(prior)) throw new EffectConflictError(taskId, key);
+      return {
+        draft: draft('effect.intended', f.owner, { key, description: opts.description, params, epoch: f.epoch }),
+        result: () => ({ replay: undefined }),
+      };
     });
-    const afterIntent = (await this.getState(taskId)).effects[key];
-    if (afterIntent?.status === 'completed') return { result: afterIntent.result as T, replayed: true };
+    if (announced.replay !== undefined) return { result: announced.replay as T, replayed: true };
 
     let result: T;
     try {
@@ -712,7 +755,10 @@ export class DurableTasks {
       throw err;
     }
     const res = toJson(result, 'effect result');
-    await this.fenced(f, () => ({ draft: draft('effect.completed', f.owner, { key, result: res }), result: () => undefined }));
+    await this.fenced(f, (s) => ({
+      draft: s.effects[key]?.status === 'completed' ? null : draft('effect.completed', f.owner, { key, result: res }),
+      result: () => undefined,
+    }));
     return { result, replayed: false };
   }
 

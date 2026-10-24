@@ -22,6 +22,7 @@ export type DurableErrorCode =
   | 'STORE_IO'
   | 'EFFECT_IN_DOUBT'
   | 'EFFECT_FAILED'
+  | 'EFFECT_CONFLICT'
   | 'RETENTION_REFUSED';
 
 export class DurableError extends Error {
@@ -145,6 +146,18 @@ export class EffectFailedError extends DurableError {
   constructor(readonly taskId: string, readonly effectKey: string, readonly detail: string) {
     super('EFFECT_FAILED', `effect "${effectKey}" of task "${taskId}" failed permanently: ${detail}`);
     this.name = 'EffectFailedError';
+  }
+}
+
+/**
+ * Another caller announced, finished or re-announced the same effect between this caller's decision and its
+ * announcement (compare-and-set on the effect's identity in the log lost). The function was NOT run by this call.
+ * Re-read the task and decide again; the other caller's attempt is the one that counts.
+ */
+export class EffectConflictError extends DurableError {
+  constructor(readonly taskId: string, readonly effectKey: string) {
+    super('EFFECT_CONFLICT', `effect "${effectKey}" of task "${taskId}" was changed by another caller while this call was deciding; it was not run by this call.`);
+    this.name = 'EffectConflictError';
   }
 }
 

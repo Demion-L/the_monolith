@@ -115,7 +115,11 @@ export class LogUnsupportedError extends DurableError {
 
 export class LogTooLargeError extends DurableError {
   constructor(readonly taskId: string, readonly limit: number) {
-    super('LOG_TOO_LARGE', `task "${taskId}" reached the event limit (${limit}); continue the work in a new task (parentTaskId).`);
+    super(
+      'LOG_TOO_LARGE',
+      `task "${taskId}" reached the event limit (${limit}); continue the work in a new task (parentTaskId). ` +
+        'Completing, failing or cancelling the task is still possible.',
+    );
     this.name = 'LogTooLargeError';
   }
 }
@@ -128,11 +132,28 @@ export class StoreSecurityError extends DurableError {
   }
 }
 
+/**
+ * The storage layer failed (disk full, I/O error, permission). Nothing was published by the failed call.
+ * This is a PHYSICAL failure and is never confused with `LogTooLargeError`, which is the logical event budget.
+ * `errnoCode` is the operating-system code found in the cause chain (`ENOSPC`, `EDQUOT`, `EIO`, ...), if any.
+ */
 export class StoreIoError extends DurableError {
+  readonly errnoCode: string | undefined;
   constructor(message: string, readonly cause?: unknown) {
     super('STORE_IO', message);
     this.name = 'StoreIoError';
+    this.errnoCode = errnoOf(cause);
   }
+}
+
+function errnoOf(cause: unknown): string | undefined {
+  let c: unknown = cause;
+  for (let i = 0; i < 4 && c !== null && typeof c === 'object'; i++) {
+    const code = (c as { code?: unknown }).code;
+    if (typeof code === 'string' && /^E[A-Z0-9]{2,}$/.test(code)) return code;
+    c = (c as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
 /** An effect was announced but its outcome was never recorded (crash between intent and result). */

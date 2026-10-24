@@ -52,6 +52,7 @@ import { applyEvent, cloneState, deliveryKey, foldEvents, foldUntil, planProblem
 import { planRetention, type RetentionDecision, type RetentionPolicy } from './retention.js';
 import {
   GENESIS_HASH,
+  TERMINAL_EVENT_TYPES,
   type AssumptionState,
   type Criticality,
   type EffectState,
@@ -80,6 +81,12 @@ export interface DurableTasksOptions {
   maxAppendAttempts?: number;
   /** Tasks kept in the in-memory read cache (least recently used are dropped). Default 256. */
   maxCachedTasks?: number;
+  /**
+   * Event slots above `maxEventsPerTask` that only lease changes (`claim`, `release`) and terminal events
+   * (`complete`, `fail`, `cancel`) may use, so a task that exhausted its ordinary budget can always be closed.
+   * The last slot is for a terminal event only. Default 16; 0 restores the strict ceiling.
+   */
+  terminalReserveEvents?: number;
 }
 
 /** Proof of the right to act on a task as its current worker. */
@@ -119,7 +126,18 @@ export type DeliveryResult =
   /** Same idempotency key seen before: nothing was written. */
   | { kind: 'duplicate'; taskId: string; awaitId: string; seq: number }
   /** The await already had a different result. The delivery is kept in the log as `await.delivery_rejected`. */
-  | { kind: 'conflict'; taskId: string; awaitId: string; seq: number }
+  | {
+      kind: 'conflict';
+      taskId: string;
+      awaitId: string;
+      /** The stored `await.delivery_rejected` event, or - when `recorded` is false - the event that resolved the await. */
+      seq: number;
+      /**
+       * False when the per-await / per-task cap on stored rejections was reached: the delivery was answered
+       * but, to keep the log bounded, not written.
+       */
+      recorded: boolean;
+    }
   | { kind: 'ignored'; reason: 'task-closed' | 'task-pruned'; taskId: string }
   | { kind: 'rejected'; reason: 'malformed-token' | 'unknown-task' | 'unknown-await' | 'bad-token' };
 
@@ -191,6 +209,12 @@ const TEXT_MAX = 4000;
 const KEY_MAX = 200;
 const MAX_TIMELINE = 500;
 const COMPACT_CHUNK_BYTES = 4 * 1024 * 1024;
+const DEFAULT_TERMINAL_RESERVE = 16;
+/** Conflicting deliveries kept in the log per await and per task; more are answered but not stored. */
+const MAX_REJECTED_PER_AWAIT = 8;
+const MAX_REJECTED_PER_TASK = 64;
+/** A stored rejected payload larger than this is replaced by its size and digest. */
+const REJECTED_PAYLOAD_MAX_BYTES = 4096;
 
 function draft<T extends EventType>(type: T, actor: string | null, data: EventDataMap[T]): EventDraft {
   return { type, actor, data } as EventDraft;
@@ -203,6 +227,13 @@ function sleep(ms: number): Promise<void> {
 /** A unique, human-readable worker identity: host, pid, random suffix. Use one per process incarnation. */
 export function newOwnerId(): string {
   return `${hostname().replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 24)}-${process.pid}-${randomBytes(3).toString('hex')}`;
+}
+
+/** The payload as stored with a rejected delivery: verbatim when small, else its size and SHA-256. */
+function boundedPayload(body: Json): Json {
+  const text = canonicalize(body);
+  const bytes = Buffer.byteLength(text, 'utf8');
+  return bytes <= REJECTED_PAYLOAD_MAX_BYTES ? body : { $truncated: true, bytes, sha256: sha256Hex(text) };
 }
 
 function defaultClassify(err: unknown): 'not-executed' | 'unknown' {
@@ -238,6 +269,7 @@ export class DurableTasks {
   private readonly maxEvents: number;
   private readonly maxAttempts: number;
   private readonly maxCached: number;
+  private readonly terminalReserve: number;
   /** Validated, incrementally extended view per task. A cache of the log, never an authority. */
   private readonly cache = new Map<string, TaskState>();
   /** Effect executions running in this runtime, so concurrent calls with one identity share one `fn` call. */
@@ -251,6 +283,7 @@ export class DurableTasks {
     this.maxEvents = opts.maxEventsPerTask ?? 50_000;
     this.maxAttempts = opts.maxAppendAttempts ?? 100;
     this.maxCached = opts.maxCachedTasks ?? 256;
+    this.terminalReserve = Math.max(0, Math.floor(opts.terminalReserveEvents ?? DEFAULT_TERMINAL_RESERVE));
   }
 
   private remember(taskId: string, state: TaskState): void {
@@ -326,7 +359,7 @@ export class DurableTasks {
       }
       const p = plan(state);
       if (p.draft === null) return p.result(null, state);
-      if (state.eventCount >= this.maxEvents) throw new LogTooLargeError(taskId, this.maxEvents);
+      if (state.eventCount >= this.eventLimitFor(p.draft.type)) throw new LogTooLargeError(taskId, this.maxEvents);
 
       const event = stampEvent(taskId, state.headSeq + 1, this.now().toISOString(), state.headHash, p.draft);
       const next = this.precheck(state, event);
@@ -345,6 +378,16 @@ export class DurableTasks {
       if (attempt >= 2) await sleep(Math.floor(Math.random() * Math.min(2 ** attempt, 40)));
     }
     throw new ContentionError(taskId, this.maxAttempts);
+  }
+
+  /**
+   * How many events a task may hold before `type` is refused. Ordinary events stop at `maxEvents`; lease changes
+   * may use the reserve except its last slot; terminal events may use all of it. See `terminalReserveEvents`.
+   */
+  private eventLimitFor(type: EventType): number {
+    if ((TERMINAL_EVENT_TYPES as readonly string[]).includes(type)) return this.maxEvents + this.terminalReserve;
+    if (type === 'run.claimed' || type === 'run.released') return this.maxEvents + Math.max(0, this.terminalReserve - 1);
+    return this.maxEvents;
   }
 
   /**
@@ -859,9 +902,17 @@ export class DurableTasks {
         if (known !== undefined) return { draft: null, result: () => ({ kind: 'duplicate', taskId, awaitId, seq: known }) };
         if (s.status !== 'active') return { draft: null, result: () => ({ kind: 'ignored', reason: 'task-closed', taskId }) };
         if (a.status === 'resolved') {
+          // Every distinct idempotency key would otherwise cost one stored event with a full payload. Keep the
+          // first few (bounded in size), then answer without writing: the caller learns it conflicts, the log stays bounded.
+          const rejectedInTask = Object.values(s.awaits).reduce((n, x) => n + x.rejectedDeliveries, 0);
+          if (a.rejectedDeliveries >= MAX_REJECTED_PER_AWAIT || rejectedInTask >= MAX_REJECTED_PER_TASK) {
+            return { draft: null, result: () => ({ kind: 'conflict', taskId, awaitId, seq: a.resolvedAtSeq as number, recorded: false }) };
+          }
           return {
-            draft: draft('await.delivery_rejected', opts.source ?? null, { awaitId, idempotencyKey: opts.idempotencyKey, reason: 'already-resolved', payload: body }),
-            result: (e) => ({ kind: 'conflict', taskId, awaitId, seq: (e as TaskEvent).seq }),
+            draft: draft('await.delivery_rejected', opts.source ?? null, {
+              awaitId, idempotencyKey: opts.idempotencyKey, reason: 'already-resolved', payload: boundedPayload(body),
+            }),
+            result: (e) => ({ kind: 'conflict', taskId, awaitId, seq: (e as TaskEvent).seq, recorded: true }),
           };
         }
         return {

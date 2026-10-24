@@ -6,7 +6,7 @@ import { DurableTasks, parseToken, type Fence } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
 import { MemoryEventStore } from './memory-store.js';
 import {
-  ContentionError, EffectFailedError, EffectInDoubtError, LeaseHeldError, LogTooLargeError, RetentionRefusedError,
+  ContentionError, EffectFailedError, EffectInDoubtError, EffectNotExecutedError, LeaseHeldError, LogTooLargeError, RetentionRefusedError,
   StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskPrunedError, ValidationError,
 } from './errors.js';
 import type { EventStore, TaskEvent } from './types.js';
@@ -282,13 +282,19 @@ describe.each(backends)('DurableTasks on %s store', (_n, make) => {
       expect(await rt2.runEffect(g, 'x', async () => ({ ran: true }), { description: 'x' })).toEqual({ result: { ran: true }, replayed: false });
     });
 
-    it('an effect that threw is retryable by default; a non-retryable one is not run again', async () => {
+    // DURABLE-FIX-001/D-5: this test used to throw a plain Error and expect an automatic re-run. An exception is no
+    // proof that the external operation did not happen, so only an error that proves it (EffectNotExecutedError)
+    // is retryable now; the plain-Error case is covered in effects-uncertain.test.ts.
+    it('an effect that provably did not run is retryable by default; a non-retryable one is not run again', async () => {
       const { rt } = setup();
       const f = await createAndClaim(rt);
-      await expect(rt.runEffect(f, 'a', async () => { throw new Error('boom'); }, { description: 'a' })).rejects.toThrow('boom');
+      await expect(rt.runEffect(f, 'a', async () => { throw new EffectNotExecutedError('boom'); }, { description: 'a' })).rejects.toThrow('boom');
       expect(await rt.runEffect(f, 'a', async () => ({ ok: 1 }), { description: 'a' })).toMatchObject({ replayed: false });
-      await expect(rt.runEffect(f, 'b', async () => { throw new Error('bad'); }, { description: 'b', retryable: false })).rejects.toThrow('bad');
+      await expect(rt.runEffect(f, 'b', async () => { throw new EffectNotExecutedError('bad'); }, { description: 'b', retryable: false })).rejects.toThrow('bad');
       await expect(rt.runEffect(f, 'b', async () => ({}), { description: 'b' })).rejects.toBeInstanceOf(EffectFailedError);
+      // a plain exception proves nothing: the effect is in doubt, not retryable
+      await expect(rt.runEffect(f, 'c', async () => { throw new Error('timeout'); }, { description: 'c' })).rejects.toThrow('timeout');
+      await expect(rt.runEffect(f, 'c', async () => ({}), { description: 'c' })).rejects.toBeInstanceOf(EffectInDoubtError);
     });
 
     it('a fenced-out worker cannot record an effect', async () => {

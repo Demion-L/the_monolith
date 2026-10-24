@@ -34,6 +34,7 @@ import {
   EffectConflictError,
   EffectFailedError,
   EffectInDoubtError,
+  EffectNotExecutedError,
   LeaseHeldError,
   LogCorruptError,
   LogTooLargeError,
@@ -130,7 +131,17 @@ export interface EffectOptions<T extends Json> {
    * system (by the effect key, which should double as its idempotency key) and say what happened.
    */
   reconcile?: (effect: EffectState) => Promise<{ status: 'completed'; result: T } | { status: 'not-executed' }>;
-  /** Whether a thrown error leaves the effect retryable (default true). */
+  /**
+   * Says what an exception thrown by `fn` proves. `'not-executed'`: the external operation certainly did not
+   * take effect. `'unknown'`: it may have (a timeout, a dropped connection, any error after the request left).
+   * Default: only `EffectNotExecutedError` is `'not-executed'`; everything else is `'unknown'`, because an
+   * exception is not evidence that the remote side did nothing.
+   */
+  classifyError?: (err: unknown) => 'not-executed' | 'unknown';
+  /**
+   * Whether a failure classified `'not-executed'` may be run again (default true). It has no effect on an
+   * `'unknown'` failure: that one is never run again blindly, whatever this says — it needs `reconcile`.
+   */
   retryable?: boolean;
 }
 
@@ -192,6 +203,10 @@ function sleep(ms: number): Promise<void> {
 /** A unique, human-readable worker identity: host, pid, random suffix. Use one per process incarnation. */
 export function newOwnerId(): string {
   return `${hostname().replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 24)}-${process.pid}-${randomBytes(3).toString('hex')}`;
+}
+
+function defaultClassify(err: unknown): 'not-executed' | 'unknown' {
+  return err instanceof EffectNotExecutedError ? 'not-executed' : 'unknown';
 }
 
 /** What a compare-and-set on an effect compares: its state and the announcement it belongs to. */
@@ -676,7 +691,13 @@ export class DurableTasks {
    *  - completed before: returns the recorded result, `fn` is not called;
    *  - intent recorded but no outcome (crash in between): calls `reconcile` if
    *    given, else throws `EffectInDoubtError` — it will not guess;
-   *  - failed before as retryable: runs again; non-retryable: `EffectFailedError`.
+   *  - failed before and PROVABLY not executed (`EffectNotExecutedError` / `classifyError`): runs again
+   *    if retryable (default), else `EffectFailedError`;
+   *  - `fn` threw anything else: an exception does not prove the remote side did nothing (a timeout after
+   *    the request was sent is the typical case), so the outcome is recorded as unknown and treated like an
+   *    announced effect without outcome: `reconcile` or `EffectInDoubtError`, never an automatic re-run.
+   *    This is "at most once as far as the log can tell", not exactly-once: only an idempotency key honoured
+   *    by the external system (use `key` for it) makes a repeated call harmless.
    *
    * Concurrency. Calls with the same (fence, key) inside one runtime share a single execution: the
    * later callers wait for it and receive its result (`replayed: true`) or its error. Between runtimes
@@ -714,8 +735,9 @@ export class DurableTasks {
     this.assertFence(state, f);
     const prior = state.effects[key];
     if (prior?.status === 'completed') return { result: prior.result as T, replayed: true };
-    if (prior?.status === 'failed' && !prior.retryable) throw new EffectFailedError(taskId, key, prior.error ?? 'unknown');
-    if (prior?.status === 'intended') {
+    if (prior?.status === 'failed' && !prior.uncertain && !prior.retryable) throw new EffectFailedError(taskId, key, prior.error ?? 'unknown');
+    // Announced without a recorded outcome, or failed with an unknown outcome: the external operation may have happened.
+    if (prior?.status === 'intended' || (prior?.status === 'failed' && prior.uncertain)) {
       if (!opts.reconcile) throw new EffectInDoubtError(taskId, key);
       const verdict = await opts.reconcile(prior);
       if (verdict.status === 'completed') {
@@ -748,8 +770,12 @@ export class DurableTasks {
       result = await fn();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const certain = (opts.classifyError ?? defaultClassify)(err) === 'not-executed';
       await this.fenced(f, () => ({
-        draft: draft('effect.failed', f.owner, { key, error: message.slice(0, TEXT_MAX), retryable: opts.retryable ?? true }),
+        // An unknown outcome is also written as `retryable: false`, so a reader that predates `uncertain` stays safe.
+        draft: draft('effect.failed', f.owner, {
+          key, error: message.slice(0, TEXT_MAX), retryable: certain ? (opts.retryable ?? true) : false, ...(certain ? {} : { uncertain: true }),
+        }),
         result: () => undefined,
       }));
       throw err;

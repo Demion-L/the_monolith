@@ -197,7 +197,7 @@ export function applyEvent(prevState: TaskState | null, e: TaskEvent): TaskState
       if (old && old.status === 'completed') corrupt(t, e.seq, `effect "${d.key}" is already completed`);
       s.effects[d.key] = {
         key: d.key, description: d.description, params: d.params, status: 'intended', intendedAtSeq: e.seq,
-        intendedEpoch: d.epoch, result: null, error: null, retryable: true,
+        intendedEpoch: d.epoch, result: null, error: null, retryable: true, uncertain: false,
       };
       break;
     }
@@ -207,6 +207,7 @@ export function applyEvent(prevState: TaskState | null, e: TaskEvent): TaskState
       x.status = 'completed';
       x.result = e.data.result;
       x.error = null;
+      x.uncertain = false;
       break;
     }
     case 'effect.failed': {
@@ -215,6 +216,7 @@ export function applyEvent(prevState: TaskState | null, e: TaskEvent): TaskState
       x.status = 'failed';
       x.error = e.data.error;
       x.retryable = e.data.retryable;
+      x.uncertain = e.data.uncertain === true;
       break;
     }
 

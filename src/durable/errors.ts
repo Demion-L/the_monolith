@@ -23,6 +23,7 @@ export type DurableErrorCode =
   | 'EFFECT_IN_DOUBT'
   | 'EFFECT_FAILED'
   | 'EFFECT_CONFLICT'
+  | 'EFFECT_NOT_EXECUTED'
   | 'RETENTION_REFUSED';
 
 export class DurableError extends Error {
@@ -146,6 +147,19 @@ export class EffectFailedError extends DurableError {
   constructor(readonly taskId: string, readonly effectKey: string, readonly detail: string) {
     super('EFFECT_FAILED', `effect "${effectKey}" of task "${taskId}" failed permanently: ${detail}`);
     this.name = 'EffectFailedError';
+  }
+}
+
+/**
+ * Thrown by the function given to `runEffect` to assert that the external operation did NOT take effect
+ * (for example a connection refused before any request was sent). It is the only kind of error that leaves
+ * an effect safely retryable by default: any other exception, a timeout above all, proves nothing about
+ * what the remote side did, and the effect is then recorded as having an unknown outcome.
+ */
+export class EffectNotExecutedError extends DurableError {
+  constructor(message: string, readonly cause?: unknown) {
+    super('EFFECT_NOT_EXECUTED', message);
+    this.name = 'EffectNotExecutedError';
   }
 }
 

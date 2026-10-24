@@ -91,7 +91,7 @@ export interface Assessment {
   results: ResultToConsume[];
   pendingAwaits: Array<Pick<AwaitState, 'awaitId' | 'purpose' | 'stepId' | 'deadlineAt' | 'registeredAtSeq'>>;
   assumptionChanges: AssumptionChange[];
-  unresolvedEffects: Array<{ key: string; description: string; intendedAtSeq: number; inDoubt: boolean }>;
+  unresolvedEffects: Array<{ key: string; description: string; intendedAtSeq: number; inDoubt: boolean; uncertainFailure: boolean }>;
   /** Events by someone other than the sender, after the oldest unconsumed result's request was sent. */
   sinceSend: Array<{ seq: number; type: string; at: string; actor: string | null; key: string | null }>;
   /** False while another owner holds a live lease. */
@@ -206,17 +206,22 @@ export function assessTask(state: TaskState, events: readonly TaskEvent[], opts:
 
   // --- effects whose outcome is unknown --------------------------------------
   const unresolvedEffects = Object.values(state.effects)
-    .filter((x) => x.status === 'intended')
+    .filter((x) => x.status === 'intended' || (x.status === 'failed' && x.uncertain))
     .sort((a, b) => a.intendedAtSeq - b.intendedAtSeq)
     .map((x) => ({
       key: x.key, description: x.description, intendedAtSeq: x.intendedAtSeq,
-      // In flight (not in doubt) only while its own epoch still holds a live lease.
-      inDoubt: !(live && state.lease !== null && x.intendedEpoch === state.lease.epoch),
+      // In flight (not in doubt) only while its own epoch still holds a live lease. A call that already
+      // failed with an unknown outcome is not in flight: nobody is going to record a result for it.
+      inDoubt: x.status === 'failed' || !(live && state.lease !== null && x.intendedEpoch === state.lease.epoch),
+      uncertainFailure: x.status === 'failed',
     }));
   for (const x of unresolvedEffects.filter((u) => u.inDoubt)) {
     reasons.push({
       code: 'EFFECT_IN_DOUBT', severity: 'recovery',
-      detail: `effect "${x.key}" (${x.description}) was started but its outcome was never recorded`, refs: [x.key],
+      detail: x.uncertainFailure
+        ? `effect "${x.key}" (${x.description}) failed with an unknown outcome: the external operation may have taken effect`
+        : `effect "${x.key}" (${x.description}) was started but its outcome was never recorded`,
+      refs: [x.key],
     });
   }
 

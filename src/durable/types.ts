@@ -61,7 +61,12 @@ export interface EventDataMap {
   'fact.observed': { key: string; fingerprint: string; value: Json | null; source: string | null };
   'effect.intended': { key: string; description: string; params: Json | null; epoch: number | null };
   'effect.completed': { key: string; result: Json | null };
-  'effect.failed': { key: string; error: string; retryable: boolean };
+  /**
+   * `uncertain: true` — the call threw, but the exception does not prove the external operation did not happen
+   * (a timeout after the request was sent). Recorded together with `retryable: false`, so a reader that predates
+   * the field also refuses to run it again. Absent (older logs) means a certain failure, as before.
+   */
+  'effect.failed': { key: string; error: string; retryable: boolean; uncertain?: boolean };
   'await.registered': {
     awaitId: string;
     token: string;
@@ -182,6 +187,11 @@ export interface EffectState {
   result: Json | null;
   error: string | null;
   retryable: boolean;
+  /**
+   * The last attempt threw and it is not known whether the external operation took effect. Such an effect is in
+   * doubt: it is neither run again nor treated as done until `reconcile` (or an operator) settles it.
+   */
+  uncertain: boolean;
 }
 
 export interface AwaitState {

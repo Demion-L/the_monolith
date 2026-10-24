@@ -32,6 +32,7 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-012 | Safe Writes and Explicit Write Scope (SEC-001B.2) | accepted | — | 2026-10-23 |
 | ADR-013 | Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3) — documentation only; native layer deferred; pending independent architectural review | proposed | — | 2026-10-23 |
 | ADR-014 | Unified Safe Read Contract (SEC-001B.1-R) — accepted as the implementation record of the merged read contract; basis of acceptance in the ADR itself; related to ADR-013 | accepted | — | 2026-10-23 |
+| ADR-017 | Durable Execution State (DURABLE-001) — domain-neutral event log for long-running agentic tasks; implemented on branch `feat/durable-state-001`, not merged; pending owner review | proposed | — | 2026-10-24 |
 
 **ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
 cognitive-architecture research program (Terra persistence, the Lexicon

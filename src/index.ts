@@ -80,3 +80,7 @@ export {
 // Safe writes — explicit write scope and publication states (SEC-001B.2, ADR-012)
 export { SafeWriteError } from './root/index.js';
 export type { WriteErrorCode, WriteWarning, WriteWarningCode, PublicationState } from './root/index.js';
+
+// Durable State — domain-neutral, crash-safe execution record for long-running agentic tasks (ADR-017).
+// Namespaced: its error taxonomy deliberately shares names (e.g. ValidationError) with Coordinatorium's.
+export * as durable from './durable/index.js';

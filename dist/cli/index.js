@@ -10,6 +10,7 @@
  *   monolith dry-run    — run finalization gate without writing output
  *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
  *   monolith brief       — deterministic, bounded project context summary
+ *   monolith durable     — inspect/verify/maintain Durable State task logs
  */
 import { MONOLITH_VERSION } from '../version.js';
 import { parseInitArgs } from './init-args.js';
@@ -31,6 +32,8 @@ Commands:
   brief       Print a deterministic, bounded summary of project state (Story,
               active Missions, latest Checkpoints, mandatory Protocols,
               accepted ADRs) — read-only, no LLM/network/ERG involved.
+  durable     Inspect and maintain Durable State (long-running task logs):
+              list | show | assess | packet | verify | retention.
 
 Mission usage:
   monolith mission start --title "..." --system "..."
@@ -42,6 +45,12 @@ Mission usage:
 
 Brief usage:
   monolith brief [--max-chars N] [--strict]
+
+Durable usage:
+  monolith durable list [--status active|completed|failed|cancelled]
+  monolith durable show|assess|packet <taskId>
+  monolith durable verify [taskId]            (exit 2 if a log fails verification)
+  monolith durable retention --retain-days N [--compact-after N] [--apply]
 
 Options:
   --help, -h      Show this help
@@ -111,6 +120,11 @@ async function main() {
         case 'brief': {
             const { runBrief } = await import('../brief/cli.js');
             await runBrief(args.slice(1));
+            break;
+        }
+        case 'durable': {
+            const { runDurableCommand } = await import('../durable/cli.js');
+            await runDurableCommand(args.slice(1));
             break;
         }
         case 'status':

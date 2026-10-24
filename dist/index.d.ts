@@ -27,4 +27,5 @@ export type { CoordinatoriumState, Mission, MissionStatus, MissionResult, Coordi
 export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, MissionNotFoundError, InvalidTransitionError, ValidationError, readState, mutateState, projectTarget, trustedDirectoryTarget, startMission, listMissions, getMission, finishMission, } from './coordinatorium/index.js';
 export { SafeWriteError } from './root/index.js';
 export type { WriteErrorCode, WriteWarning, WriteWarningCode, PublicationState } from './root/index.js';
+export * as durable from './durable/index.js';
 //# sourceMappingURL=index.d.ts.map

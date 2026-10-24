@@ -306,7 +306,7 @@ export class DurableTasks {
       if (state.eventCount >= this.maxEvents) throw new LogTooLargeError(taskId, this.maxEvents);
 
       const event = stampEvent(taskId, state.headSeq + 1, this.now().toISOString(), state.headHash, p.draft);
-      const next = applyEvent(cloneState(state), event); // rejects a rule violation before anything is stored
+      const next = this.precheck(state, event);
 
       let outcome: 'appended' | 'conflict';
       try {
@@ -322,6 +322,22 @@ export class DurableTasks {
       if (attempt >= 2) await sleep(Math.floor(Math.random() * Math.min(2 ** attempt, 40)));
     }
     throw new ContentionError(taskId, this.maxAttempts);
+  }
+
+  /**
+   * Runs a proposed event through the fold before anything is stored. A violation here means the *caller's*
+   * request does not fit the task's current state (the stored log was just verified and is fine), so it is
+   * a `ValidationError`, never a `LogCorruptError`: corruption is reserved for stored data that fails verification.
+   */
+  private precheck(state: TaskState, event: TaskEvent): TaskState {
+    try {
+      return applyEvent(cloneState(state), event);
+    } catch (err) {
+      if (err instanceof LogCorruptError) {
+        throw new ValidationError(`${event.type} is not allowed in the current state of task "${event.taskId}": ${err.reason}.`);
+      }
+      throw err;
+    }
   }
 
   /** After an unknown publication outcome: is *our* event (same hash) the one in the slot? */

@@ -18,6 +18,24 @@ export function deliveryKey(awaitId: string, idempotencyKey: string): string {
   return `${awaitId}:${idempotencyKey}`;
 }
 
+/**
+ * A string-keyed dictionary that does not inherit from `Object.prototype`.
+ *
+ * Keys of these dictionaries are application data (assumption keys, effect keys, await ids, labels).
+ * On a plain object `d['__proto__'] = x` replaces the prototype instead of storing an entry, and
+ * `d['constructor']` / `d['toString']` read an inherited function for a key that was never written.
+ * A null-prototype object has neither problem; it serializes exactly like a plain one (JSON, canonical
+ * form, `Object.keys/values/entries`), so stored events and the public `Record<string, T>` types are unchanged.
+ */
+export function newDict<T>(from?: Readonly<Record<string, T>>): Record<string, T> {
+  const out = Object.create(null) as Record<string, T>;
+  if (from) {
+    // defineProperty, not assignment: an own "__proto__" key of `from` must stay an entry.
+    for (const k of Object.keys(from)) Object.defineProperty(out, k, { value: from[k], enumerable: true, writable: true, configurable: true });
+  }
+  return out;
+}
+
 function corrupt(taskId: string, seq: number, reason: string): never {
   throw new LogCorruptError(taskId, seq, reason);
 }
@@ -65,7 +83,7 @@ export function applyEvent(prevState: TaskState | null, e: TaskEvent): TaskState
       input: d.input,
       parentTaskId: d.parentTaskId,
       dependsOn: [...d.dependsOn],
-      labels: { ...d.labels },
+      labels: newDict(d.labels),
       status: 'active',
       createdAt: e.at,
       updatedAt: e.at,
@@ -78,11 +96,11 @@ export function applyEvent(prevState: TaskState | null, e: TaskEvent): TaskState
       lease: null,
       plan: null,
       decisions: [],
-      assumptions: {},
-      observations: {},
-      effects: {},
-      awaits: {},
-      deliveryKeys: {},
+      assumptions: newDict(),
+      observations: newDict(),
+      effects: newDict(),
+      awaits: newDict(),
+      deliveryKeys: newDict(),
       eventCount: 1,
     } as TaskState;
   }
@@ -282,8 +300,16 @@ export function foldUntil(events: readonly TaskEvent[], seq: number): TaskState 
   return foldEvents(events.filter((e) => e.seq <= seq));
 }
 
+/** Deep copy. `structuredClone` alone would turn the null-prototype dictionaries back into plain objects. */
 export function cloneState(s: TaskState): TaskState {
-  return structuredClone(s);
+  const c = structuredClone(s);
+  c.labels = newDict(c.labels);
+  c.assumptions = newDict(c.assumptions);
+  c.observations = newDict(c.observations);
+  c.effects = newDict(c.effects);
+  c.awaits = newDict(c.awaits);
+  c.deliveryKeys = newDict(c.deliveryKeys);
+  return c;
 }
 
 export { GENESIS_HASH };

@@ -304,10 +304,10 @@ export function diffStates(before: TaskState, after: TaskState): StateChange[] {
   const out: StateChange[] = [];
   const cmp = (section: StateChange['section'], a: Record<string, unknown>, b: Record<string, unknown>): void => {
     for (const k of Object.keys(b).sort()) {
-      if (!(k in a)) out.push({ section, key: k, change: 'added' });
+      if (!Object.hasOwn(a, k)) out.push({ section, key: k, change: 'added' });
       else if (!sameJson(a[k], b[k])) out.push({ section, key: k, change: 'changed' });
     }
-    for (const k of Object.keys(a).sort()) if (!(k in b)) out.push({ section, key: k, change: 'removed' });
+    for (const k of Object.keys(a).sort()) if (!Object.hasOwn(b, k)) out.push({ section, key: k, change: 'removed' });
   };
   const byId = <T extends { id: string }>(xs: T[] | null): Record<string, T> => Object.fromEntries((xs ?? []).map((x) => [x.id, x]));
   cmp('plan', byId(before.plan), byId(after.plan));

@@ -38,7 +38,8 @@ import {
   StoreSecurityError,
   TaskPrunedError,
 } from './errors.js';
-import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent } from './log.js';
+import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent, verifyChain } from './log.js';
+import { GENESIS_HASH } from './types.js';
 import {
   SafeWriteError,
   createFile,
@@ -75,6 +76,7 @@ export const MAX_SEGMENT_BYTES = 16 * 1024 * 1024;
 
 const EVENT_NAME = /^(\d{9})\.json$/;
 const SEGMENT_NAME = /^S(\d{9})-(\d{9})\.jsonl$/;
+const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.json$/;
 const TMP_NAME = /^(.+)\.tmp\.\d+\.[0-9a-f]{16}$/;
 const TOMBSTONE_NAME = 'tombstone.json';
 const MAX_TOMBSTONE_BYTES = 4096;
@@ -280,6 +282,11 @@ export class FsEventStore implements EventStore {
   }
 
   async readLog(taskId: string, opts: { afterSeq?: number } = {}): Promise<LogRead> {
+    return this.readLogImpl(taskId, opts, false);
+  }
+
+  /** `ignoreTombstone`: read the data as it is, even though the task is marked pruned (used to prove it is intact). */
+  private readLogImpl(taskId: string, opts: { afterSeq?: number }, ignoreTombstone: boolean): LogRead {
     const after = opts.afterSeq ?? 0;
     const taskDir = this.taskDir(taskId);
     // Segments are immutable: once parsed in this call they are not parsed again on a retry.
@@ -288,7 +295,7 @@ export class FsEventStore implements EventStore {
       const diagnostics: StoreDiagnostic[] = [];
       if (!this.existingDir(taskDir)) return { exists: false, tombstone: null, events: [], compactedThrough: 0, diagnostics };
 
-      const tomb = this.readTombstone(taskId, diagnostics);
+      const tomb = ignoreTombstone ? null : this.readTombstone(taskId, diagnostics);
       if (tomb) {
         // The tombstone is published BEFORE the data is removed; data still present means the prune was interrupted.
         for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId)]) {
@@ -557,7 +564,7 @@ export class FsEventStore implements EventStore {
     return { removedFiles, keptFiles };
   }
 
-  async prune(tombstone: Tombstone): Promise<{ removedFiles: number }> {
+  async markPruned(tombstone: Tombstone): Promise<void> {
     const taskId = tombstone.taskId;
     const taskDir = this.taskDir(taskId);
     if (!this.existingDir(taskDir)) throw new LogCorruptError(taskId, null, 'cannot prune an unknown task');
@@ -573,14 +580,99 @@ export class FsEventStore implements EventStore {
         throw new LogCorruptError(taskId, null, 'a different tombstone already exists');
       }
     }
+  }
+
+  async withdrawTombstone(tombstone: Tombstone): Promise<void> {
+    const taskId = tombstone.taskId;
+    const abs = join(this.taskDir(taskId), TOMBSTONE_NAME);
+    const existing = this.readTombstone(taskId, []);
+    if (!existing) return; // already withdrawn
+    if (existing.headHash !== tombstone.headHash) throw new LogCorruptError(taskId, null, 'a different tombstone exists; refusing to withdraw it');
+    // Only while nothing has been removed: the data must still be the complete log the tombstone describes.
+    const log = this.readLogImpl(taskId, {}, true);
+    const last = log.events[log.events.length - 1];
+    if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
+      throw new LogCorruptError(taskId, null, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+    }
+    verifyChain(taskId, log.events, 0, GENESIS_HASH);
+    try {
+      fs.unlinkSync(abs);
+    } catch (err) {
+      if (errno(err) !== 'ENOENT') throw new StoreIoError(`cannot remove the tombstone: ${(err as Error).message}`, err);
+    }
+    this.fsyncDir(this.taskDir(taskId));
+  }
+
+  private refsDir(taskId: string): string {
+    return join(this.taskDir(taskId), 'refs');
+  }
+
+  async pinReference(parentId: string, childId: string, at: string): Promise<'pinned' | 'parent-pruned' | 'parent-missing'> {
+    if (!ID_PATTERN.test(childId)) throw new StoreSecurityError(`invalid task id "${childId}".`, 'BAD_ID');
+    const taskDir = this.taskDir(parentId);
+    const tomb = join(taskDir, TOMBSTONE_NAME);
+    if (!this.existingDir(taskDir)) return 'parent-missing';
+    if (this.fileExists(tomb)) return 'parent-pruned';
+    const name = `${childId}.json`;
+    try {
+      const parent = this.wrapSafe(() => openParent(this.boundaryFor(true) as WriteBoundary, this.refsDir(parentId), { create: true, ops: this.opts.ops }));
+      const out = createFile(parent, name, `${JSON.stringify({ v: 1, childId, at })}\n`, {
+        mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: 1024, ops: this.opts.ops,
+      });
+      for (const w of out.warnings) this.opts.onWarning?.(w);
+    } catch (err) {
+      if (err instanceof SafeWriteError && err.code === 'WRITE_TARGET_EXISTS') {
+        /* pinned before (a retry of the same creation) */
+      } else if (err instanceof SafeWriteError && (err.code === 'WRITE_PARENT_CHANGED' || err.code === 'WRITE_PARENT_MISSING') && this.fileExists(tomb)) {
+        return 'parent-pruned';
+      } else {
+        throw this.mapWriteError(err);
+      }
+    }
+    this.fsyncChain(this.refsDir(parentId));
+    // The pin is visible now. Looking at the tombstone only AFTER publishing the pin is what makes this safe:
+    // a prune that published its tombstone before this point is seen here; one that publishes it later will see the pin.
+    if (this.fileExists(tomb)) {
+      try {
+        fs.unlinkSync(join(this.refsDir(parentId), name));
+      } catch {
+        /* a leftover pin of a child that was never created is harmless: it expires (see referenceGraceMs) */
+      }
+      return 'parent-pruned';
+    }
+    return 'pinned';
+  }
+
+  async listReferences(parentId: string): Promise<Array<{ childId: string; at: string }>> {
+    const out: Array<{ childId: string; at: string }> = [];
+    for (const e of this.listDir(this.refsDir(parentId)) ?? []) {
+      const m = /^([A-Za-z0-9][A-Za-z0-9_-]{0,63})\.json$/.exec(e.name);
+      if (!m || !e.isFile()) continue;
+      const content = this.readManaged(join(this.refsDir(parentId), e.name), `reference ${e.name}`, 1024 + 4096, parentId);
+      if (content === null) continue;
+      let at = new Date(0).toISOString(); // unreadable: counts as old, so only an existing active child still blocks
+      try {
+        const o = JSON.parse(content) as { at?: unknown };
+        if (typeof o.at === 'string' && Number.isFinite(Date.parse(o.at))) at = o.at;
+      } catch {
+        /* keep the default */
+      }
+      out.push({ childId: m[1] as string, at });
+    }
+    return out.sort((a, b) => (a.childId < b.childId ? -1 : 1));
+  }
+
+  async prune(tombstone: Tombstone): Promise<{ removedFiles: number }> {
+    const taskId = tombstone.taskId;
+    await this.markPruned(tombstone);
     // Tombstone is durable: removal below is idempotent and may be repeated after a crash.
     let removed = 0;
-    for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId)]) {
+    for (const dir of [this.eventsDir(taskId), this.segmentsDir(taskId), this.refsDir(taskId)]) {
       const entries = this.listDir(dir);
       if (!entries) continue;
       let leftovers = 0;
       for (const e of entries) {
-        if (!(e.isFile() && (EVENT_NAME.test(e.name) || SEGMENT_NAME.test(e.name) || TMP_NAME.test(e.name)))) {
+        if (!(e.isFile() && (EVENT_NAME.test(e.name) || SEGMENT_NAME.test(e.name) || REF_NAME.test(e.name) || TMP_NAME.test(e.name)))) {
           leftovers++;
           continue;
         }

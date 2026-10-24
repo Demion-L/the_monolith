@@ -43,8 +43,7 @@ import { join } from 'path';
 import { DurableTasks, FsEventStore } from './durable/index.js';
 
 const [dir, mode, ctl, id, extra] = process.argv.slice(2);
-const store = new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' });
-const rt = new DurableTasks({ store });
+const inner = new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' });
 const touch = (name) => writeFileSync(join(ctl, name), '');
 const has = (name) => existsSync(join(ctl, name));
 const until = async (pred, ms = 15000) => {
@@ -54,6 +53,35 @@ const until = async (pred, ms = 15000) => {
     await new Promise((r) => setTimeout(r, 5));
   }
 };
+const gate = async (signal, release) => { touch(signal); await until(() => has(release)); };
+
+// A store that waits at the boundaries named by the test. It works against the old store too (no markPruned/pins).
+const store = {
+  readLog: (...a) => inner.readLog(...a),
+  append: (...a) => inner.append(...a),
+  listTaskIds: () => inner.listTaskIds(),
+  compact: (...a) => inner.compact(...a),
+  sweepCompacted: (...a) => inner.sweepCompacted(...a),
+  prune: async (t) => {
+    if (!inner.markPruned) await gate('prune-reached', 'go-prune'); // old store: the single commit point
+    return inner.prune(t);
+  },
+};
+if (inner.markPruned) {
+  store.markPruned = async (t) => {
+    await gate('prune-reached', 'go-prune');
+    await inner.markPruned(t);
+    await gate('marked', 'go-scan');
+  };
+  store.withdrawTombstone = (...a) => inner.withdrawTombstone(...a);
+  store.listReferences = (...a) => inner.listReferences(...a);
+  store.pinReference = async (...a) => {
+    const r = await inner.pinReference(...a);
+    if (mode === 'create-child' && extra === 'gate-after-pin') await gate('pinned', 'go-publish');
+    return r;
+  };
+}
+const rt = new DurableTasks({ store });
 const say = (s) => process.stdout.write(s + '\\n');
 
 if (mode === 'effect-race') {
@@ -82,6 +110,20 @@ if (mode === 'effect-race') {
     touch('entered.crashing');
     await new Promise(() => {});
   }, { description: 'charge' });
+} else if (mode === 'prune') {
+  try {
+    await rt.pruneTask(id, { terminalRetentionMs: 0 });
+    say('RESULT PRUNED');
+  } catch (e) {
+    say('RESULT ' + (e.code ?? e.name));
+  }
+} else if (mode === 'create-child') {
+  try {
+    const r = await rt.createTask({ taskId: id, kind: 'k', goal: 'g', parentTaskId: 'P' });
+    say('RESULT OK created=' + r.created);
+  } catch (e) {
+    say('RESULT ' + (e.code ?? e.name));
+  }
 } else if (mode === 'effect-takeover') {
   const fence = await rt.claim('job1', { owner: 'worker-b' });
   try {
@@ -219,5 +261,106 @@ describe('D-1 across real processes', () => {
     const a = await openRt(dir).assess('job1');
     expect(a.mode).toBe('recovery');
     expect(a.reasons.map((r) => r.code)).toContain('EFFECT_IN_DOUBT');
+  }, 60_000);
+});
+
+describe('D-7 across real processes', () => {
+  async function finishedParent(dir: string): Promise<DurableTasks> {
+    const rt = openRt(dir);
+    await rt.createTask({ taskId: 'P', kind: 'k', goal: 'g' });
+    const f = await rt.claim('P', { owner: 'w' });
+    await rt.complete(f, { r: 1 });
+    return rt;
+  }
+  const exists = (ctl: string, name: string): boolean => existsSync(join(ctl, name));
+
+  it('a child created in full by another process between the prune check and the removal is not orphaned', async () => {
+    const dir = tmp('durable-d7-');
+    const ctl = tmp('durable-d7-ctl-');
+    const rt = await finishedParent(dir);
+
+    const pruner = spawnChild([dir, 'prune', ctl, 'P']);
+    await waitFor(() => exists(ctl, 'prune-reached')); // the pruner has decided and is about to commit
+    const creator = spawnChild([dir, 'create-child', ctl, 'C']);
+    expect(await creator.line('RESULT')).toBe('RESULT OK created=true'); // the whole creation happens inside the window
+    writeFileSync(join(ctl, 'go-prune'), '');
+    writeFileSync(join(ctl, 'go-scan'), '');
+    const verdict = await pruner.line('RESULT');
+    await Promise.all([pruner.done, creator.done]);
+
+    expect(verdict).toBe('RESULT RETENTION_REFUSED');
+    const fresh = openRt(dir);
+    expect((await fresh.getState('P')).status).toBe('completed'); // parent still there
+    expect((await fresh.getState('C'))).toMatchObject({ status: 'active', parentTaskId: 'P' });
+    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(false);
+    expect((await fresh.verify()).every((r) => r.ok)).toBe(true);
+    void rt;
+  }, 60_000);
+
+  it('a creator that pinned before the tombstone and publishes while it is up: the pruner withdraws, the creator succeeds', async () => {
+    const dir = tmp('durable-d7-');
+    const ctl = tmp('durable-d7-ctl-');
+    await finishedParent(dir);
+
+    const pruner = spawnChild([dir, 'prune', ctl, 'P']);
+    await waitFor(() => exists(ctl, 'prune-reached')); // pruner's first look is done
+    const creator = spawnChild([dir, 'create-child', ctl, 'C', 'gate-after-pin']);
+    await waitFor(() => exists(ctl, 'pinned')); // pin published, child not yet
+    writeFileSync(join(ctl, 'go-prune'), '');
+    await waitFor(() => exists(ctl, 'marked')); // tombstone is up
+    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(true);
+    writeFileSync(join(ctl, 'go-publish'), ''); // the creator publishes while the tombstone is up
+    await waitFor(() => existsSync(join(dir, 'tasks', 'C', 'events', '000000001.json')));
+    writeFileSync(join(ctl, 'go-scan'), ''); // now the pruner looks again
+
+    expect(await pruner.line('RESULT')).toBe('RESULT RETENTION_REFUSED');
+    expect(await creator.line('RESULT')).toBe('RESULT OK created=true');
+    await Promise.all([pruner.done, creator.done]);
+    const fresh = openRt(dir);
+    expect((await fresh.getState('P')).status).toBe('completed');
+    expect((await fresh.getState('C')).status).toBe('active');
+    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(false);
+  }, 60_000);
+
+  it('a creator arriving after the tombstone is refused and publishes nothing; the prune completes', async () => {
+    const dir = tmp('durable-d7-');
+    const ctl = tmp('durable-d7-ctl-');
+    await finishedParent(dir);
+
+    const pruner = spawnChild([dir, 'prune', ctl, 'P']);
+    await waitFor(() => exists(ctl, 'prune-reached'));
+    writeFileSync(join(ctl, 'go-prune'), '');
+    await waitFor(() => exists(ctl, 'marked')); // tombstone up, data not yet removed
+    const creator = spawnChild([dir, 'create-child', ctl, 'C']);
+    expect(await creator.line('RESULT')).toBe('RESULT VALIDATION');
+    writeFileSync(join(ctl, 'go-scan'), '');
+    expect(await pruner.line('RESULT')).toBe('RESULT PRUNED');
+    await Promise.all([pruner.done, creator.done]);
+
+    const fresh = openRt(dir);
+    await expect(fresh.getState('C')).rejects.toMatchObject({ code: 'TASK_NOT_FOUND' });
+    await expect(fresh.getState('P')).rejects.toMatchObject({ code: 'TASK_PRUNED' });
+    expect(existsSync(join(dir, 'tasks', 'C'))).toBe(false);
+  }, 60_000);
+
+  it('SIGKILL of the pruner right after the tombstone: the next prune call does not strand a child that appeared', async () => {
+    const dir = tmp('durable-d7-');
+    const ctl = tmp('durable-d7-ctl-');
+    await finishedParent(dir);
+
+    const pruner = spawnChild([dir, 'prune', ctl, 'P']);
+    await waitFor(() => exists(ctl, 'prune-reached'));
+    const creator = spawnChild([dir, 'create-child', ctl, 'C']);
+    expect(await creator.line('RESULT')).toBe('RESULT OK created=true');
+    writeFileSync(join(ctl, 'go-prune'), '');
+    await waitFor(() => exists(ctl, 'marked'));
+    pruner.proc.kill('SIGKILL'); // dies with the tombstone up and the second look not done
+    await pruner.done;
+
+    const fresh = openRt(dir);
+    await expect(fresh.getState('P')).rejects.toMatchObject({ code: 'TASK_PRUNED' }); // transient: tombstone, data intact
+    await expect(fresh.pruneTask('P', { terminalRetentionMs: 0 })).rejects.toMatchObject({ code: 'RETENTION_REFUSED' });
+    expect((await openRt(dir).getState('P')).status).toBe('completed');
+    expect((await openRt(dir).getState('C')).status).toBe('active');
   }, 60_000);
 });

@@ -321,4 +321,25 @@ export interface EventStore {
    * because it cannot be proven redundant. Idempotent; safe to run concurrently with readers, writers and itself.
    */
   sweepCompacted?(taskId: string): Promise<{ removedFiles: number; keptFiles: number }>;
+
+  // --- Optional: consistency between a task and the tasks that refer to it (parentTaskId / dependsOn) ---
+  //
+  // `prune` removes a task that something may be about to refer to. Neither "check, then prune" nor "check,
+  // then create the child" is safe across processes, so the two sides publish a marker first and look at the
+  // other side's marker second (a store must make the markers durable and linearizable the same way as `append`):
+  //   child:  pinReference(parent, child)  ->  (it reports 'parent-pruned' if the tombstone is already there)  ->  append child
+  //   prune:  markPruned(tombstone)        ->  listReferences(parent) / look at the tasks  ->  withdrawTombstone or prune
+  // Whichever marker is published second sees the first, so at least one side backs off.
+
+  /** Record that `childId` is being created with a reference to `parentId`. Create-only and idempotent. */
+  pinReference?(parentId: string, childId: string, at: string): Promise<'pinned' | 'parent-pruned' | 'parent-missing'>;
+  /** The references recorded by `pinReference` (pins stay until the parent is pruned). */
+  listReferences?(parentId: string): Promise<Array<{ childId: string; at: string }>>;
+  /** First half of `prune`: publish the tombstone, remove nothing. Idempotent. */
+  markPruned?(tombstone: Tombstone): Promise<void>;
+  /**
+   * Undo `markPruned` while the task's data is still complete (verified up to the tombstone's head hash).
+   * Throws if the data is no longer intact: a prune that already started removing files cannot be withdrawn.
+   */
+  withdrawTombstone?(tombstone: Tombstone): Promise<void>;
 }

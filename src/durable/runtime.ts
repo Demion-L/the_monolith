@@ -87,6 +87,12 @@ export interface DurableTasksOptions {
    * The last slot is for a terminal event only. Default 16; 0 restores the strict ceiling.
    */
   terminalReserveEvents?: number;
+  /**
+   * How long a reference pinned by a task that is being created counts as "creation in progress" when nothing
+   * of that task was published yet. A creator that died between pinning and publishing must not block the
+   * referenced task's pruning forever. Default 10 minutes.
+   */
+  referenceGraceMs?: number;
 }
 
 /** Proof of the right to act on a task as its current worker. */
@@ -210,6 +216,9 @@ const KEY_MAX = 200;
 const MAX_TIMELINE = 500;
 const COMPACT_CHUNK_BYTES = 4 * 1024 * 1024;
 const DEFAULT_TERMINAL_RESERVE = 16;
+/** How long a creator / pruner waits for a transient tombstone (a prune that is about to be withdrawn) to settle. */
+const SETTLE_ATTEMPTS = 40;
+const SETTLE_STEP_MS = 25;
 /** Conflicting deliveries kept in the log per await and per task; more are answered but not stored. */
 const MAX_REJECTED_PER_AWAIT = 8;
 const MAX_REJECTED_PER_TASK = 64;
@@ -270,6 +279,7 @@ export class DurableTasks {
   private readonly maxAttempts: number;
   private readonly maxCached: number;
   private readonly terminalReserve: number;
+  private readonly referenceGraceMs: number;
   /** Validated, incrementally extended view per task. A cache of the log, never an authority. */
   private readonly cache = new Map<string, TaskState>();
   /** Effect executions running in this runtime, so concurrent calls with one identity share one `fn` call. */
@@ -284,6 +294,7 @@ export class DurableTasks {
     this.maxAttempts = opts.maxAppendAttempts ?? 100;
     this.maxCached = opts.maxCachedTasks ?? 256;
     this.terminalReserve = Math.max(0, Math.floor(opts.terminalReserveEvents ?? DEFAULT_TERMINAL_RESERVE));
+    this.referenceGraceMs = opts.referenceGraceMs ?? 10 * 60_000;
   }
 
   private remember(taskId: string, state: TaskState): void {
@@ -438,13 +449,15 @@ export class DurableTasks {
       labels: { ...labels },
     };
     for (const r of refs) {
-      try {
-        await this.refresh(r);
-      } catch (err) {
-        if (err instanceof TaskNotFoundError || err instanceof TaskPrunedError) {
-          throw new ValidationError(`referenced task "${r}" does not exist (or was pruned).`);
-        }
-        throw err;
+      if (!(await this.referenceIsLive(r))) throw new ValidationError(`referenced task "${r}" does not exist (or was pruned).`);
+    }
+    // Pin every reference BEFORE publishing the task, so a concurrent prune of a referenced task sees this task
+    // (or this call sees its tombstone). Stores without pins keep the old, weaker check above.
+    const pinnedAtMs = this.now().getTime();
+    if (this.store.pinReference) {
+      for (const r of refs) {
+        const pinned = await this.store.pinReference(r, taskId, this.now().toISOString());
+        if (pinned !== 'pinned') throw new ValidationError(`referenced task "${r}" does not exist (or was pruned).`);
       }
     }
 
@@ -459,6 +472,7 @@ export class DurableTasks {
     if (outcome === 'appended') {
       const state = applyEvent(null, event);
       this.remember(taskId, state);
+      await this.assertReferencesSurvived(taskId, refs, pinnedAtMs);
       return { taskId, created: true, state: cloneState(state) };
     }
     // The id is taken: the same request repeated is fine, a different one is an error.
@@ -470,6 +484,74 @@ export class DurableTasks {
       canonicalize(existing.labels) === canonicalize(data.labels);
     if (!same) throw new TaskExistsError(taskId);
     return { taskId, created: false, state: cloneState(existing) };
+  }
+
+  /**
+   * True when `taskId` exists and is not pruned. A tombstone may be transient (a prune that found a referrer
+   * withdraws it right away), so a pruned answer is re-checked for a short while before it is believed.
+   */
+  private async referenceIsLive(taskId: string): Promise<boolean> {
+    for (let i = 0; i < SETTLE_ATTEMPTS; i++) {
+      try {
+        await this.refresh(taskId);
+        return true;
+      } catch (err) {
+        if (err instanceof TaskNotFoundError) return false;
+        if (!(err instanceof TaskPrunedError)) throw err;
+      }
+      await sleep(SETTLE_STEP_MS);
+    }
+    return false;
+  }
+
+  /**
+   * Backstop for the one interleaving the pins cannot cover: a creator that stayed longer than `referenceGraceMs`
+   * between pinning and publishing, so a prune was entitled to ignore its pin. Only then is a pruned reference
+   * believed and the new task cancelled (a task that depends on nothing it can read must not stay active).
+   * Within the grace period a tombstone seen here is transient: the prune that published it will find this
+   * task's pin and withdraw it, so cancelling would be wrong.
+   */
+  private async assertReferencesSurvived(taskId: string, refs: readonly string[], pinnedAtMs: number): Promise<void> {
+    if (!this.store.pinReference) return;
+    if (this.now().getTime() - pinnedAtMs < this.referenceGraceMs) return;
+    for (const r of refs) {
+      if (await this.referenceIsLive(r)) continue;
+      await this.cancel(taskId, `referenced task "${r}" was pruned while this task was being created`, 'durable');
+      throw new ValidationError(`referenced task "${r}" was pruned while task "${taskId}" was being created; the new task was cancelled.`);
+    }
+  }
+
+  /**
+   * An active task that refers to `taskId`: either published (`parentTaskId` / `dependsOn`) or being created
+   * (a recent pin with no task behind it yet). `null` if nothing needs `taskId` any more.
+   */
+  private async activeReferrer(taskId: string): Promise<string | null> {
+    for (const other of await this.store.listTaskIds()) {
+      if (other === taskId) continue;
+      let o: TaskState;
+      try {
+        o = (await this.loadFull(other)).state;
+      } catch (err) {
+        if (err instanceof TaskPrunedError || err instanceof TaskNotFoundError) continue;
+        throw err;
+      }
+      if (o.status === 'active' && (o.parentTaskId === taskId || o.dependsOn.includes(taskId))) return other;
+    }
+    for (const pin of (await this.store.listReferences?.(taskId)) ?? []) {
+      let child: TaskState;
+      try {
+        child = await this.refresh(pin.childId);
+      } catch (err) {
+        if (err instanceof TaskNotFoundError) {
+          if (this.now().getTime() - Date.parse(pin.at) < this.referenceGraceMs) return pin.childId; // creation in progress
+          continue; // abandoned
+        }
+        if (err instanceof TaskPrunedError) continue;
+        throw err;
+      }
+      if (child.status === 'active') return pin.childId;
+    }
+    return null;
   }
 
   async getState(taskId: string): Promise<TaskState> {
@@ -1174,9 +1256,12 @@ export class DurableTasks {
     // A tombstone means an earlier call already decided (terminal, past retention, unreferenced) and published
     // that decision before removing anything. Finishing is therefore safe without deciding again, and it is
     // the only way to complete a prune that was interrupted. `store.prune` is idempotent and removes nothing
-    // but event/segment/staging files of this task.
+    // but event/segment/staging files of this task. One question is asked again, though: a task that started
+    // referring to it in the meantime (see the pins) must not be left pointing at deleted data.
     const marker = await this.store.readLog(taskId, { afterSeq: Number.MAX_SAFE_INTEGER });
     if (marker.tombstone) {
+      const holder = await this.activeReferrer(taskId);
+      if (holder !== null) await this.refuseAfterTombstone(marker.tombstone, holder);
       await this.store.prune(marker.tombstone);
       this.cache.delete(taskId);
       return marker.tombstone;
@@ -1185,27 +1270,37 @@ export class DurableTasks {
     if (state.status === 'active') throw new RetentionRefusedError(taskId, 'the task is still active');
     const age = this.now().getTime() - Date.parse(state.closedAt as string);
     if (age < policy.terminalRetentionMs) throw new RetentionRefusedError(taskId, 'the task is within its retention period');
-    for (const other of await this.store.listTaskIds()) {
-      if (other === taskId) continue;
-      let o: TaskState;
-      try {
-        o = (await this.loadFull(other)).state;
-      } catch (err) {
-        if (err instanceof TaskPrunedError || err instanceof TaskNotFoundError) continue;
-        throw err;
-      }
-      if (o.status === 'active' && (o.parentTaskId === taskId || o.dependsOn.includes(taskId))) {
-        throw new RetentionRefusedError(taskId, `active task "${other}" refers to it`);
-      }
-    }
+    const early = await this.activeReferrer(taskId);
+    if (early !== null) throw new RetentionRefusedError(taskId, `active task "${early}" refers to it`);
     const outcome = state.status === 'completed' ? state.result : { error: state.error };
     const tomb: Tombstone = {
       v: 1, taskId, kind: state.kind, finalStatus: state.status, createdAt: state.createdAt, closedAt: state.closedAt as string,
       prunedAt: this.now().toISOString(), headSeq: state.headSeq, headHash: state.headHash,
       outcomeDigest: sha256Hex(canonicalize((outcome ?? null) as Json)),
     };
+    // The check above can be overtaken: another process may create a task that refers to this one between the
+    // check and the removal. So publish the tombstone first (new creations now refuse), then look again
+    // (creations that pinned before the tombstone are visible), and take the tombstone back if one is found.
+    if (this.store.markPruned && this.store.withdrawTombstone) {
+      await this.store.markPruned(tomb);
+      const late = await this.activeReferrer(taskId);
+      if (late !== null) await this.refuseAfterTombstone(tomb, late);
+    }
     await this.store.prune(tomb);
     this.cache.delete(taskId);
     return tomb;
+  }
+
+  /** A referrer showed up after the tombstone was published: undo the prune if the data is still complete. */
+  private async refuseAfterTombstone(tomb: Tombstone, holder: string): Promise<never> {
+    try {
+      await this.store.withdrawTombstone?.(tomb);
+    } catch (err) {
+      if (!(err instanceof LogCorruptError)) throw err;
+      this.cache.delete(tomb.taskId);
+      throw new RetentionRefusedError(tomb.taskId, `active task "${holder}" refers to it, but its data was already partly removed; restore it from a backup or cancel "${holder}"`);
+    }
+    this.cache.delete(tomb.taskId);
+    throw new RetentionRefusedError(tomb.taskId, `active task "${holder}" refers to it`);
   }
 }

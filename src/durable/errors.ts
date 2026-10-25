@@ -12,6 +12,7 @@ export type DurableErrorCode =
   | 'TASK_PRUNED'
   | 'TASK_EXISTS'
   | 'TASK_CLOSED'
+  | 'TASK_ORPHANED'
   | 'LEASE_HELD'
   | 'STALE_FENCE'
   | 'CONTENTION'
@@ -193,6 +194,17 @@ export class EffectConflictError extends DurableError {
   constructor(readonly taskId: string, readonly effectKey: string) {
     super('EFFECT_CONFLICT', `effect "${effectKey}" of task "${taskId}" was changed by another caller while this call was deciding; it was not run by this call.`);
     this.name = 'EffectConflictError';
+  }
+}
+
+/**
+ * The task is active in the log, but a task it requires (`parentTaskId` / `dependsOn`) was pruned or does not exist,
+ * so it must not run. Raised by `claim`; the log is NOT what decides this, the required task's state right now is.
+ */
+export class TaskOrphanedError extends DurableError {
+  constructor(readonly taskId: string, readonly requiredTaskId: string) {
+    super('TASK_ORPHANED', `task "${taskId}" requires task "${requiredTaskId}", which was pruned or does not exist; it will not be run.`);
+    this.name = 'TaskOrphanedError';
   }
 }
 

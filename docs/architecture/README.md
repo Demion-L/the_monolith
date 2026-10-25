@@ -27,6 +27,7 @@ program moved to [Webway](https://github.com/Demion-L/webway) on
 | Document              | Describes                                                           |
 | ---------------------- | -------------------------------------------------------------------- |
 | `toolkit-pipeline.md` | How a markdown artifact becomes structured, governed memory: Scriptorium → Explicit Relationship Graph → working memory → finalize-story consolidation |
+| `DURABLE-STATE-RETENTION-SAFETY.md` | Durable State & Retention: safety invariants, failure model, verification matrix (draft for independent review; branch `feat/durable-state-001`) |
 
 ---
 

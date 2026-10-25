@@ -220,7 +220,10 @@ const KEY_MAX = 200;
 const MAX_TIMELINE = 500;
 const COMPACT_CHUNK_BYTES = 4 * 1024 * 1024;
 const DEFAULT_TERMINAL_RESERVE = 16;
-/** How long a creator / pruner waits for a transient tombstone (a prune that is about to be withdrawn) to settle. */
+/**
+ * How long `createTask` waits for a transient tombstone to settle before it refuses to create a task under that
+ * parent. Only a request is refused; it never decides that a required task is gone (see `requirementState`).
+ */
 const SETTLE_ATTEMPTS = 40;
 const SETTLE_STEP_MS = 25;
 /** Conflicting deliveries kept in the log per await and per task; more are answered but not stored. */

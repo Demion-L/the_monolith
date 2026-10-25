@@ -37,6 +37,7 @@ import {
   StoreIoError,
   StoreSecurityError,
   TaskPrunedError,
+  TombstoneCommittedError,
 } from './errors.js';
 import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent, verifyChain } from './log.js';
 import { GENESIS_HASH } from './types.js';
@@ -589,12 +590,21 @@ export class FsEventStore implements EventStore {
     if (!existing) return; // already withdrawn
     if (existing.headHash !== tombstone.headHash) throw new LogCorruptError(taskId, null, 'a different tombstone exists; refusing to withdraw it');
     // Only while nothing has been removed: the data must still be the complete log the tombstone describes.
-    const log = this.readLogImpl(taskId, {}, true);
-    const last = log.events[log.events.length - 1];
-    if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
-      throw new LogCorruptError(taskId, null, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+    // Removal deletes files in order, so a partly removed log shows up as a gap, a missing head or a broken chain.
+    // All of these mean the same thing here: the prune is committed and there is nothing to roll back to.
+    let log: LogRead;
+    try {
+      log = this.readLogImpl(taskId, {}, true);
+      const last = log.events[log.events.length - 1];
+      if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
+        throw new TombstoneCommittedError(taskId, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+      }
+      verifyChain(taskId, log.events, 0, GENESIS_HASH);
+    } catch (err) {
+      if (err instanceof TombstoneCommittedError) throw err;
+      if (err instanceof LogCorruptError) throw new TombstoneCommittedError(taskId, `the data of the pruned task is not intact (${err.reason}); the tombstone cannot be withdrawn`);
+      throw err;
     }
-    verifyChain(taskId, log.events, 0, GENESIS_HASH);
     try {
       fs.unlinkSync(abs);
     } catch (err) {

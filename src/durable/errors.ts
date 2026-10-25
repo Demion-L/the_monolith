@@ -13,6 +13,7 @@ export type DurableErrorCode =
   | 'TASK_EXISTS'
   | 'TASK_CLOSED'
   | 'TASK_ORPHANED'
+  | 'REQUIRED_TASK_PENDING'
   | 'LEASE_HELD'
   | 'STALE_FENCE'
   | 'CONTENTION'
@@ -103,6 +104,17 @@ export class LogCorruptError extends DurableError {
   constructor(readonly taskId: string, readonly seq: number | null, readonly reason: string) {
     super('LOG_CORRUPT', `log of task "${taskId}" is corrupt${seq === null ? '' : ` at seq ${seq}`}: ${reason}`);
     this.name = 'LogCorruptError';
+  }
+}
+
+/**
+ * `withdrawTombstone` found the pruned task's data no longer complete: removal has started, so the prune is committed
+ * and cannot be rolled back. (It is a `LogCorruptError` for callers that only know the old contract.)
+ */
+export class TombstoneCommittedError extends LogCorruptError {
+  constructor(taskId: string, reason: string) {
+    super(taskId, null, reason);
+    this.name = 'TombstoneCommittedError';
   }
 }
 
@@ -205,6 +217,19 @@ export class TaskOrphanedError extends DurableError {
   constructor(readonly taskId: string, readonly requiredTaskId: string) {
     super('TASK_ORPHANED', `task "${taskId}" requires task "${requiredTaskId}", which was pruned or does not exist; it will not be run.`);
     this.name = 'TaskOrphanedError';
+  }
+}
+
+/**
+ * A task this one requires is in an unfinished prune (tombstone published, removal not finished or not provably
+ * rolled back), or could not be examined right now. Nothing is run and NOTHING IS CANCELLED: the state is transient,
+ * and the call can simply be repeated. Contrast `TaskOrphanedError`, which is final.
+ */
+export class RequiredTaskPendingError extends DurableError {
+  readonly retryable = true;
+  constructor(readonly taskId: string, readonly requiredTaskId: string) {
+    super('REQUIRED_TASK_PENDING', `task "${taskId}" requires task "${requiredTaskId}", whose prune is not settled; it is not run now, and not cancelled. Retry.`);
+    this.name = 'RequiredTaskPendingError';
   }
 }
 

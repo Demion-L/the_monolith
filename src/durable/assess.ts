@@ -44,7 +44,9 @@ export type ReasonCode =
   | 'REPLANNED_SINCE_SEND'
   | 'LEASE_HELD'
   /** A task this one requires (parentTaskId / dependsOn) was pruned or is missing: the task must not run. */
-  | 'REQUIRED_TASK_GONE';
+  | 'REQUIRED_TASK_GONE'
+  /** A task this one requires is in an unfinished prune: the task does not run now, and is NOT cancelled. */
+  | 'REQUIRED_TASK_PRUNE_PENDING';
 
 export interface Reason {
   code: ReasonCode;

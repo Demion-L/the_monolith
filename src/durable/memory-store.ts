@@ -5,8 +5,8 @@
  * against both), but nothing survives the process.
  */
 
-import { LogCorruptError, TaskPrunedError } from './errors.js';
-import type { CompactionResult, EventStore, LogRead, TaskEvent, Tombstone } from './types.js';
+import { LogCorruptError, TaskPrunedError, TombstoneCommittedError } from './errors.js';
+import type { CompactionResult, EventStore, LogRead, StoreDiagnostic, TaskEvent, Tombstone } from './types.js';
 
 interface Entry {
   events: TaskEvent[];
@@ -21,7 +21,10 @@ export class MemoryEventStore implements EventStore {
   async readLog(taskId: string, opts: { afterSeq?: number } = {}): Promise<LogRead> {
     const entry = this.tasks.get(taskId);
     if (!entry) return { exists: false, tombstone: null, events: [], compactedThrough: 0, diagnostics: [] };
-    if (entry.tombstone) return { exists: true, tombstone: structuredClone(entry.tombstone), events: [], compactedThrough: 0, diagnostics: [] };
+    if (entry.tombstone) {
+      const diagnostics: StoreDiagnostic[] = entry.events.length > 0 ? [{ code: 'PRUNE_INCOMPLETE', taskId, name: 'events' }] : [];
+      return { exists: true, tombstone: structuredClone(entry.tombstone), events: [], compactedThrough: 0, diagnostics };
+    }
     const after = opts.afterSeq ?? 0;
     return { exists: true, tombstone: null, events: structuredClone(entry.events.filter((e) => e.seq > after)), compactedThrough: 0, diagnostics: [] };
   }
@@ -69,7 +72,7 @@ export class MemoryEventStore implements EventStore {
     if (!entry?.tombstone) return;
     const last = entry.events[entry.events.length - 1];
     if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
-      throw new LogCorruptError(tombstone.taskId, null, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+      throw new TombstoneCommittedError(tombstone.taskId, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
     }
     entry.tombstone = null;
   }

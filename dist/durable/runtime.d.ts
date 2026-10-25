@@ -253,13 +253,28 @@ export declare class DurableTasks {
      */
     private referenceIsLive;
     /**
-     * Backstop for the one interleaving the pins cannot cover: a creator that stayed longer than `referenceGraceMs`
-     * between pinning and publishing, so a prune was entitled to ignore its pin. Only then is a pruned reference
-     * believed and the new task cancelled (a task that depends on nothing it can read must not stay active).
-     * Within the grace period a tombstone seen here is transient: the prune that published it will find this
-     * task's pin and withdraw it, so cancelling would be wrong.
+     * Immediate feedback for the creator, NOT the safety net: a creator that is killed before it gets here leaves an
+     * active task behind, and that is made harmless by `claim` / discovery (see `requiredTaskGone`). It runs without
+     * looking at any clock: a clock-dependent skip is what let a skewed creator keep a task whose parent was pruned.
+     * A tombstone seen here may be transient (a prune that found this task's pin withdraws it); `referenceIsLive`
+     * waits for that, and a parent that stays pruned cancels the task, which is also what a pruner that resumes later
+     * wants to see (a cancelled referrer does not block it).
      */
     private assertReferencesSurvived;
+    /**
+     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is pruned or missing right now, else
+     * `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it is safe without
+     * any clock: a pruner publishes its tombstone and only then looks for referrers; this check runs after the
+     * task's `task.created` is published. So either the tombstone is visible here, or the pruner sees the task and backs
+     * off. Once the check has passed, no prune of the required task can succeed while this task is active.
+     */
+    private requiredTaskGone;
+    /**
+     * Durable, idempotent cleanup of an orphan: `task.cancelled` (a terminal event, which also fits in the reserve).
+     * Best effort by design: if the write fails (crash, ENOSPC) the task stays active in the log but
+     * `requiredTaskGone` keeps refusing it on every call, and the next discovery tries the write again.
+     */
+    private quarantine;
     /**
      * An active task that refers to `taskId`: either published (`parentTaskId` / `dependsOn`) or being created
      * (a recent pin with no task behind it yet). `null` if nothing needs `taskId` any more.
@@ -409,6 +424,8 @@ export declare class DurableTasks {
     assess(taskId: string, opts?: Omit<AssessOptions, 'now'> & {
         now?: Date;
     }): Promise<Assessment>;
+    /** An active task whose required task is gone is reported as not claimable, with the reason; `claim` enforces it. */
+    private withRequirements;
     /** Everything a resumed worker — or a reasoning component — needs, in one deterministic document. */
     resumePacket(taskId: string, opts?: Omit<AssessOptions, 'now'> & {
         now?: Date;

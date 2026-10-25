@@ -5,7 +5,7 @@
  * message text. No error message embeds event payloads or file contents
  * (payloads are application data and may be sensitive).
  */
-export type DurableErrorCode = 'VALIDATION' | 'TASK_NOT_FOUND' | 'TASK_PRUNED' | 'TASK_EXISTS' | 'TASK_CLOSED' | 'LEASE_HELD' | 'STALE_FENCE' | 'CONTENTION' | 'LOG_CORRUPT' | 'LOG_UNSUPPORTED' | 'LOG_TOO_LARGE' | 'STORE_SECURITY' | 'STORE_IO' | 'EFFECT_IN_DOUBT' | 'EFFECT_FAILED' | 'EFFECT_CONFLICT' | 'EFFECT_NOT_EXECUTED' | 'RETENTION_REFUSED';
+export type DurableErrorCode = 'VALIDATION' | 'TASK_NOT_FOUND' | 'TASK_PRUNED' | 'TASK_EXISTS' | 'TASK_CLOSED' | 'TASK_ORPHANED' | 'LEASE_HELD' | 'STALE_FENCE' | 'CONTENTION' | 'LOG_CORRUPT' | 'LOG_UNSUPPORTED' | 'LOG_TOO_LARGE' | 'STORE_SECURITY' | 'STORE_IO' | 'EFFECT_IN_DOUBT' | 'EFFECT_FAILED' | 'EFFECT_CONFLICT' | 'EFFECT_NOT_EXECUTED' | 'RETENTION_REFUSED';
 export declare class DurableError extends Error {
     readonly code: DurableErrorCode;
     constructor(code: DurableErrorCode, message: string);
@@ -119,6 +119,15 @@ export declare class EffectConflictError extends DurableError {
     readonly taskId: string;
     readonly effectKey: string;
     constructor(taskId: string, effectKey: string);
+}
+/**
+ * The task is active in the log, but a task it requires (`parentTaskId` / `dependsOn`) was pruned or does not exist,
+ * so it must not run. Raised by `claim`; the log is NOT what decides this, the required task's state right now is.
+ */
+export declare class TaskOrphanedError extends DurableError {
+    readonly taskId: string;
+    readonly requiredTaskId: string;
+    constructor(taskId: string, requiredTaskId: string);
 }
 export declare class RetentionRefusedError extends DurableError {
     readonly taskId: string;

@@ -28,7 +28,7 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import { hostname } from 'os';
 import { canonicalize, fingerprintOf, toJson } from './canonical.js';
 import { assessTask, diffStates, leaseIsLive } from './assess.js';
-import { ContentionError, EffectConflictError, EffectFailedError, EffectInDoubtError, EffectNotExecutedError, LeaseHeldError, LogCorruptError, LogTooLargeError, RetentionRefusedError, StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskPrunedError, ValidationError, } from './errors.js';
+import { ContentionError, DurableError, EffectConflictError, EffectFailedError, EffectInDoubtError, EffectNotExecutedError, LeaseHeldError, LogCorruptError, LogTooLargeError, RetentionRefusedError, StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskOrphanedError, TaskPrunedError, ValidationError, } from './errors.js';
 import { AppendOutcomeUnknownError } from './fs-store.js';
 import { assertId, assertNonEmpty, stampEvent, verifyChain } from './log.js';
 import { applyEvent, cloneState, deliveryKey, foldEvents, foldUntil, planProblem } from './projection.js';
@@ -274,7 +274,6 @@ export class DurableTasks {
         }
         // Pin every reference BEFORE publishing the task, so a concurrent prune of a referenced task sees this task
         // (or this call sees its tombstone). Stores without pins keep the old, weaker check above.
-        const pinnedAtMs = this.now().getTime();
         if (this.store.pinReference) {
             for (const r of refs) {
                 const pinned = await this.store.pinReference(r, taskId, this.now().toISOString());
@@ -295,7 +294,7 @@ export class DurableTasks {
         if (outcome === 'appended') {
             const state = applyEvent(null, event);
             this.remember(taskId, state);
-            await this.assertReferencesSurvived(taskId, refs, pinnedAtMs);
+            await this.assertReferencesSurvived(taskId, refs);
             return { taskId, created: true, state: cloneState(state) };
         }
         // The id is taken: the same request repeated is fine, a different one is an error.
@@ -329,22 +328,54 @@ export class DurableTasks {
         return false;
     }
     /**
-     * Backstop for the one interleaving the pins cannot cover: a creator that stayed longer than `referenceGraceMs`
-     * between pinning and publishing, so a prune was entitled to ignore its pin. Only then is a pruned reference
-     * believed and the new task cancelled (a task that depends on nothing it can read must not stay active).
-     * Within the grace period a tombstone seen here is transient: the prune that published it will find this
-     * task's pin and withdraw it, so cancelling would be wrong.
+     * Immediate feedback for the creator, NOT the safety net: a creator that is killed before it gets here leaves an
+     * active task behind, and that is made harmless by `claim` / discovery (see `requiredTaskGone`). It runs without
+     * looking at any clock: a clock-dependent skip is what let a skewed creator keep a task whose parent was pruned.
+     * A tombstone seen here may be transient (a prune that found this task's pin withdraws it); `referenceIsLive`
+     * waits for that, and a parent that stays pruned cancels the task, which is also what a pruner that resumes later
+     * wants to see (a cancelled referrer does not block it).
      */
-    async assertReferencesSurvived(taskId, refs, pinnedAtMs) {
+    async assertReferencesSurvived(taskId, refs) {
         if (!this.store.pinReference)
-            return;
-        if (this.now().getTime() - pinnedAtMs < this.referenceGraceMs)
             return;
         for (const r of refs) {
             if (await this.referenceIsLive(r))
                 continue;
-            await this.cancel(taskId, `referenced task "${r}" was pruned while this task was being created`, 'durable');
+            await this.quarantine(taskId, r);
             throw new ValidationError(`referenced task "${r}" was pruned while task "${taskId}" was being created; the new task was cancelled.`);
+        }
+    }
+    /**
+     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is pruned or missing right now, else
+     * `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it is safe without
+     * any clock: a pruner publishes its tombstone and only then looks for referrers; this check runs after the
+     * task's `task.created` is published. So either the tombstone is visible here, or the pruner sees the task and backs
+     * off. Once the check has passed, no prune of the required task can succeed while this task is active.
+     */
+    async requiredTaskGone(s) {
+        if (s.status !== 'active')
+            return null;
+        for (const r of [...(s.parentTaskId ? [s.parentTaskId] : []), ...s.dependsOn]) {
+            if (!(await this.referenceIsLive(r)))
+                return r;
+        }
+        return null;
+    }
+    /**
+     * Durable, idempotent cleanup of an orphan: `task.cancelled` (a terminal event, which also fits in the reserve).
+     * Best effort by design: if the write fails (crash, ENOSPC) the task stays active in the log but
+     * `requiredTaskGone` keeps refusing it on every call, and the next discovery tries the write again.
+     */
+    async quarantine(taskId, requiredId) {
+        try {
+            await this.cancel(taskId, `required task "${requiredId}" was pruned while this task was being created`, 'durable');
+        }
+        catch (err) {
+            if (err instanceof TaskClosedError || err instanceof TaskNotFoundError || err instanceof TaskPrunedError)
+                return;
+            if (err instanceof DurableError)
+                return; // the guard does not depend on this write
+            throw err;
         }
     }
     /**
@@ -441,6 +472,12 @@ export class DurableTasks {
         const leaseMs = opts.leaseMs ?? this.defaultLeaseMs;
         if (!Number.isFinite(leaseMs) || leaseMs <= 0)
             throw new ValidationError('leaseMs must be positive.');
+        // Execution permission is decided from the required tasks as they are now, not from the log of this task.
+        const gone = await this.requiredTaskGone(await this.refresh(taskId));
+        if (gone !== null) {
+            await this.quarantine(taskId, gone);
+            throw new TaskOrphanedError(taskId, gone);
+        }
         return this.mutate(taskId, (s) => {
             if (s.status !== 'active')
                 throw new TaskClosedError(taskId, s.status);
@@ -885,12 +922,24 @@ export class DurableTasks {
     // =========================================================================
     async assess(taskId, opts = {}) {
         const { state, events } = await this.loadFull(taskId);
-        return assessTask(state, events, { ...opts, now: opts.now ?? this.now() });
+        return this.withRequirements(state, assessTask(state, events, { ...opts, now: opts.now ?? this.now() }));
+    }
+    /** An active task whose required task is gone is reported as not claimable, with the reason; `claim` enforces it. */
+    async withRequirements(state, a) {
+        const gone = await this.requiredTaskGone(state);
+        if (gone === null)
+            return a;
+        await this.quarantine(state.taskId, gone);
+        return {
+            ...a,
+            claimable: false,
+            reasons: [...a.reasons, { code: 'REQUIRED_TASK_GONE', severity: 'recovery', detail: `required task "${gone}" was pruned or does not exist; the task will not be run`, refs: [gone] }],
+        };
     }
     /** Everything a resumed worker — or a reasoning component — needs, in one deterministic document. */
     async resumePacket(taskId, opts = {}) {
         const { state, events } = await this.loadFull(taskId);
-        const assessment = assessTask(state, events, { ...opts, now: opts.now ?? this.now() });
+        const assessment = await this.withRequirements(state, assessTask(state, events, { ...opts, now: opts.now ?? this.now() }));
         const bases = [...new Set(assessment.results.map((r) => r.basisSeq))].sort((a, b) => a - b);
         const sinceSend = bases.map((basisSeq) => ({
             awaitId: assessment.results.filter((r) => r.basisSeq === basisSeq).map((r) => r.awaitId).sort().join(','),
@@ -963,6 +1012,8 @@ export class DurableTasks {
             const a = assessTask(loaded.state, loaded.events, { now: this.now(), observations: opts.observations?.(loaded.state) });
             if (!a.claimable || a.mode === 'waiting' || a.mode === 'closed')
                 continue;
+            if ((await this.withRequirements(loaded.state, a)).claimable === false)
+                continue; // orphan: never offered for execution
             out.push({ taskId: id, mode: a.mode, reasons: a.reasons.filter((r) => r.severity !== 'info').map((r) => r.code) });
         }
         return out;

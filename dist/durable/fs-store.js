@@ -31,7 +31,7 @@
 import * as fs from 'fs';
 import { dirname, join } from 'path';
 import { sha256Hex } from './canonical.js';
-import { LogCorruptError, StoreIoError, StoreSecurityError, TaskPrunedError, } from './errors.js';
+import { LogCorruptError, StoreIoError, StoreSecurityError, TaskPrunedError, TombstoneCommittedError, } from './errors.js';
 import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent, verifyChain } from './log.js';
 import { GENESIS_HASH } from './types.js';
 import { SafeWriteError, createFile, openParent, projectBoundary, readBoundedFile, trustedDirectoryBoundary, } from '../root/index.js';
@@ -589,12 +589,24 @@ export class FsEventStore {
         if (existing.headHash !== tombstone.headHash)
             throw new LogCorruptError(taskId, null, 'a different tombstone exists; refusing to withdraw it');
         // Only while nothing has been removed: the data must still be the complete log the tombstone describes.
-        const log = this.readLogImpl(taskId, {}, true);
-        const last = log.events[log.events.length - 1];
-        if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
-            throw new LogCorruptError(taskId, null, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+        // Removal deletes files in order, so a partly removed log shows up as a gap, a missing head or a broken chain.
+        // All of these mean the same thing here: the prune is committed and there is nothing to roll back to.
+        let log;
+        try {
+            log = this.readLogImpl(taskId, {}, true);
+            const last = log.events[log.events.length - 1];
+            if (!last || last.seq !== tombstone.headSeq || last.hash !== tombstone.headHash) {
+                throw new TombstoneCommittedError(taskId, 'the data of the pruned task is no longer complete; the tombstone cannot be withdrawn');
+            }
+            verifyChain(taskId, log.events, 0, GENESIS_HASH);
         }
-        verifyChain(taskId, log.events, 0, GENESIS_HASH);
+        catch (err) {
+            if (err instanceof TombstoneCommittedError)
+                throw err;
+            if (err instanceof LogCorruptError)
+                throw new TombstoneCommittedError(taskId, `the data of the pruned task is not intact (${err.reason}); the tombstone cannot be withdrawn`);
+            throw err;
+        }
         try {
             fs.unlinkSync(abs);
         }

@@ -5,7 +5,7 @@
  * message text. No error message embeds event payloads or file contents
  * (payloads are application data and may be sensitive).
  */
-export type DurableErrorCode = 'VALIDATION' | 'TASK_NOT_FOUND' | 'TASK_PRUNED' | 'TASK_EXISTS' | 'TASK_CLOSED' | 'TASK_ORPHANED' | 'LEASE_HELD' | 'STALE_FENCE' | 'CONTENTION' | 'LOG_CORRUPT' | 'LOG_UNSUPPORTED' | 'LOG_TOO_LARGE' | 'STORE_SECURITY' | 'STORE_IO' | 'EFFECT_IN_DOUBT' | 'EFFECT_FAILED' | 'EFFECT_CONFLICT' | 'EFFECT_NOT_EXECUTED' | 'RETENTION_REFUSED';
+export type DurableErrorCode = 'VALIDATION' | 'TASK_NOT_FOUND' | 'TASK_PRUNED' | 'TASK_EXISTS' | 'TASK_CLOSED' | 'TASK_ORPHANED' | 'REQUIRED_TASK_PENDING' | 'LEASE_HELD' | 'STALE_FENCE' | 'CONTENTION' | 'LOG_CORRUPT' | 'LOG_UNSUPPORTED' | 'LOG_TOO_LARGE' | 'STORE_SECURITY' | 'STORE_IO' | 'EFFECT_IN_DOUBT' | 'EFFECT_FAILED' | 'EFFECT_CONFLICT' | 'EFFECT_NOT_EXECUTED' | 'RETENTION_REFUSED';
 export declare class DurableError extends Error {
     readonly code: DurableErrorCode;
     constructor(code: DurableErrorCode, message: string);
@@ -60,6 +60,13 @@ export declare class LogCorruptError extends DurableError {
     readonly seq: number | null;
     readonly reason: string;
     constructor(taskId: string, seq: number | null, reason: string);
+}
+/**
+ * `withdrawTombstone` found the pruned task's data no longer complete: removal has started, so the prune is committed
+ * and cannot be rolled back. (It is a `LogCorruptError` for callers that only know the old contract.)
+ */
+export declare class TombstoneCommittedError extends LogCorruptError {
+    constructor(taskId: string, reason: string);
 }
 /** The log contains an event format/type this version does not know. Never skipped silently. */
 export declare class LogUnsupportedError extends DurableError {
@@ -127,6 +134,17 @@ export declare class EffectConflictError extends DurableError {
 export declare class TaskOrphanedError extends DurableError {
     readonly taskId: string;
     readonly requiredTaskId: string;
+    constructor(taskId: string, requiredTaskId: string);
+}
+/**
+ * A task this one requires is in an unfinished prune (tombstone published, removal not finished or not provably
+ * rolled back), or could not be examined right now. Nothing is run and NOTHING IS CANCELLED: the state is transient,
+ * and the call can simply be repeated. Contrast `TaskOrphanedError`, which is final.
+ */
+export declare class RequiredTaskPendingError extends DurableError {
+    readonly taskId: string;
+    readonly requiredTaskId: string;
+    readonly retryable = true;
     constructor(taskId: string, requiredTaskId: string);
 }
 export declare class RetentionRefusedError extends DurableError {

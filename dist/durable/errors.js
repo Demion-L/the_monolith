@@ -108,6 +108,16 @@ export class LogCorruptError extends DurableError {
         this.name = 'LogCorruptError';
     }
 }
+/**
+ * `withdrawTombstone` found the pruned task's data no longer complete: removal has started, so the prune is committed
+ * and cannot be rolled back. (It is a `LogCorruptError` for callers that only know the old contract.)
+ */
+export class TombstoneCommittedError extends LogCorruptError {
+    constructor(taskId, reason) {
+        super(taskId, null, reason);
+        this.name = 'TombstoneCommittedError';
+    }
+}
 /** The log contains an event format/type this version does not know. Never skipped silently. */
 export class LogUnsupportedError extends DurableError {
     taskId;
@@ -230,6 +240,22 @@ export class TaskOrphanedError extends DurableError {
         this.taskId = taskId;
         this.requiredTaskId = requiredTaskId;
         this.name = 'TaskOrphanedError';
+    }
+}
+/**
+ * A task this one requires is in an unfinished prune (tombstone published, removal not finished or not provably
+ * rolled back), or could not be examined right now. Nothing is run and NOTHING IS CANCELLED: the state is transient,
+ * and the call can simply be repeated. Contrast `TaskOrphanedError`, which is final.
+ */
+export class RequiredTaskPendingError extends DurableError {
+    taskId;
+    requiredTaskId;
+    retryable = true;
+    constructor(taskId, requiredTaskId) {
+        super('REQUIRED_TASK_PENDING', `task "${taskId}" requires task "${requiredTaskId}", whose prune is not settled; it is not run now, and not cancelled. Retry.`);
+        this.taskId = taskId;
+        this.requiredTaskId = requiredTaskId;
+        this.name = 'RequiredTaskPendingError';
     }
 }
 export class RetentionRefusedError extends DurableError {

@@ -28,7 +28,7 @@ import { randomBytes, timingSafeEqual } from 'crypto';
 import { hostname } from 'os';
 import { canonicalize, fingerprintOf, toJson } from './canonical.js';
 import { assessTask, diffStates, leaseIsLive } from './assess.js';
-import { ContentionError, DurableError, EffectConflictError, EffectFailedError, EffectInDoubtError, EffectNotExecutedError, LeaseHeldError, LogCorruptError, LogTooLargeError, RetentionRefusedError, StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskOrphanedError, TaskPrunedError, ValidationError, } from './errors.js';
+import { ContentionError, DurableError, EffectConflictError, EffectFailedError, EffectInDoubtError, EffectNotExecutedError, LeaseHeldError, LogCorruptError, LogTooLargeError, RetentionRefusedError, StaleFenceError, TaskClosedError, TaskExistsError, TaskNotFoundError, TaskOrphanedError, RequiredTaskPendingError, TombstoneCommittedError, TaskPrunedError, ValidationError, } from './errors.js';
 import { AppendOutcomeUnknownError } from './fs-store.js';
 import { assertId, assertNonEmpty, stampEvent, verifyChain } from './log.js';
 import { applyEvent, cloneState, deliveryKey, foldEvents, foldUntil, planProblem } from './projection.js';
@@ -42,7 +42,10 @@ const KEY_MAX = 200;
 const MAX_TIMELINE = 500;
 const COMPACT_CHUNK_BYTES = 4 * 1024 * 1024;
 const DEFAULT_TERMINAL_RESERVE = 16;
-/** How long a creator / pruner waits for a transient tombstone (a prune that is about to be withdrawn) to settle. */
+/**
+ * How long `createTask` waits for a transient tombstone to settle before it refuses to create a task under that
+ * parent. Only a request is refused; it never decides that a required task is gone (see `requirementState`).
+ */
 const SETTLE_ATTEMPTS = 40;
 const SETTLE_STEP_MS = 25;
 /** Conflicting deliveries kept in the log per await and per task; more are answered but not stored. */
@@ -329,42 +332,95 @@ export class DurableTasks {
     }
     /**
      * Immediate feedback for the creator, NOT the safety net: a creator that is killed before it gets here leaves an
-     * active task behind, and that is made harmless by `claim` / discovery (see `requiredTaskGone`). It runs without
+     * active task behind, and that is made harmless by `claim` / discovery (see `blockingRequirement`). It runs without
      * looking at any clock: a clock-dependent skip is what let a skewed creator keep a task whose parent was pruned.
-     * A tombstone seen here may be transient (a prune that found this task's pin withdraws it); `referenceIsLive`
-     * waits for that, and a parent that stays pruned cancels the task, which is also what a pruner that resumes later
-     * wants to see (a cancelled referrer does not block it).
+     * Only a parent that is GONE cancels the new task. A parent whose prune is merely unfinished is rolled back on the
+     * spot (this task is published and active, so it is a referrer the prune must respect) or, if that cannot be
+     * done now, left alone: `claim` refuses to run the task until the question is settled, and cancels nothing.
      */
     async assertReferencesSurvived(taskId, refs) {
         if (!this.store.pinReference)
             return;
         for (const r of refs) {
-            if (await this.referenceIsLive(r))
+            if ((await this.requirementState(r, true)) !== 'gone')
                 continue;
             await this.quarantine(taskId, r);
             throw new ValidationError(`referenced task "${r}" was pruned while task "${taskId}" was being created; the new task was cancelled.`);
         }
     }
     /**
-     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is pruned or missing right now, else
-     * `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it is safe without
-     * any clock: a pruner publishes its tombstone and only then looks for referrers; this check runs after the
-     * task's `task.created` is published. So either the tombstone is visible here, or the pruner sees the task and backs
-     * off. Once the check has passed, no prune of the required task can succeed while this task is active.
+     * What a required task is, as seen right now (a logical model; nothing of this is persisted):
+     *  - `live`     it exists and carries no tombstone.
+     *  - `pending`  a tombstone exists, but the prune is unfinished and may still be rolled back, or cannot be examined.
+     *               This is a transient state. It is never a reason to cancel anybody.
+     *  - `gone`     it never existed, or its removal has started or finished: the prune is committed and irreversible.
+     *
+     * Why the tombstone alone proves nothing: a pruner publishes it BEFORE it looks for referrers, and a stopped
+     * (SIGSTOP) or killed pruner leaves it behind with all data in place. Only the data decides:
+     *  - complete data + a referrer that is active ⇒ the pruner has not passed its referrer check (or never will);
+     *    the prune is rolled back here (`withdrawTombstone`, idempotent, refused once any file was removed).
+     *  - data gone or partly removed ⇒ the pruner passed its referrer check and committed.
+     * With `recover: false` nothing is written: an unfinished prune is reported as `pending`.
+     * No timeout takes part in this decision; `pending` is retried by the caller, never promoted to `gone`.
      */
-    async requiredTaskGone(s) {
-        if (s.status !== 'active')
-            return null;
-        for (const r of [...(s.parentTaskId ? [s.parentTaskId] : []), ...s.dependsOn]) {
-            if (!(await this.referenceIsLive(r)))
-                return r;
+    async requirementState(taskId, recover) {
+        for (let pass = 0; pass < 3; pass++) {
+            try {
+                await this.refresh(taskId);
+                return 'live';
+            }
+            catch (err) {
+                if (err instanceof TaskNotFoundError)
+                    return 'gone';
+                if (!(err instanceof TaskPrunedError))
+                    throw err;
+            }
+            const head = await this.store.readLog(taskId, { afterSeq: Number.MAX_SAFE_INTEGER });
+            if (!head.tombstone)
+                continue; // withdrawn (or never there) meanwhile: look again
+            if (!head.diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE'))
+                return 'gone'; // nothing left to roll back to
+            if (!recover || !this.store.withdrawTombstone)
+                return 'pending';
+            try {
+                await this.store.withdrawTombstone(head.tombstone);
+            }
+            catch (err) {
+                if (err instanceof TombstoneCommittedError)
+                    return 'gone';
+                if (err instanceof DurableError)
+                    return 'pending'; // could not roll back now (I/O error, ...): undetermined
+                throw err;
+            }
+            this.cache.delete(taskId);
         }
-        return null;
+        return 'pending';
     }
     /**
-     * Durable, idempotent cleanup of an orphan: `task.cancelled` (a terminal event, which also fits in the reserve).
+     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is gone, else the first whose prune is
+     * pending, else `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it
+     * is safe without any clock: a pruner publishes its tombstone and only then looks for referrers; this check runs
+     * after the task's `task.created` is published. So either the tombstone is visible here, or the pruner sees the
+     * task and backs off. Once the check has passed, no prune of the required task can succeed while this task is active.
+     */
+    async blockingRequirement(s, recover) {
+        if (s.status !== 'active')
+            return null;
+        let pending = null;
+        for (const r of [...(s.parentTaskId ? [s.parentTaskId] : []), ...s.dependsOn]) {
+            const st = await this.requirementState(r, recover);
+            if (st === 'gone')
+                return { id: r, state: 'gone' };
+            if (st === 'pending' && pending === null)
+                pending = { id: r, state: 'pending' };
+        }
+        return pending;
+    }
+    /**
+     * Durable, idempotent cleanup of an orphan whose required task is GONE (never for a pending prune):
+     * `task.cancelled` (a terminal event, which also fits in the reserve).
      * Best effort by design: if the write fails (crash, ENOSPC) the task stays active in the log but
-     * `requiredTaskGone` keeps refusing it on every call, and the next discovery tries the write again.
+     * `blockingRequirement` keeps refusing it on every call, and the next discovery tries the write again.
      */
     async quarantine(taskId, requiredId) {
         try {
@@ -473,11 +529,13 @@ export class DurableTasks {
         if (!Number.isFinite(leaseMs) || leaseMs <= 0)
             throw new ValidationError('leaseMs must be positive.');
         // Execution permission is decided from the required tasks as they are now, not from the log of this task.
-        const gone = await this.requiredTaskGone(await this.refresh(taskId));
-        if (gone !== null) {
-            await this.quarantine(taskId, gone);
-            throw new TaskOrphanedError(taskId, gone);
+        const blocked = await this.blockingRequirement(await this.refresh(taskId), true);
+        if (blocked?.state === 'gone') {
+            await this.quarantine(taskId, blocked.id);
+            throw new TaskOrphanedError(taskId, blocked.id);
         }
+        if (blocked)
+            throw new RequiredTaskPendingError(taskId, blocked.id); // fail closed, but not final: nothing is cancelled
         return this.mutate(taskId, (s) => {
             if (s.status !== 'active')
                 throw new TaskClosedError(taskId, s.status);
@@ -922,24 +980,35 @@ export class DurableTasks {
     // =========================================================================
     async assess(taskId, opts = {}) {
         const { state, events } = await this.loadFull(taskId);
-        return this.withRequirements(state, assessTask(state, events, { ...opts, now: opts.now ?? this.now() }));
+        return this.withRequirements(state, assessTask(state, events, { ...opts, now: opts.now ?? this.now() }), false);
     }
-    /** An active task whose required task is gone is reported as not claimable, with the reason; `claim` enforces it. */
-    async withRequirements(state, a) {
-        const gone = await this.requiredTaskGone(state);
-        if (gone === null)
+    /**
+     * An active task whose required task is gone is reported as not claimable, with the reason; `claim` enforces it.
+     * A required task whose prune is pending also makes it not claimable, but the task is not cancelled.
+     * `recover`: roll back an unfinished prune of a required task (a write); `assess` / `resumePacket` do not.
+     */
+    async withRequirements(state, a, recover) {
+        const blocked = await this.blockingRequirement(state, recover);
+        if (blocked === null)
             return a;
-        await this.quarantine(state.taskId, gone);
+        if (blocked.state === 'pending') {
+            return {
+                ...a,
+                claimable: false,
+                reasons: [...a.reasons, { code: 'REQUIRED_TASK_PRUNE_PENDING', severity: 'recovery', detail: `the prune of required task "${blocked.id}" is not settled; the task is not run now and is not cancelled`, refs: [blocked.id] }],
+            };
+        }
+        await this.quarantine(state.taskId, blocked.id);
         return {
             ...a,
             claimable: false,
-            reasons: [...a.reasons, { code: 'REQUIRED_TASK_GONE', severity: 'recovery', detail: `required task "${gone}" was pruned or does not exist; the task will not be run`, refs: [gone] }],
+            reasons: [...a.reasons, { code: 'REQUIRED_TASK_GONE', severity: 'recovery', detail: `required task "${blocked.id}" was pruned or does not exist; the task will not be run`, refs: [blocked.id] }],
         };
     }
     /** Everything a resumed worker — or a reasoning component — needs, in one deterministic document. */
     async resumePacket(taskId, opts = {}) {
         const { state, events } = await this.loadFull(taskId);
-        const assessment = await this.withRequirements(state, assessTask(state, events, { ...opts, now: opts.now ?? this.now() }));
+        const assessment = await this.withRequirements(state, assessTask(state, events, { ...opts, now: opts.now ?? this.now() }), false);
         const bases = [...new Set(assessment.results.map((r) => r.basisSeq))].sort((a, b) => a - b);
         const sinceSend = bases.map((basisSeq) => ({
             awaitId: assessment.results.filter((r) => r.basisSeq === basisSeq).map((r) => r.awaitId).sort().join(','),
@@ -1012,8 +1081,8 @@ export class DurableTasks {
             const a = assessTask(loaded.state, loaded.events, { now: this.now(), observations: opts.observations?.(loaded.state) });
             if (!a.claimable || a.mode === 'waiting' || a.mode === 'closed')
                 continue;
-            if ((await this.withRequirements(loaded.state, a)).claimable === false)
-                continue; // orphan: never offered for execution
+            if ((await this.withRequirements(loaded.state, a, true)).claimable === false)
+                continue; // orphan or unsettled prune: not offered now; a pending one is retried by the next call
             out.push({ taskId: id, mode: a.mode, reasons: a.reasons.filter((r) => r.severity !== 'info').map((r) => r.code) });
         }
         return out;

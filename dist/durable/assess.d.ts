@@ -29,7 +29,9 @@ import type { AwaitState, PlanStepState, TaskEvent, TaskState } from './types.js
 export type ResumeMode = 'closed' | 'waiting' | 'direct' | 'adaptive' | 'recovery';
 export type ReasonCode = 'BLOCKING_ASSUMPTION_CHANGED' | 'BLOCKING_ASSUMPTION_UNVERIFIED' | 'ADVISORY_ASSUMPTION_CHANGED' | 'EFFECT_IN_DOUBT' | 'AWAIT_EXPIRED' | 'LATE_RESULT' | 'PLAN_STUCK' | 'NO_PLAN_YET' | 'NO_PLAN_BUT_PROGRESS' | 'WORLD_CHANGED_SINCE_SEND' | 'REPLANNED_SINCE_SEND' | 'LEASE_HELD'
 /** A task this one requires (parentTaskId / dependsOn) was pruned or is missing: the task must not run. */
- | 'REQUIRED_TASK_GONE';
+ | 'REQUIRED_TASK_GONE'
+/** A task this one requires is in an unfinished prune: the task does not run now, and is NOT cancelled. */
+ | 'REQUIRED_TASK_PRUNE_PENDING';
 export interface Reason {
     code: ReasonCode;
     severity: 'recovery' | 'adaptive' | 'info';

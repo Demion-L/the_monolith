@@ -22,6 +22,7 @@
     "dogfood-graph": "node dist/scripts/dogfood-graph.js",
     "dogfood-monolith": "node dist/scripts/dogfood-monolith.js",
     "prepare": "npm run build",
+    "dev:api": "node dist/scripts/dev-api.js",
     "dev:ui": "vite --config ui/vite.config.ts",
     "typecheck:ui": "vue-tsc -p ui/tsconfig.json --noEmit",
     "build:ui": "vite build --config ui/vite.config.ts",

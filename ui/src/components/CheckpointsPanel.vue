@@ -2,13 +2,14 @@
 import type { Checkpoint } from '../types/dashboard';
 import ValueOrUnknown from './ValueOrUnknown.vue';
 
-defineProps<{ checkpoints: Checkpoint[] }>();
+defineProps<{ checkpoints: Checkpoint[] | null }>();
 </script>
 
 <template>
   <section id="checkpoints" class="panel" aria-labelledby="checkpoints-h">
     <h2 id="checkpoints-h">Checkpoints</h2>
-    <p v-if="checkpoints.length === 0" class="empty">No checkpoints recorded.</p>
+    <p v-if="checkpoints === null" class="empty"><span class="unknown">NOT AVAILABLE</span></p>
+    <p v-else-if="checkpoints.length === 0" class="empty">No checkpoints recorded.</p>
     <ul v-else class="cards">
       <li v-for="c in checkpoints" :key="c.id" class="card" data-testid="checkpoint">
         <div class="card-head">

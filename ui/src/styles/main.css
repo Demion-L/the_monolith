@@ -118,3 +118,17 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
   .facts { grid-template-columns: 1fr; }
   .facts dd { margin-bottom: 6px; }
 }
+
+.live-badge {
+  background: #1f6f43; color: #eafff3;
+  font-weight: 800; letter-spacing: 0.1em;
+  padding: 4px 12px; border-radius: 4px;
+}
+.live-badge-off { background: var(--surface-2); color: var(--muted, #9aa4b2); border: 1px solid var(--border); }
+.story { white-space: pre-wrap; margin: 0; font: inherit; }
+button {
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 4px 12px; font: inherit; cursor: pointer;
+}
+button:disabled { opacity: 0.5; cursor: default; }

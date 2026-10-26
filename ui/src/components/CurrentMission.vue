@@ -3,15 +3,16 @@ import { computed } from 'vue';
 import type { Mission } from '../types/dashboard';
 import ValueOrUnknown from './ValueOrUnknown.vue';
 
-const props = defineProps<{ missions: Mission[] }>();
+const props = defineProps<{ missions: Mission[] | null }>();
 
-const active = computed(() => props.missions.filter((m) => m.status === 'in_progress'));
+const active = computed(() => (props.missions ?? []).filter((m) => m.status === 'in_progress'));
 </script>
 
 <template>
   <section id="mission" class="panel" aria-labelledby="mission-h">
     <h2 id="mission-h">Current Mission</h2>
-    <p v-if="active.length === 0" class="empty">No active missions.</p>
+    <p v-if="missions === null" class="empty"><span class="unknown">NOT AVAILABLE</span></p>
+    <p v-else-if="active.length === 0" class="empty">No active missions.</p>
     <ul v-else class="cards">
       <li v-for="m in active" :key="m.id" class="card" data-testid="mission">
         <div class="card-head">

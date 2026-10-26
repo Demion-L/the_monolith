@@ -11,9 +11,12 @@ export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled'
 
 export interface ProjectOverview {
   name: string | null;
-  description: string | null;
+  /** `undefined` = the data source has no such field (the row is not shown); `null` = unknown. */
+  description?: string | null;
   /** Revision counter of the project state, if the source provides one. */
   stateRevision: number | null;
+  /** Verbatim `## Current Story` excerpt (untrusted text). `undefined` = not provided by the source (row hidden). */
+  currentStory?: string | null;
 }
 
 export interface Mission {
@@ -42,11 +45,12 @@ export interface Diagnostic {
 }
 
 export interface DashboardData {
-  /** True for every fixture; the header shows DEMO DATA unconditionally. */
+  /** True for every fixture, false for data adapted from the HTTP API. */
   isDemo: boolean;
   overview: ProjectOverview;
-  missions: Mission[];
-  checkpoints: Checkpoint[];
+  /** `null` = the source could not supply the section (shown as NOT AVAILABLE, never as "none"). */
+  missions: Mission[] | null;
+  checkpoints: Checkpoint[] | null;
   /** Raw roadmap text, shown verbatim. */
   roadmapText: string | null;
   diagnostics: Diagnostic[];

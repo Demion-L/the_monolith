@@ -11,10 +11,17 @@ defineProps<{ overview: ProjectOverview }>();
     <dl class="facts">
       <dt>Name</dt>
       <dd><ValueOrUnknown :value="overview.name" /></dd>
-      <dt>Description</dt>
-      <dd><ValueOrUnknown :value="overview.description" /></dd>
+      <template v-if="overview.description !== undefined">
+        <dt>Description</dt>
+        <dd><ValueOrUnknown :value="overview.description" /></dd>
+      </template>
       <dt>State revision</dt>
       <dd><ValueOrUnknown :value="overview.stateRevision" /></dd>
+      <template v-if="overview.currentStory !== undefined">
+        <dt>Current story</dt>
+        <!-- Untrusted project text: interpolation only, never HTML. -->
+        <dd><pre v-if="overview.currentStory" class="story" data-testid="current-story">{{ overview.currentStory }}</pre><ValueOrUnknown v-else :value="null" /></dd>
+      </template>
     </dl>
   </section>
 </template>

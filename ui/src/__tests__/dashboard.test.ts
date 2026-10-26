@@ -1,10 +1,15 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App.vue';
 import CheckpointsPanel from '../components/CheckpointsPanel.vue';
 import CurrentMission from '../components/CurrentMission.vue';
 import RoadmapPanel from '../components/RoadmapPanel.vue';
 import { normalScenario } from '../fixtures/dashboard';
+
+// DEMO is only entered explicitly; these tests exercise the synthetic fixtures.
+beforeEach(() => {
+  window.history.replaceState({}, '', '/?mode=demo');
+});
 
 async function appWith(scenario: string) {
   const w = mount(App);
@@ -13,6 +18,18 @@ async function appWith(scenario: string) {
 }
 
 describe('dashboard', () => {
+  it('DEMO never calls the HTTP API', async () => {
+    const spy = vi.fn();
+    vi.stubGlobal('fetch', spy);
+    try {
+      const w = mount(App);
+      await w.get('[data-testid="scenario-select"]').setValue('empty');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('renders all five sections', () => {
     const w = mount(App);
     for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'diagnostics']) {
@@ -73,7 +90,7 @@ describe('dashboard', () => {
   });
 
   it('shows "None recorded." for empty remainingSteps', () => {
-    const checkpoints = [{ ...normalScenario.checkpoints[0], remainingSteps: [] }];
+    const checkpoints = [{ ...normalScenario.checkpoints![0], remainingSteps: [] }];
     const w = mount(CheckpointsPanel, { props: { checkpoints } });
     expect(w.text()).toContain('None recorded.');
     expect(w.text()).not.toContain('UNKNOWN');

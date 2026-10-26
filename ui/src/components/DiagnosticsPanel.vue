@@ -10,13 +10,16 @@ const missing = computed(() => {
   if (d.overview.name === null) out.push('overview.name');
   if (d.overview.description === null) out.push('overview.description');
   if (d.overview.stateRevision === null) out.push('overview.stateRevision');
+  if (d.overview.currentStory === null) out.push('overview.currentStory');
   if (d.roadmapText === null) out.push('roadmapText');
-  for (const m of d.missions) {
+  if (d.missions === null) out.push('missions');
+  if (d.checkpoints === null) out.push('checkpoints');
+  for (const m of d.missions ?? []) {
     for (const k of ['title', 'summary', 'startedAt', 'updatedAt'] as const) {
       if (m[k] === null) out.push(`mission ${m.id}.${k}`);
     }
   }
-  for (const c of d.checkpoints) {
+  for (const c of d.checkpoints ?? []) {
     for (const k of ['createdAt', 'summary', 'remainingSteps'] as const) {
       if (c[k] === null) out.push(`checkpoint ${c.id}.${k}`);
     }
@@ -30,11 +33,15 @@ const missing = computed(() => {
     <h2 id="diagnostics-h">Diagnostics</h2>
     <dl class="facts">
       <dt>Data source</dt>
-      <dd>{{ data.isDemo ? 'Synthetic demo fixtures (available)' : 'UNKNOWN' }}</dd>
+      <dd>{{ data.isDemo ? 'Synthetic demo fixtures (available)' : 'MONOLITH HTTP API (GET /api/dashboard)' }}</dd>
     </dl>
-    <p class="muted">
+    <p v-if="data.isDemo" class="muted">
       No runtime checks of a real project are performed. Security status of MONOLITH Core is not
       reported here.
+    </p>
+    <p v-else class="muted">
+      Only the availability of the fixed source files is reported. Project validity and the
+      security status of MONOLITH Core are not reported here.
     </p>
 
     <h3>Messages</h3>

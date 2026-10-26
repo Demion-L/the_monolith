@@ -35,6 +35,8 @@ export interface Checkpoint {
   summary: string | null;
   /** Historical record as of `createdAt`; NOT the current plan. */
   remainingSteps: string[] | null;
+  /** Checkpoints recorded for the mission. Absent = the source does not say; never shown as a number. */
+  recordedCount?: number;
 }
 
 export type DiagnosticSeverity = 'info' | 'warning' | 'error';

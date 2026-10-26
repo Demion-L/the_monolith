@@ -86,9 +86,9 @@ describe('fetchDashboard', () => {
   it('rejects network errors, non-2xx, malformed JSON and a wrong shape', async () => {
     const cases: Array<[Response | Error, RegExp]> = [
       [new TypeError('Failed to fetch'), /unreachable/],
-      [json({ error: { kind: 'security', code: 'HOST_NOT_ALLOWED' } }, 403), /HTTP 403 \(HOST_NOT_ALLOWED\)/],
-      [json({ error: { kind: 'request', code: 'NOT_FOUND' } }, 404), /HTTP 404 \(NOT_FOUND\)/],
-      [json({ error: { code: '/home/secret/path' } }, 500), /^The MONOLITH API answered HTTP 500\.$/],
+      [json({ error: { kind: 'security', code: 'HOST_NOT_ALLOWED' } }, 403), /HTTP 403, HOST_NOT_ALLOWED\)/],
+      [json({ error: { kind: 'request', code: 'NOT_FOUND' } }, 404), /HTTP 404, NOT_FOUND\)/],
+      [json({ error: { code: '/home/secret/path' } }, 500), /^Dashboard request failed \(HTTP 500\)\. Check whether the MONOLITH dev API is running\.$/],
       [json('<html>not json', 200), /not valid JSON/],
       [json({ projectOverview: {} }), /unexpected data shape/],
       [json([]), /unexpected data shape/],
@@ -111,6 +111,53 @@ describe('fetchDashboard', () => {
     bad2.checkpoints.data!.byActiveMission[0].latest!.remainingSteps = 'x' as never;
     stubFetch(json(bad2));
     await expect(fetchDashboard()).rejects.toThrow(/unexpected data shape/);
+  });
+});
+
+describe('F-1: checkpoint count', () => {
+  const withCount = (count: number) => {
+    const m = model();
+    m.checkpoints.data!.byActiveMission[0].count = count;
+    return m;
+  };
+
+  it('adapter keeps count next to the latest checkpoint', () => {
+    expect(toDashboardData(withCount(5)).checkpoints![0].recordedCount).toBe(5);
+  });
+
+  it('count 5: shows the latest checkpoint, says it is only the latest, shows the total', async () => {
+    stubFetch(json(withCount(5)));
+    const w = mount(App);
+    await flushPromises();
+    const panel = w.get('#checkpoints');
+    expect(panel.text()).toContain('Latest checkpoint per active mission');
+    expect(panel.text()).toContain('Live checkpoint');
+    expect(panel.get('[data-testid="checkpoint-count"]').text()).toBe('5 recorded checkpoints');
+    expect(panel.findAll('[data-testid="checkpoint"]')).toHaveLength(1);
+  });
+
+  it('count 1 is singular', async () => {
+    stubFetch(json(withCount(1)));
+    const w = mount(App);
+    await flushPromises();
+    expect(w.get('[data-testid="checkpoint-count"]').text()).toBe('1 recorded checkpoint');
+  });
+
+  it('EMPTY stays "No checkpoints recorded."; UNAVAILABLE never becomes a count', async () => {
+    const empty = model();
+    empty.checkpoints.data!.byActiveMission[0] = { missionId: 'MIS-0001', count: 0, latest: null };
+    stubFetch(json(empty));
+    let w = mount(App);
+    await flushPromises();
+    expect(w.get('#checkpoints').text()).toContain('No checkpoints recorded.');
+    expect(w.get('#checkpoints').text()).not.toContain('NOT AVAILABLE');
+
+    stubFetch(json(model({ checkpoints: { data: null, sources: [src('state', 'corrupt', 'PARSE_ERROR')] } })));
+    w = mount(App);
+    await flushPromises();
+    expect(w.get('#checkpoints').text()).toContain('NOT AVAILABLE');
+    expect(w.get('#checkpoints').text()).not.toMatch(/recorded checkpoint|0 recorded/);
+    expect(w.find('[data-testid="checkpoint-count"]').exists()).toBe(false);
   });
 });
 

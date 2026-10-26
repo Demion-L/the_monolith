@@ -55,7 +55,9 @@ export async function fetchDashboard(fetchImpl: typeof fetch = fetch): Promise<D
   }
   if (!res.ok) {
     const code = await serverCode(res);
-    throw new DashboardLoadError(`The MONOLITH API answered HTTP ${res.status}${code ? ` (${code})` : ''}.`);
+    throw new DashboardLoadError(
+      `Dashboard request failed (HTTP ${res.status}${code ? `, ${code}` : ''}). Check whether the MONOLITH dev API is running.`,
+    );
   }
   let body: unknown;
   try {

@@ -52,7 +52,7 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
       startedAt: m.startedAt,
       updatedAt: m.updatedAt,
     })),
-    // The read model carries the latest checkpoint per active mission.
+    // The read model carries the latest checkpoint and the total count per active mission.
     checkpoints: checkpoints === null ? null : checkpoints.byActiveMission.flatMap((m): Checkpoint[] =>
       m.latest === null
         ? []
@@ -62,6 +62,7 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
             createdAt: m.latest.createdAt,
             summary: m.latest.summary,
             remainingSteps: m.latest.remainingSteps,
+            recordedCount: m.count,
           }],
     ),
     roadmapText: roadmap === null ? null : roadmap.text,

@@ -8,6 +8,7 @@ defineProps<{ checkpoints: Checkpoint[] | null }>();
 <template>
   <section id="checkpoints" class="panel" aria-labelledby="checkpoints-h">
     <h2 id="checkpoints-h">Checkpoints</h2>
+    <p class="muted">Latest checkpoint per active mission</p>
     <p v-if="checkpoints === null" class="empty"><span class="unknown">NOT AVAILABLE</span></p>
     <p v-else-if="checkpoints.length === 0" class="empty">No checkpoints recorded.</p>
     <ul v-else class="cards">
@@ -16,6 +17,9 @@ defineProps<{ checkpoints: Checkpoint[] | null }>();
           <code>{{ c.id }}</code>
           <span class="muted"><ValueOrUnknown :value="c.createdAt" /></span>
         </div>
+        <p v-if="c.recordedCount !== undefined" class="muted" data-testid="checkpoint-count">
+          {{ c.recordedCount }} recorded {{ c.recordedCount === 1 ? 'checkpoint' : 'checkpoints' }}
+        </p>
         <p><ValueOrUnknown :value="c.summary" /></p>
         <div class="steps">
           <h4>Remaining steps <span class="tag">historical record as of this checkpoint, not the current plan</span></h4>

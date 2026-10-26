@@ -89,6 +89,13 @@ describe('dashboard', () => {
     expect(w.find('[data-testid="roadmap-text"]').exists()).toBe(false);
   });
 
+  it('DEMO checkpoints without a count do not claim one', () => {
+    const w = mount(CheckpointsPanel, { props: { checkpoints: normalScenario.checkpoints } });
+    expect(w.text()).toContain('Latest checkpoint per active mission');
+    expect(w.find('[data-testid="checkpoint-count"]').exists()).toBe(false);
+    expect(w.text()).not.toMatch(/recorded checkpoint/);
+  });
+
   it('shows "None recorded." for empty remainingSteps', () => {
     const checkpoints = [{ ...normalScenario.checkpoints![0], remainingSteps: [] }];
     const w = mount(CheckpointsPanel, { props: { checkpoints } });

@@ -113,6 +113,19 @@ function single(h: string | string[] | undefined): string | undefined {
   return typeof h === 'string' ? h : undefined;
 }
 
+/**
+ * Node exposes only the first `Host` in `req.headers`, so duplicates must be
+ * counted on the raw header list (names are case-insensitive; values are
+ * ignored here and never echoed).
+ */
+function hostHeaderCount(rawHeaders: readonly string[]): number {
+  let count = 0;
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    if (rawHeaders[i].toLowerCase() === 'host') count++;
+  }
+  return count;
+}
+
 /** Path of the request target without its query; the query is never interpreted. */
 function pathOf(target: string | undefined): string {
   if (target === undefined) return '';
@@ -131,8 +144,9 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
 
   function handle(req: IncomingMessage, res: ServerResponse): void {
     // 1. Security preconditions, before anything about the route is revealed.
+    // Exactly one Host: a duplicate is ambiguous (proxies may pick another one).
     const host = single(req.headers.host)?.toLowerCase();
-    if (host === undefined || !allowedHosts.has(host)) return sendError(res, 'HOST_NOT_ALLOWED');
+    if (hostHeaderCount(req.rawHeaders) !== 1 || host === undefined || !allowedHosts.has(host)) return sendError(res, 'HOST_NOT_ALLOWED');
     if (req.headers.origin !== undefined && !allowedOrigins.has(single(req.headers.origin)?.toLowerCase() ?? '')) {
       return sendError(res, 'ORIGIN_NOT_ALLOWED');
     }

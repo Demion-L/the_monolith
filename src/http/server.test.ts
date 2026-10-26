@@ -1,16 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { request } from 'http';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { request, Server } from 'http';
 import { createConnection } from 'net';
 import {
   linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync,
 } from 'fs';
-import { tmpdir } from 'os';
+import { networkInterfaces, tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { startDashboardServer, MAX_RESPONSE_BYTES } from './index.js';
 import type { DashboardServer } from './index.js';
 import { readDashboardModel, ROADMAP_REL } from '../readmodel/index.js';
 import type { DashboardReadModel } from '../readmodel/index.js';
+
+// Pass-through spy so tests can prove a rejected request never reaches the read model.
+vi.mock('../readmodel/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../readmodel/index.js')>();
+  return { ...actual, readDashboardModel: vi.fn(actual.readDashboardModel) };
+});
 
 let dir: string;
 let outside: string;
@@ -115,7 +121,38 @@ describe('functional', () => {
     await expect(startDashboardServer({ projectRoot: dir, port: s.port })).rejects.toThrow();
   });
 
-  it('does not bind a non-loopback interface', async () => {
+  it('listens on exactly 127.0.0.1 (server.address(), not 0.0.0.0)', async () => {
+    const listening: Server[] = [];
+    const realListen = Server.prototype.listen;
+    const spy = vi.spyOn(Server.prototype, 'listen').mockImplementation(function (this: Server, ...args: unknown[]) {
+      listening.push(this);
+      return (realListen as (...a: unknown[]) => Server).apply(this, args);
+    });
+    let s: DashboardServer;
+    try {
+      s = await start();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(listening).toHaveLength(1);
+    expect(listening[0].address()).toEqual({ address: '127.0.0.1', family: 'IPv4', port: s.port });
+  });
+
+  it('refuses connections on a non-loopback interface address', async () => {
+    const s = await start();
+    const external = Object.values(networkInterfaces())
+      .flat()
+      .find((i) => i !== undefined && i.family === 'IPv4' && !i.internal)?.address;
+    if (external === undefined) return; // no external IPv4 on this host; the address() test above still holds
+    const code = await new Promise<string>((resolve) => {
+      const sock = createConnection({ host: external, port: s.port });
+      sock.once('connect', () => { sock.destroy(); resolve('CONNECTED'); });
+      sock.once('error', (e: NodeJS.ErrnoException) => resolve(e.code ?? 'ERR'));
+    });
+    expect(code).toBe('ECONNREFUSED');
+  });
+
+  it('accepts connections on 127.0.0.1', async () => {
     const s = await start();
     const addr = await new Promise<string>((resolve) => {
       const sock = createConnection({ host: '127.0.0.1', port: s.port }, () => {
@@ -137,6 +174,93 @@ describe('HTTP security', () => {
       expect(JSON.parse(r.body)).toEqual({ error: { kind: 'security', code: 'HOST_NOT_ALLOWED' } });
     }
     expect((await http(s, { headers: { Host: `localhost:${s.port}` } })).status).toBe(200);
+  });
+
+  describe('Host header cardinality (raw headers)', () => {
+    /** Sends a hand-written request so the Host lines are exactly as given. */
+    function raw(s: DashboardServer, hostLines: string[]): Promise<{ status: number; body: string }> {
+      return new Promise((resolve, reject) => {
+        const sock = createConnection({ host: '127.0.0.1', port: s.port });
+        let data = '';
+        sock.setEncoding('utf8');
+        sock.on('data', (d: string) => { data += d; });
+        sock.on('error', reject);
+        sock.on('close', () => {
+          const status = Number(/^HTTP\/1\.1 (\d{3})/.exec(data)?.[1] ?? 0);
+          resolve({ status, body: data.slice(data.indexOf('\r\n\r\n') + 4) });
+        });
+        sock.write(['GET /api/dashboard HTTP/1.1', ...hostLines, 'Connection: close', '', ''].join('\r\n'));
+      });
+    }
+    const denied = { error: { kind: 'security', code: 'HOST_NOT_ALLOWED' } };
+
+    it('accepts exactly one valid Host (either casing of the header name)', async () => {
+      fullProject();
+      const s = await start();
+      expect((await raw(s, [`Host: 127.0.0.1:${s.port}`])).status).toBe(200);
+      expect((await raw(s, [`hOsT: localhost:${s.port}`])).status).toBe(200);
+    });
+
+    it('rejects two identical Host headers without reading the project', async () => {
+      fullProject();
+      const s = await start();
+      vi.mocked(readDashboardModel).mockClear();
+      const h = `127.0.0.1:${s.port}`;
+      const r = await raw(s, [`Host: ${h}`, `Host: ${h}`]);
+      expect(r.status).toBe(403);
+      expect(JSON.parse(r.body)).toEqual(denied);
+      expect(readDashboardModel).not.toHaveBeenCalled();
+    });
+
+    it('rejects two different Host headers in either order, valid or not', async () => {
+      fullProject();
+      const s = await start();
+      vi.mocked(readDashboardModel).mockClear();
+      const ok = `127.0.0.1:${s.port}`;
+      for (const lines of [[`Host: ${ok}`, 'Host: evil.example'], ['Host: evil.example', `Host: ${ok}`], [`Host: ${ok}`, `Host: localhost:${s.port}`]]) {
+        const r = await raw(s, lines);
+        expect(r.status, lines.join('|')).toBe(403);
+        expect(JSON.parse(r.body)).toEqual(denied);
+        expect(r.body).not.toContain('evil');
+      }
+      expect(readDashboardModel).not.toHaveBeenCalled();
+    });
+
+    it('rejects duplicates that differ only in header-name case', async () => {
+      fullProject();
+      const s = await start();
+      vi.mocked(readDashboardModel).mockClear();
+      const h = `127.0.0.1:${s.port}`;
+      for (const lines of [[`Host: ${h}`, `host: ${h}`], [`HOST: ${h}`, `hOsT: ${h}`]]) {
+        const r = await raw(s, lines);
+        expect(r.status, lines.join('|')).toBe(403);
+        expect(JSON.parse(r.body)).toEqual(denied);
+      }
+      expect(readDashboardModel).not.toHaveBeenCalled();
+    });
+
+    it('rejects a missing Host and an invalid Host', async () => {
+      fullProject();
+      const s = await start();
+      vi.mocked(readDashboardModel).mockClear();
+      for (const lines of [[], ['Host: '], ['Host: evil.example'], [`Host: 127.0.0.1.evil.example:${s.port}`]]) {
+        const r = await raw(s, lines);
+        expect(r.status, lines.join('|')).toBeGreaterThanOrEqual(400);
+        expect(r.status).toBeLessThan(500);
+        if (r.status === 403) expect(JSON.parse(r.body)).toEqual(denied);
+      }
+      expect(readDashboardModel).not.toHaveBeenCalled();
+    });
+
+    it('does not echo raw headers in the rejection', async () => {
+      fullProject();
+      const s = await start();
+      const r = await raw(s, ['Host: leak-a.example', 'Host: leak-b.example']);
+      expect(r.status).toBe(403);
+      expect(r.body).not.toMatch(/leak|rawHeaders|\.example/i);
+      expect(JSON.parse(r.body)).toEqual(denied);
+      expect(Object.keys(JSON.parse(r.body))).toEqual(['error']);
+    });
   });
 
   it('rejects an invalid Origin, never reflects it and sets no CORS headers', async () => {

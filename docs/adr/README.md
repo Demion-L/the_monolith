@@ -32,6 +32,11 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-012 | Safe Writes and Explicit Write Scope (SEC-001B.2) | accepted | — | 2026-10-23 |
 | ADR-013 | Filesystem Threat Model and Dynamic TOCTOU (SEC-001B.3) — documentation only; native layer deferred; pending independent architectural review | proposed | — | 2026-10-23 |
 | ADR-014 | Unified Safe Read Contract (SEC-001B.1-R) — accepted as the implementation record of the merged read contract; basis of acceptance in the ADR itself; related to ADR-013 | accepted | — | 2026-10-23 |
+| [ADR-017](ADR-017-durable-execution-state.md) | Durable Execution State (DURABLE-001) — domain-neutral event log for long-running agentic tasks; implemented on branch `feat/durable-state-001`, not merged; pending owner review | proposed | — | 2026-10-24 |
+| [ADR-018](ADR-018-durable-state-failure-model.md) | Durable State Mode A Failure Model and Missing-State Semantics (DURABLE-001) — failure model, fail-closed `MISSING`, compatibility; accepted 2026-10-26; partially supersedes ADR-017 §2.4a–§2.4c once ADR-017 is accepted (see ADR-018 "Соотношение с ADR-017") | accepted | — | 2026-10-26 |
+| [ADR-019](ADR-019-persisted-prune-decision-register.md) | Persisted Prune Decision Register (DURABLE-001, Design A) — immutable per-attempt prepare/decision register; accepted 2026-10-26; implementation (FIX-004) not started | accepted | — | 2026-10-26 |
+
+**ADR-015 / ADR-016:** `proposed` ADRs that exist only as untracked files in the `main` working copy; they are not part of branch `feat/durable-state-001`, so they are not linked here and will be indexed when they are integrated.
 
 **ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
 cognitive-architecture research program (Terra persistence, the Lexicon

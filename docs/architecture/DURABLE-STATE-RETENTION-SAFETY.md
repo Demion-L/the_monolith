@@ -6,8 +6,6 @@ stability: volatile
 last_updated: 2026-10-25
 related_adrs:
   - ADR-017
-related_docs:
-  - docs/adr/ADR-017-followups.md
 ---
 
 # Durable State & Retention: Safety Invariants and Failure Model
@@ -548,7 +546,7 @@ tombstone (`finalStatus`, `outcomeDigest`, `headHash`). Хранение пол�
 
 | ID | Описание | Серьёзность | Статус |
 |---|---|---|---|
-| **N-3** | `SIGKILL` во время записи tombstone оставляет `tombstone.json.tmp.*`, который prune не чистит | LOW | не исправлено (ADR-017-followups) |
+| **N-3** | `SIGKILL` во время записи tombstone оставляет `tombstone.json.tmp.*`, который prune не чистит | LOW | не исправлено (follow-up backlog ADR-017 ведётся в рабочей ветке `feat/durable-state-001` и не входит в этот пакет) |
 | **N-4** | Транзитный tombstone отказывает *создателю* новой задачи (`ValidationError`), хотя prune будет отозван | LOW (живость создателя) | не исправлено; N-6 не затрагивает |
 | **N-5** | Старые журналы: `effect.failed {retryable:true}` без `uncertain` читаются как достоверный сбой | LOW | задокументировано (ADR §2.3a) |
 | **N-7** | `assess`/`resumePacket` (по названию — чтения) записывают карантин при GONE; `findResumable` — ещё и откат PENDING | LOW | задокументировано; PENDING в `assess`/`resumePacket` не пишет |

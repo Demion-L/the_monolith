@@ -27,7 +27,10 @@ program moved to [Webway](https://github.com/Demion-L/webway) on
 | Document              | Describes                                                           |
 | ---------------------- | -------------------------------------------------------------------- |
 | `toolkit-pipeline.md` | How a markdown artifact becomes structured, governed memory: Scriptorium → Explicit Relationship Graph → working memory → finalize-story consolidation |
-| `DURABLE-STATE-RETENTION-SAFETY.md` | Durable State & Retention: safety invariants, failure model, verification matrix (draft for independent review; branch `feat/durable-state-001`) |
+| `DURABLE-STATE-RETENTION-SAFETY.md` | Durable State & Retention: safety invariants (INV-001…INV-012), failure model, verification matrix — a specification for independent audit, not approved; describes behavior of branch `feat/durable-state-001`, which is not merged |
+| `DURABLE-PRUNE-PROTOCOL-DESIGN-004.md` | Durable State Design A: atomic prune protocol (persisted prepare/decision register); `ARCHITECTURE_FROZEN` per §46 — design only, no implementation (FIX-004A…E not started) |
+| `DURABLE-PRUNE-PROTOCOL-DESIGN-004-APPENDIX-A.md` | Appendix A to Design A: state tables and crash-recovery matrix |
+| `DUREX-PROTOCOL-CONCEPT.md` | MONOLITH DurEx Protocol — `PROPOSED CONCEPT` only; no implementation obligations, does not change Design A |
 
 ---
 

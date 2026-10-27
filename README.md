@@ -232,7 +232,4 @@ declarations with zero runtime implementation today), protocol drift
 detection (`driftLogPath` in `project.definition.mjs` points at a directory
 that does not exist yet).
 
-**Extracted:** Webway (frequency-based concept/semantic-link extraction) —
-now developed independently at
-[github.com/Demion-L/webway](https://github.com/Demion-L/webway). See
-`docs/webway-v0.md` for the historical record of why and how.
+

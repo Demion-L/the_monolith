@@ -5,6 +5,7 @@ import CurrentMission from './components/CurrentMission.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
 import ProjectOverview from './components/ProjectOverview.vue';
 import RoadmapPanel from './components/RoadmapPanel.vue';
+import SkinSwitcher from './components/SkinSwitcher.vue';
 import { scenarioIds, scenarios } from './fixtures/dashboard';
 import { toDashboardData } from './live/adapter';
 import { DashboardLoadError, fetchDashboard } from './live/client';
@@ -58,6 +59,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
     </div>
     <div class="project">{{ data?.overview.name ?? 'UNKNOWN' }}</div>
     <div class="topbar-right">
+      <SkinSwitcher />
       <label v-if="demo" class="scenario">
         Scenario
         <select v-model="scenario" data-testid="scenario-select">

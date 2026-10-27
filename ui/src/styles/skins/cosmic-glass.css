@@ -1,0 +1,20 @@
+/* Cosmic Glass skin. Every rule is scoped to data-skin="cosmic-glass";
+   Classic is the unscoped base in ../main.css and is never overridden here. */
+:root[data-skin="cosmic-glass"] {
+  --bg: #0b0a1f;
+  --surface: rgba(30, 24, 70, 0.72);
+  --surface-2: rgba(52, 42, 112, 0.6);
+  --border: rgba(140, 130, 255, 0.28);
+  --text: #ece9ff;
+  --muted: #a49fd6;
+  --accent: #9a8cff;
+}
+
+:root[data-skin="cosmic-glass"] body {
+  background: linear-gradient(160deg, #0b0a1f 0%, #1a1245 100%);
+  background-attachment: fixed;
+}
+
+:root[data-skin="cosmic-glass"] .topbar {
+  backdrop-filter: blur(10px);
+}

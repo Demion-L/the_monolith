@@ -6,4 +6,6 @@ export { runBrief, parseBriefArgs } from './cli.js';
 export type { BriefArgsResult, BriefArgsOk, BriefArgsErr } from './cli.js';
 export { evaluateFreshness } from './freshness.js';
 export type { FreshnessStatus, FreshnessResult, FreshnessEvidence, FreshnessReason, GitSignals } from './freshness.js';
+export { reconcile, renderReconciliation } from './reconcile.js';
+export type { ReconciliationReport, ReconciliationFinding, FindingKind, UntrackedWorkItem, ReviewDocument } from './reconcile.js';
 //# sourceMappingURL=index.d.ts.map

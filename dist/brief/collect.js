@@ -229,7 +229,7 @@ function collectFreshness(targetDir, monolithRoot, root, story) {
     const content = new Map(docs.map((rel) => [rel, readStateDocument(targetDir, monolithRoot, root, rel)]));
     const roadmap = content.get(ROADMAP_INDEX_REL) ?? null;
     const storyIndex = content.get(STORY_INDEX_REL) ?? null;
-    return evaluateFreshness({
+    const evidence = {
         git: readGitSignals(targetDir, stateFiles),
         activeStory: story.fileExists && story.hasCurrentStorySection ? parseActiveStoryClaim(story.excerpt) : { kind: 'unknown' },
         roadmapActiveStory: roadmap === null ? null : parseRoadmapActiveStory(roadmap),
@@ -237,7 +237,8 @@ function collectFreshness(targetDir, monolithRoot, root, story) {
         storyIndexStatuses: storyIndex === null ? new Map() : parseStoryIndexStatuses(storyIndex),
         recordedText: [...content.values()].filter((c) => c !== null).join('\n'),
         stateFiles: new Set(stateFiles),
-    });
+    };
+    return { result: evaluateFreshness(evidence), evidence };
 }
 export async function collect(targetDir) {
     const diagnostics = [];
@@ -274,7 +275,7 @@ export async function collect(targetDir) {
     const missions = collectMissions(targetDir, config.monolithRoot, state, diagnostics);
     const checkpoints = collectCheckpoints(targetDir, config.monolithRoot, state, missions.active, diagnostics);
     const story = collectStory(targetDir, config.monolithRoot, root, diagnostics);
-    const freshness = collectFreshness(targetDir, config.monolithRoot, root, story);
+    const { result: freshness, evidence: freshnessEvidence } = collectFreshness(targetDir, config.monolithRoot, root, story);
     const protocolsRelDir = `${config.monolithRoot}/${PROTOCOLS_DIR}`;
     const mandatoryProtocols = {
         items: discoverDocs(targetDir, [protocolsRelDir], (fields) => fields.get('enforcement') === 'mandatory', diagnostics),
@@ -296,5 +297,6 @@ export async function collect(targetDir) {
         adrs,
         diagnostics,
         freshness,
+        freshnessEvidence,
     };
 }

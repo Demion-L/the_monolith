@@ -45,6 +45,7 @@ Mission usage:
 
 Brief usage:
   monolith brief [--max-chars N] [--strict]
+  monolith brief --reconcile [--max-chars N]   (read-only report: what the Freshness verdict rests on)
 
 Durable usage:
   monolith durable list [--status active|completed|failed|cancelled]

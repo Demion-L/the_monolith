@@ -24,6 +24,8 @@ export type FreshnessReasonCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'G
 export interface FreshnessReason {
     code: FreshnessReasonCode;
     message: string;
+    /** STATE_CONTRADICTION only: the state documents (by file name) that disagree. */
+    documents?: string[];
 }
 /** One commit after the last state update, as seen by git. */
 export interface GitCommitSignal {
@@ -89,6 +91,7 @@ export interface FreshnessResult {
     unrecordedWork: string[];
 }
 export declare function extractWorkItemIds(text: string): string[];
+export declare function mentionsId(text: string, id: string): boolean;
 /** Interprets the `## Current Story` excerpt of active.md. */
 export declare function parseActiveStoryClaim(excerpt: string | null): StoryClaim;
 /** `Active Story: <text>` line of roadmap-index.md. */

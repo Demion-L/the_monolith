@@ -135,6 +135,8 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + the unified safe reader `readBoundedFile()` and its wrappers `checkProjectFile()`/`readProjectFile()` (ADR-011, ADR-014) |
 | `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
 | `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
+| `src/durable/`                    | **Durable State** (ADR-017, DURABLE-001): domain-neutral, crash-safe execution record for long-running agentic tasks — hash-chained event log per task (`log.ts`), pure projection (`projection.ts`), `DurableTasks` API (`runtime.ts`), resume assessment (`assess.ts`), retention (`retention.ts`), backends `fs-store.ts` / `memory-store.ts`, `cli.ts` |
+| `src/scripts/durable-demo.ts`     | Multi-process demonstration: a task survives SIGKILL of its first process and is continued days later by another (`direct` / `adaptive` / `recovery`) |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
 
@@ -168,6 +170,15 @@ What MONOLITH does today (865 tests passing, typecheck clean):
 - `monolith mission checkpoint|checkpoints` (COORDINATORIUM-002) — durable, append-only progress checkpoints for an `in_progress` mission; `schemaVersion` bumped to 2 (a v1 file is migrated in-memory on read, see ADR-008's compatibility-fix addendum — a pre-002 binary refuses to touch a v2 file instead of silently dropping checkpoints)
 - Deterministic State Keeper: cross-process file lock + atomic write, no lost updates, no LLM/database/background service involved
 - Strategic Coordinatorium (product/subsystem state) is **not implemented** — schema-reserved only
+
+**Durable State — `src/durable/`** (DURABLE-001, ADR-017, **proposed; on branch `feat/durable-state-001`, not merged**):
+- Per-task append-only, hash-chained event log; state is a pure fold of it. Writes are compare-and-set on the next sequence number (`createFile`/`link()`), so there is no lock file and no stale-lock recovery
+- Generic: task, plan, decision, assumption (value-at-decision, `blocking|advisory`), observation, effect ledger (intent/outcome, in-doubt detection), await/delivery (token, idempotent, any order, duplicates, late), lease + fencing epoch
+- `assess` classifies a resumed task as `direct | adaptive | recovery | waiting | closed`; `resumePacket` is the input a future Reasoning Projector would take (not implemented)
+- Retention: compaction into verified segments, prune with tombstone and protection of tasks referenced by active ones; dry-run by default in the CLI
+- `monolith durable list|show|assess|packet|verify|retention`; library entry: `import { durable } from '@monolith/core'`
+- Coordinatorium (`state.json`) is **unchanged** and is not yet a client of this layer
+- Limits and residual risks: ADR-017 §9 (clock skew, at-least-once external effects, read cost O(events), POSIX local FS only, TM-C unsupported)
 
 **Context Gateway — `monolith brief`** (CONTEXT-001A):
 - `monolith brief [--max-chars N] [--strict]` — deterministic, read-only, character-budgeted summary of project state; see Project Brief section below

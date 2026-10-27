@@ -20,3 +20,6 @@ export { buildGraph, normalizeLabel, selectCanonicalLabel } from './graph/index.
 export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, MissionNotFoundError, InvalidTransitionError, ValidationError, readState, mutateState, projectTarget, trustedDirectoryTarget, startMission, listMissions, getMission, finishMission, } from './coordinatorium/index.js';
 // Safe writes — explicit write scope and publication states (SEC-001B.2, ADR-012)
 export { SafeWriteError } from './root/index.js';
+// Durable State — domain-neutral, crash-safe execution record for long-running agentic tasks (ADR-017).
+// Namespaced: its error taxonomy deliberately shares names (e.g. ValidationError) with Coordinatorium's.
+export * as durable from './durable/index.js';

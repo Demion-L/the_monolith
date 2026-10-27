@@ -23,9 +23,11 @@ No active phase.
 
 ## Current Story
 
-No active story.
+No active story recorded.
 
-Previous: **CONTEXT-001A — MONOLITH Context Gateway: `monolith brief`** (COMPLETED 2026-10-22)
+Previous recorded story: **CONTEXT-001A — MONOLITH Context Gateway: `monolith brief`** (COMPLETED 2026-10-22)
+
+**Known drift (checked against git on 2026-10-27, `main` at `7f3e718`):** this file had not been updated since 2026-10-22, while `main` gained the SEC-001A/B, SEC-002 and UI-000…UI-002D work (see `roadmap-index.md`, "Work merged to `main` after CONTEXT-001A"). That work never went through the story system, so "no active story recorded" means *nothing is registered*, not that nothing is happening and not that the project is complete. Branch `feat/monolith-self-awareness-001` (SELF-AWARENESS-001, Project State Freshness) is in progress and has deliberately not been registered as a story. `monolith brief` now reports this kind of drift as `Freshness`; see `STATE-DRIFT-001` in `tech-debt.md`.
 
 ---
 
@@ -39,7 +41,7 @@ Previous: **CONTEXT-001A — MONOLITH Context Gateway: `monolith brief`** (COMPL
 
 ## Current Operational Focus
 
-CONTEXT-001A finalized (IMPLEMENTED / VERIFIED within the scope below): `monolith brief [--max-chars N] [--strict]` — a deterministic, read-only, character-budgeted summary of project state (State Keeper status, active missions and latest checkpoints, mandatory protocols, current story, accepted ADRs) with per-section provenance, an explicit `Completeness: COMPLETE|INCOMPLETE` line, explicit truncation markers, exit codes 0/1/2, and sanitization of every project-controlled string. Reads `state.json` once, never writes; State Keeper v2 native, v1 via in-memory migration. New optional config field `contextGateway.adrDirs` (this repository sets `["docs/adr"]`). 374 tests passing (brief 122), typecheck and build clean. `brief` supplements the Boot Sequence; it does not replace it.
+CONTEXT-001A finalized (as of 2026-10-22; the test counts below are from that finalization, not current) (IMPLEMENTED / VERIFIED within the scope below): `monolith brief [--max-chars N] [--strict]` — a deterministic, read-only, character-budgeted summary of project state (State Keeper status, active missions and latest checkpoints, mandatory protocols, current story, accepted ADRs) with per-section provenance, an explicit `Completeness: COMPLETE|INCOMPLETE` line, explicit truncation markers, exit codes 0/1/2, and sanitization of every project-controlled string. Reads `state.json` once, never writes; State Keeper v2 native, v1 via in-memory migration. New optional config field `contextGateway.adrDirs` (this repository sets `["docs/adr"]`). 374 tests passing (brief 122), typecheck and build clean. `brief` supplements the Boot Sequence; it does not replace it.
 
 Scope cut, still deferred (not implemented): `monolith context <topic>` (CONTEXT-001B), JSON output, ERG/graph-derived relevance, Strategic Coordinatorium. Mission registration and checkpointing remain not runtime-enforced.
 
@@ -53,6 +55,7 @@ Open registered items (not started): **SEC-001** — Project Root Trust Boundary
 **COORDINATORIUM-002:** COMPLETE
 **Init Safety:** COMPLETE (positional-arg/preflight rejection + `.gitkeep` protection)
 **CONTEXT-001A:** COMPLETE (`monolith brief`)
+**Not recorded:** phases and stories after 2026-10-22 — status UNKNOWN in this file; see `roadmap-index.md`
 
 Not implemented — do not represent as done: Strategic Coordinatorium, `monolith context <topic>` (CONTEXT-001B), SEC-001.
 

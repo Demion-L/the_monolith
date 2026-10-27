@@ -32,7 +32,7 @@ Keep in sync with `memory/working/active.md` and `memory/working/story-index.md`
 
 #### Work merged to `main` after CONTEXT-001A — not recorded as stories
 
-Reconstructed from `git log` on 2026-10-27 (SELF-AWARENESS-001). None of these
+Reconstructed from `git log` on 2026-10-27 (SELF-AWARENESS-001); extended through `main` at `5010d42` by SELF-AWARENESS-002 and through its integration (MONOLITH-INTEGRATION-002). None of these
 went through `finalize-story`: there are no capsules, no `story-index.md`
 entries and no execution-history records for them. "Merged" below means only
 that the commit is reachable from `main`; whether each item was formally
@@ -56,11 +56,21 @@ gap in the story system, registered as `STATE-DRIFT-001` in `tech-debt.md`.
 | UI-002B | Skin infrastructure | MERGED; finalization UNKNOWN | 2026-10-27 | `56082ac` |
 | UI-002C | Sidebar layout shell | MERGED; finalization UNKNOWN | 2026-10-27 | `4c3e041` |
 | UI-002D | Cosmic Glass skin | MERGED; finalization UNKNOWN | 2026-10-27 | `7f3e718` |
-| SELF-AWARENESS-001 | Project State Freshness in `monolith brief` | IN PROGRESS on branch `feat/monolith-self-awareness-001`; not merged | 2026-10-27 | — |
+| DURABLE-001 | Durable Execution State: event-log layer `src/durable/` (ADR-017 `proposed`, ADR-018/019 `accepted`) | MERGED (via `828ddf4`); **not accepted** — see below | 2026-10-27 | `c57b46c`, merge `828ddf4` |
+| DURABLE-FIX-002, DURABLE-FIX-003 | Review-fix iterations of DURABLE-001 (tracked `dist` refreshes) | MERGED (via `828ddf4`); commit labels only, no separate acceptance recorded | 2026-10-27 | `2366502`, `3f49f5b` |
+| FIX-004 | Durable State handoff coverage gaps (architecture documents) | MERGED (via `828ddf4`); documents only | 2026-10-27 | `3201f1f` |
+| FIX-004A-B, FIX-004C-F, FIX-004D-F | Append outcomes, storage SPI, runtime CAS (A-B); crash/process/concurrency tests (C-F); safety, retention and security-review documentation (D-F) | MERGED; implemented; **security acceptance NOT recorded**; open item 23 (A2-R unproven, owner decision) remains OPEN | 2026-10-27 | `e9f1ab7`, `3a375c7`, `a5c01c4`, merge `828ddf4` |
+| SELF-AWARENESS-001 | Project State Freshness in `monolith brief` | implemented: yes; merged: yes; accepted: yes — owner functional acceptance confirmed (date not recorded). Formal `finalize-story` NOT run (no capsule, no story-index entry) | 2026-10-27 | `8ea1ad2`, merge `fe6661a` |
+| (no id) | Explicit `package.json` `files` allowlist; tracked `dist` synchronization | MERGED; build/packaging only | 2026-10-27 | `c9a5e09`, `5010d42` |
+| SELF-AWARENESS-002 | `monolith brief --reconcile`: State Reconciliation Report | implemented: yes; merged: yes (MONOLITH-INTEGRATION-002, merge commit is in `git log`); accepted: yes — owner functional acceptance confirmed (date not recorded). Formal `finalize-story` NOT run (no capsule, no story-index entry) | 2026-10-27 | — |
 
-Durable Execution State (ADR-017/018/019) exists on `main` as design documents
-only (`7204f22`); its implementation lives in a separate, unmerged worktree and
-is outside this index. Its state is **UNKNOWN** here.
+Durable Execution State: its design documents reached `main` first (`7204f22`);
+the implementation (`src/durable/`) was merged by `828ddf4`. Words are kept
+apart on purpose: **implemented** — yes; **merged** — yes; **accepted** — no.
+An independent security review runs in a separate worktree
+(`review/durable-security-001`); its outcome is not recorded in these documents
+(**UNKNOWN**) and acceptance criterion 23 (A2-R, owner decision; see
+`DURABLE-PRUNE-PROTOCOL-DESIGN-004.md`) is **OPEN**. See `DURABLE-001` in `tech-debt.md`.
 
 **Candidate next stories** (not decisions — require user definition):
 - CONTEXT-001B — `monolith context <topic>` (Context Gateway, second deliverable) — not started; see HANDOFF.md
@@ -88,7 +98,7 @@ independently: https://github.com/Demion-L/webway
 ## Current Focus
 
 Active Phase: 1 — Cognitive Core & First Evidence
-Active Story: none recorded — SELF-AWARENESS-001 is in progress on a branch but has not been registered as a story (see `active.md`)
+Active Story: none recorded — no work is in progress on a registered story (see `active.md`)
 
 ---
 

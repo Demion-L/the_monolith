@@ -18,8 +18,8 @@ Update this file at the end of each work session before closing.
 
 None recorded. CONTEXT-001A (`monolith brief`) was the last story finalized (2026-10-22).
 
-This is **not** a statement that nothing happened since: `main` gained ~60 commits
-(SEC-001A/B, SEC-002, UI-000…UI-002D, Durable State design docs) that were never
+This is **not** a statement that nothing happened since: `main` gained 92 commits (`git rev-list --count b8c4f1c..main`)
+(SEC-001A/B, SEC-002, UI-000…UI-002D, Durable State, SELF-AWARENESS-001) that were never
 registered as stories. See `roadmap-index.md` ("Work merged to `main` after
 CONTEXT-001A") for the git-derived list, and `STATE-DRIFT-001` in `tech-debt.md`.
 
@@ -28,12 +28,17 @@ CONTEXT-001A") for the git-derived list, and `STATE-DRIFT-001` in `tech-debt.md`
 ## Objective
 
 COORDINATORIUM-001, COORDINATORIUM-002, Init Safety and CONTEXT-001A are
-closed as stories. Reconciliation of the story documents with git is in
-progress on branch `feat/monolith-self-awareness-001` (SELF-AWARENESS-001): this
-file, `active.md`, `roadmap-index.md` and the counts in `AGENTS.md` were brought
-back in line with git on 2026-10-27, and `monolith brief` gained a `Freshness`
-check so the next drift is reported instead of hidden. Whether the post-2026-10-22
-work was formally finalized is UNKNOWN.
+closed as stories. SELF-AWARENESS-001 (`monolith brief` `Freshness`) is merged (`fe6661a`).
+SELF-AWARENESS-002 (`monolith brief --reconcile`, a read-only report of what the
+Freshness verdict rests on) is implemented and merged (MONOLITH-INTEGRATION-002).
+Both self-awareness items have owner functional acceptance; neither went through
+`finalize-story` (no capsule, no story-index entry) because that would require
+inventing a finalization date and event — whether to run it retroactively is an
+owner decision.
+The state documents were brought in line with `git log` through `main` at
+`5010d42` on 2026-10-27. Durable State is **merged but not accepted**: the
+security review outcome is not recorded here (UNKNOWN) and acceptance item 23
+(A2-R) is OPEN. Whether the post-2026-10-22 work was formally finalized is UNKNOWN.
 
 ---
 
@@ -85,7 +90,7 @@ work was formally finalized is UNKNOWN.
 
 Ask the user. First decide whether to register the unrecorded post-2026-10-22 work
 as stories (or accept the git-derived list in `roadmap-index.md` as its record) and
-whether SELF-AWARENESS-001 gets a story entry. Candidates (none started, none decided): CONTEXT-001B
+whether SELF-AWARENESS-001/-002 get story entries via `finalize-story`. Candidates (none started, none decided): CONTEXT-001B
 (`monolith context <topic>`), SEC-001, an ADR for the Context Gateway
 decisions, corpus relationship density, Engineering Gate runtime.
 
@@ -93,8 +98,6 @@ decisions, corpus relationship density, Engineering Gate runtime.
 
 ## Files in Flight
 
-Branch `feat/monolith-self-awareness-001` (worktree
-`worktrees/monolith-self-awareness-001`): `src/brief/freshness*.ts`,
-`src/brief/git-signals.ts`, brief wiring, state-document sync. Uncommitted, not
-merged, not pushed. Other worktrees (Durable State, UI) are independent and
-untouched.
+None registered. `feat/monolith-self-awareness-002` is merged (MONOLITH-INTEGRATION-002).
+Other worktrees (Durable security fix/review, UI) are independent and untouched.
+Open security findings F-1/F-2 (Durable State) remain open until a separate fix.

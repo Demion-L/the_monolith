@@ -11,7 +11,7 @@
 
 import type { Mission, Checkpoint } from '../coordinatorium/types.js';
 import type { ProjectFileErrorCode } from '../root/index.js';
-import type { FreshnessResult } from './freshness.js';
+import type { FreshnessResult, FreshnessEvidence } from './freshness.js';
 
 export type DiagnosticSeverity = 'info' | 'warn' | 'error';
 
@@ -134,4 +134,10 @@ export interface BriefModel {
    * Completeness. Optional so a hand-built model without it renders as before.
    */
   freshness?: FreshnessResult;
+  /**
+   * SELF-AWARENESS-002: the evidence `freshness` was computed from, kept so
+   * `brief --reconcile` can explain the verdict without a second git read.
+   * Never rendered by the plain brief.
+   */
+  freshnessEvidence?: FreshnessEvidence;
 }

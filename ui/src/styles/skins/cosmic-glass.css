@@ -1,20 +1,148 @@
 /* Cosmic Glass skin. Every rule is scoped to data-skin="cosmic-glass";
-   Classic is the unscoped base in ../main.css and is never overridden here. */
+   Classic is the unscoped base in ../main.css and is never overridden here.
+   Only visuals change: markup, data and behaviour are shared with Classic. */
 :root[data-skin="cosmic-glass"] {
-  --bg: #0b0a1f;
-  --surface: rgba(30, 24, 70, 0.72);
-  --surface-2: rgba(52, 42, 112, 0.6);
-  --border: rgba(140, 130, 255, 0.28);
-  --text: #ece9ff;
-  --muted: #a49fd6;
-  --accent: #9a8cff;
+  --bg: #080a1e;
+  --surface: rgba(12, 16, 40, 0.74);
+  --surface-2: rgba(30, 34, 76, 0.62);
+  --border: rgba(190, 200, 255, 0.2);
+  --text: #f1f4ff;
+  --muted: #b8c3df;
+  --accent: #b4a9ff;
+  --ok: #5fd68a;
+  --warn: #f0c040;
+  --err: #ff8a85;
+  --demo: #f0b429;
+  --glass-dense: rgba(9, 12, 32, 0.86);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 8px 32px rgba(2, 3, 14, 0.45);
+  --glass-blur: blur(14px) saturate(1.15);
+  background: var(--bg);
 }
 
+/* Decorative background: one fixed layer behind everything. It never takes
+   part in layout, pointer events, the accessibility tree or scrolling. */
 :root[data-skin="cosmic-glass"] body {
-  background: linear-gradient(160deg, #0b0a1f 0%, #1a1245 100%);
-  background-attachment: fixed;
+  background: transparent;
+  isolation: isolate;
 }
 
+:root[data-skin="cosmic-glass"] body::before {
+  content: "";
+  position: fixed;
+  /* Wider than the viewport on the left: shifts the monolith out from under
+     the content column, towards the sidebar and the gap beside it. */
+  top: 0; bottom: 0; right: 0; left: -14vw;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(8, 10, 30, 0) 0%, rgba(8, 10, 30, 0.2) 60%, rgba(8, 10, 30, 0.6) 100%),
+    url('../../assets/cosmic-glass-bg.webp') 24% 0 / cover no-repeat,
+    var(--bg);
+}
+
+/* Sidebar */
+:root[data-skin="cosmic-glass"] .sidebar {
+  background: rgba(8, 11, 32, 0.5);
+  backdrop-filter: blur(4px) saturate(1.1);
+  border-right-color: var(--border);
+  box-shadow: 1px 0 0 rgba(150, 140, 255, 0.08), 6px 0 28px rgba(2, 3, 14, 0.35);
+}
+:root[data-skin="cosmic-glass"] .brand strong { color: var(--text); letter-spacing: 0.16em; }
+:root[data-skin="cosmic-glass"] .brand .muted { font-size: 13px; }
+:root[data-skin="cosmic-glass"] .nav a { color: var(--muted); border-left: 2px solid transparent; border-radius: 0 6px 6px 0; }
+:root[data-skin="cosmic-glass"] .nav a:hover {
+  color: var(--text);
+  background: rgba(150, 140, 255, 0.16);
+  border-left-color: var(--accent);
+}
+:root[data-skin="cosmic-glass"] .sidebar-panel .skin-switcher { border-top-color: var(--border); }
+
+/* Topbar */
 :root[data-skin="cosmic-glass"] .topbar {
-  backdrop-filter: blur(10px);
+  background: rgba(8, 11, 32, 0.66);
+  backdrop-filter: blur(12px) saturate(1.1);
+  border-bottom-color: var(--border);
+  box-shadow: 0 6px 24px rgba(2, 3, 14, 0.3);
+}
+:root[data-skin="cosmic-glass"] .project { font-size: 16px; letter-spacing: 0.01em; }
+:root[data-skin="cosmic-glass"] .live-badge {
+  background: #14532f; color: #eafff3;
+  border: 1px solid #5fd68a;
+}
+:root[data-skin="cosmic-glass"] .live-badge-off { background: var(--glass-dense); color: var(--muted); border-color: var(--border); }
+:root[data-skin="cosmic-glass"] .demo-badge { border: 1px solid #ffd978; }
+
+/* Panels and cards */
+:root[data-skin="cosmic-glass"] .panel {
+  background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  border-radius: 10px;
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  padding: 18px 22px;
+}
+:root[data-skin="cosmic-glass"] .panel h2 {
+  font-size: 14px; letter-spacing: 0.08em; font-weight: 700;
+  padding-bottom: 8px; margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+:root[data-skin="cosmic-glass"] .panel h3 { font-size: 15px; font-weight: 650; }
+:root[data-skin="cosmic-glass"] .card {
+  background: var(--surface-2);
+  border-radius: 8px;
+  box-shadow: var(--glass-edge);
+  line-height: 1.55;
+}
+:root[data-skin="cosmic-glass"] .facts dt { font-size: 13px; }
+/* Long-form text sits on a denser surface than the rest. */
+:root[data-skin="cosmic-glass"] .roadmap,
+:root[data-skin="cosmic-glass"] .story {
+  background: var(--glass-dense);
+  border-radius: 8px;
+  line-height: 1.6;
+}
+:root[data-skin="cosmic-glass"] .roadmap { border: 1px solid var(--border); }
+:root[data-skin="cosmic-glass"] .status { background: rgba(95, 214, 138, 0.12); }
+:root[data-skin="cosmic-glass"] .tag { background: rgba(240, 192, 64, 0.1); }
+
+/* Controls */
+:root[data-skin="cosmic-glass"] button,
+:root[data-skin="cosmic-glass"] select {
+  background: var(--glass-dense);
+  border-color: rgba(190, 200, 255, 0.32);
+}
+:root[data-skin="cosmic-glass"] button:hover:not(:disabled) { border-color: var(--accent); background: rgba(60, 56, 130, 0.7); }
+:root[data-skin="cosmic-glass"] button:disabled { opacity: 1; color: #8f9abb; border-style: dashed; cursor: not-allowed; }
+:root[data-skin="cosmic-glass"] a:focus-visible,
+:root[data-skin="cosmic-glass"] button:focus-visible,
+:root[data-skin="cosmic-glass"] select:focus-visible {
+  outline: 2px solid #d3ccff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(154, 140, 255, 0.35);
+}
+
+/* Without backdrop blur, translucency alone would hurt contrast: go denser. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-skin="cosmic-glass"] { --surface: rgba(12, 16, 40, 0.92); --surface-2: rgba(26, 30, 70, 0.92); }
+  :root[data-skin="cosmic-glass"] .sidebar,
+  :root[data-skin="cosmic-glass"] .topbar { background: rgba(8, 11, 32, 0.95); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-skin="cosmic-glass"] .nav a,
+  :root[data-skin="cosmic-glass"] button { transition: background-color 0.15s, border-color 0.15s, color 0.15s; }
+}
+
+/* Narrow screens: the sidebar is a sticky top bar, so the picture needs
+   a stronger veil and a crop that keeps the monolith in view. */
+@media (max-width: 899px) {
+  :root[data-skin="cosmic-glass"] body::before {
+    left: 0;
+    background:
+      linear-gradient(180deg, rgba(8, 10, 30, 0) 0%, rgba(8, 10, 30, 0.2) 55%, rgba(8, 10, 30, 0.55) 100%),
+      url('../../assets/cosmic-glass-bg.webp') 16% 0 / cover no-repeat,
+      var(--bg);
+  }
+  :root[data-skin="cosmic-glass"] .sidebar { background: rgba(8, 11, 32, 0.82); border-bottom-color: var(--border); }
+  :root[data-skin="cosmic-glass"] .panel { padding: 14px 16px; background: rgba(12, 16, 40, 0.6); }
 }

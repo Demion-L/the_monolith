@@ -132,8 +132,9 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
 | `src/brief/freshness.ts`          | `evaluateFreshness()` — pure FRESH/STALE/UNKNOWN verdict + state-document parsers (SELF-AWARENESS-001) |
 | `src/brief/git-signals.ts`        | `readGitSignals()` — read-only `git log` signals for the freshness check |
+| `src/brief/reconcile.ts`          | `reconcile()` / `renderReconciliation()` — pure State Reconciliation Report for `monolith brief --reconcile` (SELF-AWARENESS-002) |
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
-| `src/brief/*.test.ts`             | Vitest test suite (168 tests, incl. end-to-end CLI runs on real directories) |
+| `src/brief/*.test.ts`             | Vitest test suite (185 tests, incl. end-to-end CLI runs on real directories) |
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + the unified safe reader `readBoundedFile()` and its wrappers `checkProjectFile()`/`readProjectFile()` (ADR-011, ADR-014) |
 | `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
 | `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
@@ -146,7 +147,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (1020 tests passing in the core suite as of 2026-10-27, typecheck clean):
+What MONOLITH does today (1737 tests passing in the full `vitest run` as of 2026-10-27 on the SELF-AWARENESS-002 integration, typecheck clean; the earlier figure of 1020 was not re-derived):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -173,7 +174,7 @@ What MONOLITH does today (1020 tests passing in the core suite as of 2026-10-27,
 - Deterministic State Keeper: cross-process file lock + atomic write, no lost updates, no LLM/database/background service involved
 - Strategic Coordinatorium (product/subsystem state) is **not implemented** — schema-reserved only
 
-**Durable State — `src/durable/`** (DURABLE-001, ADR-017, **proposed; on branch `feat/durable-state-001`, not merged**):
+**Durable State — `src/durable/`** (DURABLE-001, ADR-017 `proposed`, ADR-018/019 `accepted`; **implemented and merged to `main` by `828ddf4`, security acceptance NOT recorded** — the independent review outcome is UNKNOWN here and acceptance item 23 (A2-R, owner decision) is OPEN):
 - Per-task append-only, hash-chained event log; state is a pure fold of it. Writes are compare-and-set on the next sequence number (`createFile`/`link()`), so there is no lock file and no stale-lock recovery
 - Generic: task, plan, decision, assumption (value-at-decision, `blocking|advisory`), observation, effect ledger (intent/outcome, in-doubt detection), await/delivery (token, idempotent, any order, duplicates, late), lease + fencing epoch
 - `assess` classifies a resumed task as `direct | adaptive | recovery | waiting | closed`; `resumePacket` is the input a future Reasoning Projector would take (not implemented)
@@ -224,6 +225,7 @@ nothing requires an AI session to call this.
 
 ```
 monolith brief [--max-chars N] [--strict]
+monolith brief --reconcile [--max-chars N]
 ```
 
 Prints a compact summary of current project state so a session need not
@@ -277,6 +279,24 @@ run it: validate is a static, file-only gate (SEC-002/ADR-011) with no subproces
 freshness is advisory, not pass/fail. Limits: work-item ids are recognized by a narrow
 pattern (`UI-002D`, `SEC-001B.1-R`); uncommitted edits to state documents are invisible
 to it; "mentioned" is not "correct".
+
+**Reconciliation (SELF-AWARENESS-002).** `monolith brief --reconcile` prints a *State
+Reconciliation Report* instead of the brief: the evidence behind the `Freshness` verdict
+and what a person should check. It reuses the evidence `brief` already collected (one
+read, no second git call) and is read-only in the same sense: it writes no file, changes
+nothing in git and applies no decision. Sections: confirmed mismatches between state
+documents; untracked work items (ids git references that no state document mentions, each
+with up to 3 commits as evidence); suspected mismatches; unknown (missing evidence);
+documents requiring review (each with the reason); limitations; suggested actions, ending
+with `No files were modified.`. Two rules: a commit is not proof that a work item is
+complete, and an id in a commit subject is not proof that its recorded status is right —
+so the report only says *referenced* / *mentioned*. Output is bounded (≤10 items listed,
+≤3 commits per item, `--max-chars` drops lower-priority sections with an explicit
+`[truncated: …]` marker; the header and the closing line are never dropped). Exit codes:
+0 report formed (whatever the Freshness), 1 usage error; `--strict` is refused with
+`--reconcile` (its meaning, Completeness, belongs to the brief). Without git the report
+degrades to `Freshness: UNKNOWN` plus an `Unknown` finding; document contradictions are
+still reported. It never edits `active.md`, `roadmap-index.md` or any other document.
 
 **File read contract (SEC-001B.1):** `state.json`, the lock record,
 `active.md` and the Markdown documents `brief` scans are read through the

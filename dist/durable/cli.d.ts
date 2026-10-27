@@ -20,7 +20,17 @@ export interface CliIo {
     out: (s: string) => void;
     err: (s: string) => void;
 }
+/**
+ * Opens the durable store of the instance. A store without `durable-protocol.json` is open for diagnostics only: reads
+ * work, every write is refused (`STORE_PROTOCOL`). Opening never creates the marker.
+ */
 export declare function openDurable(cwd: string): DurableTasks;
+/**
+ * The explicit operator action that makes an EMPTY store writable (Design A section 46.5, ADR-018 D3). Not reachable from
+ * `runDurable` on purpose: it must be called by a person or script that knows no runtime of an older version is running.
+ * Refuses a store that already holds tasks.
+ */
+export declare function initializeDurable(cwd: string): 'initialized' | 'already-initialized';
 /** Returns the process exit code: 0 ok, 1 usage/error, 2 verification found a problem. */
 export declare function runDurable(args: string[], io: CliIo): Promise<number>;
 export declare function runDurableCommand(args: string[]): Promise<void>;

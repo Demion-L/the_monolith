@@ -268,3 +268,50 @@ export class RetentionRefusedError extends DurableError {
         this.name = 'RetentionRefusedError';
     }
 }
+/**
+ * The persisted prune decision register of a task is corrupt, or the task directory is missing, or it is an
+ * unmigrated legacy tombstone. Fail closed: nothing is deleted and nobody is cancelled; an operator decides.
+ * Never mapped to `TaskOrphanedError`, `RetentionRefusedError` or a quarantine, and never retryable.
+ * `published` is true when a write the caller made is already visible (the outcome of that write is unknown).
+ */
+export class PruneDecisionCorruptError extends DurableError {
+    taskId;
+    reason;
+    file;
+    attempt;
+    published;
+    retryable = false;
+    constructor(taskId, reason, file = null, attempt = null, published = false) {
+        super('PRUNE_DECISION_CORRUPT', `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}); nothing was deleted or cancelled.`);
+        this.taskId = taskId;
+        this.reason = reason;
+        this.file = file;
+        this.attempt = attempt;
+        this.published = published;
+        this.name = 'PruneDecisionCorruptError';
+    }
+}
+/** The attempt number would exceed `MAX_PRUNE_ATTEMPTS`. A liveness limit: numbers are never reused or reset. */
+export class PruneAttemptLimitError extends DurableError {
+    taskId;
+    attempts;
+    constructor(taskId, attempts) {
+        super('PRUNE_ATTEMPT_LIMIT', `task "${taskId}" has used all ${attempts} prune attempts; raise the limit or find out why they keep being aborted.`);
+        this.taskId = taskId;
+        this.attempts = attempts;
+        this.name = 'PruneAttemptLimitError';
+    }
+}
+/**
+ * The store does not carry a usable `durable-protocol.json`: it is uninitialized (read-only diagnostics only), has a
+ * version this build does not understand, or cannot be initialized because it already holds tasks. The marker is
+ * created only by an explicit operator action, never by opening the store.
+ */
+export class StoreProtocolError extends DurableError {
+    detailCode;
+    constructor(message, detailCode) {
+        super('STORE_PROTOCOL', message);
+        this.detailCode = detailCode;
+        this.name = 'StoreProtocolError';
+    }
+}

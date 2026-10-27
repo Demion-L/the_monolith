@@ -42,13 +42,26 @@ function flag(args, name) {
     const i = args.indexOf(name);
     return i >= 0 ? args[i + 1] : undefined;
 }
-export function openDurable(cwd) {
+function openStore(cwd) {
     const root = resolveMonolithRoot(cwd);
     assertContainedFile(root, `${DURABLE_DIR_NAME}/x`);
     const dir = join(root.rootAbs, DURABLE_DIR_NAME);
-    return new DurableTasks({
-        store: new FsEventStore({ target: { scope: 'project', projectRoot: root.projectRoot, dir }, onWarning: (w) => reportWriteWarning(w) }),
-    });
+    return new FsEventStore({ target: { scope: 'project', projectRoot: root.projectRoot, dir }, onWarning: (w) => reportWriteWarning(w) });
+}
+/**
+ * Opens the durable store of the instance. A store without `durable-protocol.json` is open for diagnostics only: reads
+ * work, every write is refused (`STORE_PROTOCOL`). Opening never creates the marker.
+ */
+export function openDurable(cwd) {
+    return new DurableTasks({ store: openStore(cwd) });
+}
+/**
+ * The explicit operator action that makes an EMPTY store writable (Design A section 46.5, ADR-018 D3). Not reachable from
+ * `runDurable` on purpose: it must be called by a person or script that knows no runtime of an older version is running.
+ * Refuses a store that already holds tasks.
+ */
+export function initializeDurable(cwd) {
+    return openStore(cwd).initializeProtocolSync();
 }
 /** Returns the process exit code: 0 ok, 1 usage/error, 2 verification found a problem. */
 export async function runDurable(args, io) {

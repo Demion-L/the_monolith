@@ -91,8 +91,38 @@ function formatProtocolsBlock(items, provenance) {
 function formatIdentityTitle(model) {
     return `\n# MONOLITH Brief — ${san(model.identity.name)}\n(monolithRoot: ${san(model.identity.monolithRoot)}, source: ${san(model.identity.provenance.source)})\n`;
 }
+const ACTIVE_STORY_LABEL = {
+    'none-recorded': 'none recorded (this does not mean the project is complete)',
+    recorded: 'recorded in active.md',
+    unknown: 'unknown',
+};
+/**
+ * SELF-AWARENESS-001: the Freshness block. Part of P0 — it is never truncated,
+ * and it never influences `Completeness`. Every string that originates in
+ * project files or git history passes through the sanitizer.
+ */
+function formatFreshnessBlock(f) {
+    const lines = ['', '## Freshness', `  Status: ${f.status}`];
+    if (f.lastStateUpdate) {
+        lines.push(`  Last state update: ${san(f.lastStateUpdate.sha.slice(0, 7))} (${san(f.lastStateUpdate.date.slice(0, 10))}, git)`);
+    }
+    lines.push(`  Active Story: ${ACTIVE_STORY_LABEL[f.activeStory]}`);
+    if (f.reasons.length > 0) {
+        lines.push('  Evidence:');
+        for (const r of f.reasons)
+            lines.push(`    - [${r.code}] ${san(r.message)}`);
+    }
+    if (f.warnings.length > 0) {
+        lines.push('  Warnings:');
+        for (const w of f.warnings)
+            lines.push(`    - ${san(w)}`);
+    }
+    lines.push(`  Recommendation: ${san(f.recommendation)}`);
+    return lines.join('\n') + '\n';
+}
 function buildCoreP0(model, includeBudgetExceeded) {
     return (formatIdentityTitle(model) +
+        (model.freshness ? formatFreshnessBlock(model.freshness) : '') +
         formatStateKeeperBlock(model.stateKeeper) +
         formatDiagnosticsBlock(model.diagnostics, includeBudgetExceeded ? BUDGET_EXCEEDED_LINE : null) +
         formatActiveMissionsBlock(model.missions.active, model.missions.provenance) +
@@ -328,10 +358,12 @@ const P3_TEXT = '\n## More\n' +
     '  Full ADR/protocol listings: see their directories above.\n';
 export function render(model, maxChars = DEFAULT_MAX_CHARS) {
     const coreText0 = buildCoreP0(model, false);
-    const requiredMinimum = coreText0.length + RESERVED_COMPLETENESS_LEN;
+    // The Freshness headline sits right under Completeness and is counted in the budget like it.
+    const freshnessLine = model.freshness ? `Freshness: ${model.freshness.status}\n` : '';
+    const requiredMinimum = coreText0.length + RESERVED_COMPLETENESS_LEN + freshnessLine.length;
     const budgetExceededByRequired = requiredMinimum > maxChars;
     const coreText = budgetExceededByRequired ? buildCoreP0(model, true) : coreText0;
-    let remaining = budgetExceededByRequired ? 0 : Math.max(0, maxChars - coreText.length - RESERVED_COMPLETENESS_LEN);
+    let remaining = budgetExceededByRequired ? 0 : Math.max(0, maxChars - coreText.length - RESERVED_COMPLETENESS_LEN - freshnessLine.length);
     let budgetLoss = false;
     let p1 = '';
     let p2 = '';
@@ -370,6 +402,6 @@ export function render(model, maxChars = DEFAULT_MAX_CHARS) {
     const collectTimeError = model.diagnostics.some((d) => d.severity === 'error');
     const completeness = !collectTimeError && !budgetExceededByRequired && !budgetLoss ? 'COMPLETE' : 'INCOMPLETE';
     const completenessLine = completeness === 'COMPLETE' ? COMPLETE_LINE : INCOMPLETE_LINE;
-    const text = `${completenessLine}\n${coreText}${p1}${p2}${p3}`;
+    const text = `${completenessLine}\n${freshnessLine}${coreText}${p1}${p2}${p3}`;
     return { text: `${text.replace(/\n+$/, '')}\n`, completeness };
 }

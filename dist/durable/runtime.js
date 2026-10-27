@@ -33,7 +33,7 @@ import { AppendOutcomeUnknownError } from './fs-store.js';
 import { assertId, assertNonEmpty, stampEvent, verifyChain } from './log.js';
 import { applyEvent, cloneState, deliveryKey, foldEvents, foldUntil, planProblem } from './projection.js';
 import { planRetention } from './retention.js';
-import { GENESIS_HASH, TERMINAL_EVENT_TYPES, } from './types.js';
+import { GENESIS_HASH, TERMINAL_EVENT_TYPES, adoptedIsSuccess, } from './types.js';
 import { sha256Hex } from './canonical.js';
 const KIND_MAX = 100;
 const GOAL_MAX = 4000;
@@ -203,7 +203,10 @@ export class DurableTasks {
                     throw err;
                 outcome = await this.resolveUnknown(event);
             }
-            if (outcome === 'appended') {
+            // Only 'appended' proves this call won the slot. 'adopted' is success solely for the closed list of state-only
+            // events; for every other type (the rights-bearing ones and any unknown type) it is a lost race: re-read, re-plan,
+            // and never act on the strength of the matching event (Amendment-004G, 2.11).
+            if (outcome === 'appended' || (outcome === 'adopted' && adoptedIsSuccess(event.type))) {
                 this.remember(taskId, next);
                 return p.result(event, next);
             }
@@ -239,11 +242,15 @@ export class DurableTasks {
             throw err;
         }
     }
-    /** After an unknown publication outcome: is *our* event (same hash) the one in the slot? */
+    /**
+     * After an unknown publication outcome: is *our* event (same hash) the one in the slot? Matching bytes cannot prove
+     * that this call created the slot, so the answer is 'adopted', never 'appended' (Amendment-004G, F-G-3). A failing
+     * read propagates: the outcome stays unknown and no right is granted.
+     */
     async resolveUnknown(event) {
         const log = await this.store.readLog(event.taskId, { afterSeq: event.seq - 1 });
         const there = log.events[0];
-        return there !== undefined && there.seq === event.seq && there.hash === event.hash ? 'appended' : 'conflict';
+        return there !== undefined && there.seq === event.seq && there.hash === event.hash ? 'adopted' : 'conflict';
     }
     // =========================================================================
     // Tasks

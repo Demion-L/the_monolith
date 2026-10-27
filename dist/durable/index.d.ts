@@ -16,5 +16,5 @@ export { MAX_EVENT_BYTES } from './log.js';
 export { toJson, canonicalize, fingerprintOf } from './canonical.js';
 export type { Json } from './canonical.js';
 export * from './errors.js';
-export type { EventStore, TaskEvent, EventType, TaskState, TaskStatus, Tombstone, LogRead, Evidence, Criticality, PlanStepState, AwaitState, EffectState, AssumptionState, StoreDiagnostic, } from './types.js';
+export type { EventStore, TaskEvent, EventType, TaskState, TaskStatus, Tombstone, LogRead, Evidence, Criticality, PlanStepState, AwaitState, EffectState, AssumptionState, StoreDiagnostic, AppendOutcome, } from './types.js';
 //# sourceMappingURL=index.d.ts.map

@@ -240,7 +240,11 @@ export declare class DurableTasks {
      * a `ValidationError`, never a `LogCorruptError`: corruption is reserved for stored data that fails verification.
      */
     private precheck;
-    /** After an unknown publication outcome: is *our* event (same hash) the one in the slot? */
+    /**
+     * After an unknown publication outcome: is *our* event (same hash) the one in the slot? Matching bytes cannot prove
+     * that this call created the slot, so the answer is 'adopted', never 'appended' (Amendment-004G, F-G-3). A failing
+     * read propagates: the outcome stays unknown and no right is granted.
+     */
     private resolveUnknown;
     createTask(input: CreateTaskInput): Promise<{
         taskId: string;

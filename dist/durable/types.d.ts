@@ -145,6 +145,15 @@ export interface EventDataMap {
 }
 export type EventType = keyof EventDataMap;
 export declare const EVENT_TYPES: readonly EventType[];
+/**
+ * Events whose `'adopted'` append result counts as success (Amendment-004G, section 2.11 / 8.2). A closed list: none of
+ * these confers the right to an irreversible action, that right comes from another event won through the CAS.
+ * Everything not named here (the rights-bearing `task.created`, `run.claimed`, `effect.intended`, `await.resolved`,
+ * and any type added later) is deny-by-default: `'adopted'` is treated like `'conflict'`.
+ */
+export declare const ADOPTED_IS_SUCCESS_EVENT_TYPES: readonly EventType[];
+/** True only for a type named in the closed list; an unknown string is false (fail closed). */
+export declare function adoptedIsSuccess(type: string): boolean;
 export declare const TERMINAL_EVENT_TYPES: readonly EventType[];
 export type EventOf<T extends EventType> = {
     v: typeof EVENT_FORMAT_VERSION;
@@ -291,14 +300,23 @@ export interface Tombstone {
 export interface StoreDiagnostic {
     code: 'LOOSE_COPY_OF_COMPACTED_EVENT' | 'STAGING_RESIDUE_REPAIRED' | 'STAGING_FILE_PRESENT' | 'UNKNOWN_ENTRY'
     /** A tombstone exists but event/segment files of the pruned task are still on disk: an interrupted prune. */
-     | 'PRUNE_INCOMPLETE';
+     | 'PRUNE_INCOMPLETE'
+    /** The prune decision register has an artifact that is not part of its grammar (an operator's `.bak`, say). */
+     | 'UNKNOWN_PRUNE_ARTIFACT';
     taskId: string;
     name: string;
 }
 export interface LogRead {
     /** False when the task directory does not exist and no tombstone is present. */
     exists: boolean;
+    /**
+     * Set when the task is pruned (`committed`), AND — for consumers written against the pre-register protocol — while a
+     * prune attempt is open (`preparing`): they treat "tombstone visible, data intact" as a prune that is not settled.
+     * `prune.kind` tells the two apart.
+     */
     tombstone: Tombstone | null;
+    /** The observed prune state when it is anything but `live`. Informational; the register is the authority. */
+    prune?: PruneState;
     /** Verified-contiguous in seq, ascending, `seq > afterSeq`. Hash chain is verified by the caller. */
     events: TaskEvent[];
     /** Highest seq already packed into immutable segments (0 if none). Informational; used to plan compaction. */
@@ -310,6 +328,40 @@ export interface CompactionResult {
     packedEvents: number;
     removedFiles: number;
 }
+/** Number of prune attempts a task may ever use. A liveness limit; attempt numbers are never reused or reset. */
+export declare const MAX_PRUNE_ATTEMPTS = 1000;
+export type PruneOutcome = 'commit' | 'abort';
+/** Who published an `abort`. Diagnostic only; it never changes the semantics of the decision. */
+export type DecisionBy = 'pruner' | 'child' | 'creator' | 'claim' | 'append' | 'compact' | 'pin';
+export type PruneStateKind = 'live' | 'preparing' | 'committed' | 'missing' | 'corrupt' | 'unreadable' | 'legacy';
+/**
+ * What the register says about a task, derived from the names and contents of its directory (Design A, section 20.2).
+ * Nothing here is persisted and nothing is written by computing it. `corrupt`, `unreadable`, `missing` and `legacy`
+ * never grant the right to an irreversible action.
+ */
+export interface PruneState {
+    kind: PruneStateKind;
+    /** `preparing` / `committed`: the attempt number. `live`: the highest attempt number seen (0 if none). */
+    attempt?: number;
+    /** `preparing` / `committed`: the tombstone of the attempt. `legacy`: the legacy tombstone. */
+    tombstone?: Tombstone;
+    /** `corrupt`: the finding; `unreadable`: what could not be read or confirmed. */
+    reason?: string;
+    /** `corrupt` / `legacy`: whether the finding rests on present files (`present`) or on confirmed absence (`lookup`). */
+    basis?: 'present' | 'lookup';
+    /** `corrupt`: the register file the finding is about, if any. */
+    file?: string;
+    /** `committed`: files of the pruned task that are still on disk (`> 0` means deleting, `0` means gone). Not monotonic. */
+    residue?: number;
+    /** `committed`: the commit was written by the legacy migration procedure. */
+    migrated?: boolean;
+    /** Findings that do not change the verdict (`UNKNOWN_PRUNE:<name>`). */
+    anomalies?: string[];
+    /** `committed`. Mode A only: the commit is visible to every process, but survival of an OS crash is NOT guaranteed. */
+    durability?: 'NOT_GUARANTEED';
+}
+/** Result of `EventStore.append` (Amendment-004G, CEI-6). Only `'appended'` carries the right of the slot's winner. */
+export type AppendOutcome = 'appended' | 'adopted' | 'conflict';
 /**
  * The persistence contract. A backend must provide ONE linearizable primitive:
  * `append` publishes an event at `event.seq` if and only if that slot is free,
@@ -318,15 +370,32 @@ export interface CompactionResult {
  * so a SQL/KV backend can implement it with a unique key.
  */
 export interface EventStore {
+    /**
+     * `rawEvents`: return the events of a task whose prune attempt is open (`prune.kind === 'preparing'`) instead of
+     * hiding them behind the transitional tombstone. A pruner needs the head of the log AFTER its `prepare` is visible.
+     */
     readLog(taskId: string, opts?: {
         afterSeq?: number;
+        rawEvents?: boolean;
     }): Promise<LogRead>;
-    append(event: TaskEvent): Promise<'appended' | 'conflict'>;
+    /**
+     * Amendment-004G. `'appended'`: this call created the first file of the slot and the canonical content is the event
+     * (the right derived from winning the slot). `'adopted'`: the canonical content equals the event, but this call cannot
+     * prove it created the slot (EEXIST, evidence through a segment, a retry). `'conflict'`: the slot holds another event.
+     */
+    append(event: TaskEvent): Promise<AppendOutcome>;
     listTaskIds(): Promise<string[]>;
     /** Pack verified events `1..throughSeq` into immutable storage, then drop the loose copies. Idempotent. */
     compact(taskId: string, throughSeq: number, events: TaskEvent[]): Promise<CompactionResult>;
-    /** Write the tombstone, then remove the task's data. Idempotent: a second call finishes an interrupted one. */
-    prune(tombstone: Tombstone): Promise<{
+    /**
+     * Low-level prune, always through the decision register: make sure there is a `commit` for the tombstone (publishing
+     * the attempt and the commit itself when there is none and `requireCommit` is not set — this form does NOT look for
+     * referrers), publish `tombstone.json` from the commit, then remove the task's data. Idempotent: a second call
+     * finishes an interrupted one. With `requireCommit` it refuses unless a verified `commit` already exists.
+     */
+    prune(tombstone: Tombstone, opts?: {
+        requireCommit?: boolean;
+    }): Promise<{
         removedFiles: number;
     }>;
     /**
@@ -345,12 +414,29 @@ export interface EventStore {
         childId: string;
         at: string;
     }>>;
-    /** First half of `prune`: publish the tombstone, remove nothing. Idempotent. */
+    /** Adapter of the pre-register protocol: open a prune attempt (`preparePrune`), remove nothing. Idempotent. */
     markPruned?(tombstone: Tombstone): Promise<void>;
     /**
-     * Undo `markPruned` while the task's data is still complete (verified up to the tombstone's head hash).
-     * Throws if the data is no longer intact: a prune that already started removing files cannot be withdrawn.
+     * Adapter of the pre-register protocol: `decidePrune(abort)` for the open attempt. Throws `TombstoneCommittedError`
+     * when the register says `commit`: a committed prune cannot be taken back.
      */
     withdrawTombstone?(tombstone: Tombstone): Promise<void>;
+    /**
+     * Publish the next attempt (`prune-<n>.prepare.json`, create-only) for a task in state `live`, or accept the attempt
+     * that is already open (`preparing`). `n = 1 + the highest attempt ever seen`; numbers are never reused. Refuses
+     * (`PruneAttemptLimitError`) when `n > MAX_PRUNE_ATTEMPTS`, and in every other state.
+     */
+    preparePrune?(tombstone: Tombstone): Promise<{
+        attempt: number;
+        created: boolean;
+    }>;
+    /**
+     * Publish the decision of an attempt (create-only, first writer wins) and return the VALUE OF THE REGISTER, which is
+     * not necessarily the value asked for. Only for an attempt whose valid `prepare` is visible. A `commit` must carry the
+     * tombstone of the attempt. It never deletes or rewrites a decision.
+     */
+    decidePrune?(taskId: string, attempt: number, outcome: PruneOutcome, tombstone?: Tombstone, by?: DecisionBy): Promise<PruneOutcome>;
+    /** Derive the state of the register (Design A, section 20.2). Read-only; never repairs and never deletes. */
+    pruneState?(taskId: string): Promise<PruneState>;
 }
 //# sourceMappingURL=types.d.ts.map

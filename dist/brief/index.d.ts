@@ -4,4 +4,6 @@ export { render, DEFAULT_MAX_CHARS } from './render.js';
 export type { RenderResult, Completeness } from './render.js';
 export { runBrief, parseBriefArgs } from './cli.js';
 export type { BriefArgsResult, BriefArgsOk, BriefArgsErr } from './cli.js';
+export { evaluateFreshness } from './freshness.js';
+export type { FreshnessStatus, FreshnessResult, FreshnessEvidence, FreshnessReason, GitSignals } from './freshness.js';
 //# sourceMappingURL=index.d.ts.map

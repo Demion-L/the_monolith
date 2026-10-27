@@ -11,14 +11,16 @@
  * `listCheckpoints()` (which each independently re-read the file).
  */
 import { existsSync } from 'fs';
-import { join, relative } from 'path';
+import { join, relative, posix } from 'path';
 import { readBriefConfig } from './config.js';
 import { resolveMonolithRootValue, checkContainedFile, readBoundedFileStable, isReadSecurityViolation, findWriteArtifacts, describeWriteArtifacts, } from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import { selectActiveMissions, selectRecentFinishedMissions, selectLatestCheckpoint, hasCheckpointOrderMismatch, } from './selectors.js';
 import { stateFilePath, validateState, createInitialState, MAX_STATE_BYTES } from '../coordinatorium/index.js';
-import { ACTIVE_MD_REL, STANDARD_ADR_DIR, PROTOCOLS_DIR } from './constants.js';
+import { ACTIVE_MD_REL, STANDARD_ADR_DIR, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
+import { evaluateFreshness, parseActiveStoryClaim, parseRoadmapActiveStory, parseRoadmapStatuses, parseStoryIndexStatuses, } from './freshness.js';
+import { readGitSignals } from './git-signals.js';
 const RECENT_FINISHED_MISSIONS_LIMIT = 5;
 /** SEC-001B.1: `active.md` is a short hand-written context file (~3 KB today). */
 export const MAX_ACTIVE_CONTEXT_BYTES = 256 * 1024;
@@ -209,6 +211,34 @@ function collectStory(targetDir, monolithRoot, root, diagnostics) {
         provenance: { source: extraction.lineRange ? `${relPath}:${extraction.lineRange}` : relPath },
     };
 }
+/**
+ * Best-effort read of one state document for the freshness check. A missing,
+ * refused or unreadable file simply contributes no evidence — freshness never
+ * adds a diagnostic of its own and never makes the brief INCOMPLETE.
+ */
+function readStateDocument(targetDir, monolithRoot, root, rel) {
+    if (checkContainedFile(root, rel))
+        return null;
+    const abs = join(targetDir, monolithRoot, rel);
+    const read = readBoundedFileStable(abs, relative(targetDir, abs), { boundary: targetDir, maxBytes: MAX_ACTIVE_CONTEXT_BYTES, allowEmpty: true }, true);
+    return read.ok && 'content' in read ? read.content : null;
+}
+function collectFreshness(targetDir, monolithRoot, root, story) {
+    const docs = [ACTIVE_MD_REL, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL];
+    const stateFiles = docs.map((rel) => posix.normalize(`${monolithRoot}/${rel}`));
+    const content = new Map(docs.map((rel) => [rel, readStateDocument(targetDir, monolithRoot, root, rel)]));
+    const roadmap = content.get(ROADMAP_INDEX_REL) ?? null;
+    const storyIndex = content.get(STORY_INDEX_REL) ?? null;
+    return evaluateFreshness({
+        git: readGitSignals(targetDir, stateFiles),
+        activeStory: story.fileExists && story.hasCurrentStorySection ? parseActiveStoryClaim(story.excerpt) : { kind: 'unknown' },
+        roadmapActiveStory: roadmap === null ? null : parseRoadmapActiveStory(roadmap),
+        roadmapStatuses: roadmap === null ? new Map() : parseRoadmapStatuses(roadmap),
+        storyIndexStatuses: storyIndex === null ? new Map() : parseStoryIndexStatuses(storyIndex),
+        recordedText: [...content.values()].filter((c) => c !== null).join('\n'),
+        stateFiles: new Set(stateFiles),
+    });
+}
 export async function collect(targetDir) {
     const diagnostics = [];
     const config = readBriefConfig(targetDir, diagnostics);
@@ -244,6 +274,7 @@ export async function collect(targetDir) {
     const missions = collectMissions(targetDir, config.monolithRoot, state, diagnostics);
     const checkpoints = collectCheckpoints(targetDir, config.monolithRoot, state, missions.active, diagnostics);
     const story = collectStory(targetDir, config.monolithRoot, root, diagnostics);
+    const freshness = collectFreshness(targetDir, config.monolithRoot, root, story);
     const protocolsRelDir = `${config.monolithRoot}/${PROTOCOLS_DIR}`;
     const mandatoryProtocols = {
         items: discoverDocs(targetDir, [protocolsRelDir], (fields) => fields.get('enforcement') === 'mandatory', diagnostics),
@@ -264,5 +295,6 @@ export async function collect(targetDir) {
         mandatoryProtocols,
         adrs,
         diagnostics,
+        freshness,
     };
 }

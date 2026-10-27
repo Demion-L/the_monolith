@@ -5,6 +5,7 @@ import CheckpointsPanel from '../components/CheckpointsPanel.vue';
 import CurrentMission from '../components/CurrentMission.vue';
 import RoadmapPanel from '../components/RoadmapPanel.vue';
 import { normalScenario } from '../fixtures/dashboard';
+import { goTo, sweep } from './nav';
 
 // DEMO is only entered explicitly; these tests exercise the synthetic fixtures.
 beforeEach(() => {
@@ -30,10 +31,12 @@ describe('dashboard', () => {
     }
   });
 
-  it('renders all five sections', () => {
+  it('renders all five sections, one at a time', async () => {
     const w = mount(App);
     for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'diagnostics']) {
+      await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
+      expect(w.findAll('main section')).toHaveLength(1);
     }
   });
 
@@ -55,16 +58,21 @@ describe('dashboard', () => {
 
   it('shows empty states in the empty scenario', async () => {
     const w = await appWith('empty');
-    expect(w.text()).toContain('No active missions.');
-    expect(w.text()).toContain('No checkpoints recorded.');
+    const text = (await sweep(w, () => w.text())).join('|');
+    expect(text).toContain('No active missions.');
+    expect(text).toContain('No checkpoints recorded.');
     expect(w.findAll('[data-testid="mission"]')).toHaveLength(0);
   });
 
   it('shows UNKNOWN for missing data in the partial scenario', async () => {
     const w = await appWith('partial');
-    expect(w.findAll('.unknown').length).toBeGreaterThan(3);
+    const unknown = (await sweep(w, () => w.findAll('.unknown').length)).reduce((a, b) => a + b, 0);
+    expect(unknown).toBeGreaterThan(3);
+    await goTo(w, 'mission');
     expect(w.get('#mission').text()).toContain('UNKNOWN');
+    await goTo(w, 'roadmap');
     expect(w.get('#roadmap').text()).toContain('NOT AVAILABLE');
+    await goTo(w, 'diagnostics');
     expect(w.get('[data-testid="missing"]').text()).toContain('overview.description');
   });
 
@@ -106,34 +114,41 @@ describe('dashboard', () => {
   it('leaves no stale data when switching normal -> partial -> empty -> normal', async () => {
     const w = mount(App);
     const select = w.get('[data-testid="scenario-select"]');
+    const all = async () => (await sweep(w, () => w.text())).join('|');
     const diagnostics = () => w.findAll('[data-testid="diagnostic"]').map((d) => d.text());
+    // The scenario select stays in the topbar while sections change.
+    const count = async (sel: string) => (await sweep(w, () => w.findAll(sel).length)).reduce((a, b) => a + b, 0);
 
-    expect(w.text()).toContain('MIS-0003');
+    let text = await all();
+    expect(text).toContain('MIS-0003');
     expect(diagnostics().join('|')).toContain('Fixture "normal" loaded.');
 
     await select.setValue('partial');
-    expect(w.text()).toContain('MIS-0007');
-    expect(w.text()).not.toContain('MIS-0003');
-    expect(w.text()).not.toContain('Validate offset ranges');
-    expect(w.text()).not.toContain('Tidewatch roadmap');
+    text = await all();
+    expect(text).toContain('MIS-0007');
+    expect(text).not.toContain('MIS-0003');
+    expect(text).not.toContain('Validate offset ranges');
+    expect(text).not.toContain('Tidewatch roadmap');
     expect(diagnostics().join('|')).toContain('Fixture "partial" loaded.');
     expect(diagnostics().join('|')).not.toContain('Fixture "normal" loaded.');
     expect(w.get('[data-testid="missing"]').text()).toContain('overview.description');
 
     await select.setValue('empty');
-    expect(w.text()).not.toContain('MIS-0007');
-    expect(w.findAll('[data-testid="mission"]')).toHaveLength(0);
-    expect(w.findAll('[data-testid="checkpoint"]')).toHaveLength(0);
-    expect(w.text()).toContain('Roadmap is empty.');
+    text = await all();
+    expect(text).not.toContain('MIS-0007');
+    expect(await count('[data-testid="mission"]')).toBe(0);
+    expect(await count('[data-testid="checkpoint"]')).toBe(0);
+    expect(text).toContain('Roadmap is empty.');
     expect(diagnostics()).toEqual(['info Fixture "empty" loaded.']);
     expect(w.find('[data-testid="missing"]').exists()).toBe(false);
-    expect(w.find('.unknown').exists()).toBe(false);
+    expect(await count('.unknown')).toBe(0);
 
     await select.setValue('normal');
-    expect(w.findAll('[data-testid="mission"]')).toHaveLength(2);
-    expect(w.text()).toContain('MIS-0003');
-    expect(w.text()).not.toContain('MIS-0007');
-    expect(w.text()).not.toContain('Roadmap is empty.');
+    text = await all();
+    expect(await count('[data-testid="mission"]')).toBe(2);
+    expect(text).toContain('MIS-0003');
+    expect(text).not.toContain('MIS-0007');
+    expect(text).not.toContain('Roadmap is empty.');
     expect(diagnostics().join('|')).toContain('Fixture "normal" loaded.');
     expect(diagnostics().join('|')).not.toContain('Fixture "empty" loaded.');
   });

@@ -4,6 +4,7 @@ import type { DashboardReadModel } from '../../../src/readmodel/types';
 import App from '../App.vue';
 import { DASHBOARD_ENDPOINT, DashboardLoadError, fetchDashboard } from '../live/client';
 import { toDashboardData } from '../live/adapter';
+import { goTo, sweep } from './nav';
 
 const src = (id: string, status = 'available', code: string | null = null) =>
   ({ id, path: `.monolith/${id}`, status, code }) as never;
@@ -129,6 +130,7 @@ describe('F-1: checkpoint count', () => {
     stubFetch(json(withCount(5)));
     const w = mount(App);
     await flushPromises();
+    await goTo(w, 'checkpoints');
     const panel = w.get('#checkpoints');
     expect(panel.text()).toContain('Latest checkpoint per active mission');
     expect(panel.text()).toContain('Live checkpoint');
@@ -140,6 +142,7 @@ describe('F-1: checkpoint count', () => {
     stubFetch(json(withCount(1)));
     const w = mount(App);
     await flushPromises();
+    await goTo(w, 'checkpoints');
     expect(w.get('[data-testid="checkpoint-count"]').text()).toBe('1 recorded checkpoint');
   });
 
@@ -149,12 +152,14 @@ describe('F-1: checkpoint count', () => {
     stubFetch(json(empty));
     let w = mount(App);
     await flushPromises();
+    await goTo(w, 'checkpoints');
     expect(w.get('#checkpoints').text()).toContain('No checkpoints recorded.');
     expect(w.get('#checkpoints').text()).not.toContain('NOT AVAILABLE');
 
     stubFetch(json(model({ checkpoints: { data: null, sources: [src('state', 'corrupt', 'PARSE_ERROR')] } })));
     w = mount(App);
     await flushPromises();
+    await goTo(w, 'checkpoints');
     expect(w.get('#checkpoints').text()).toContain('NOT AVAILABLE');
     expect(w.get('#checkpoints').text()).not.toMatch(/recorded checkpoint|0 recorded/);
     expect(w.find('[data-testid="checkpoint-count"]').exists()).toBe(false);
@@ -190,15 +195,19 @@ describe('App in LIVE mode (default)', () => {
     expect(w.get('[data-testid="live-badge"]').text()).toBe('LIVE DATA');
     expect(w.find('[data-testid="demo-badge"]').exists()).toBe(false);
     expect(w.find('[data-testid="scenario-select"]').exists()).toBe(false);
+    const seen: string[] = [];
     for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'diagnostics']) {
+      await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
+      seen.push(w.text());
     }
-    expect(w.text()).toContain('MIS-0001');
-    expect(w.text()).toContain('Live mission');
-    expect(w.text()).toContain('Live checkpoint');
-    expect(w.text()).toContain('Live step');
-    expect(w.text()).toContain('MULTIPLE_ACTIVE_MISSIONS');
-    expect(w.text()).not.toContain('Tidewatch');
+    const text = seen.join('|');
+    expect(text).toContain('MIS-0001');
+    expect(text).toContain('Live mission');
+    expect(text).toContain('Live checkpoint');
+    expect(text).toContain('Live step');
+    expect(text).toContain('MULTIPLE_ACTIVE_MISSIONS');
+    expect(text).not.toContain('Tidewatch');
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -206,12 +215,12 @@ describe('App in LIVE mode (default)', () => {
     stubFetch(json(model()));
     const w = mount(App);
     await flushPromises();
-    expect(w.get('[data-testid="roadmap-text"]').element.textContent).toContain('<script>window.__pwn=1</script>');
     expect(w.get('[data-testid="current-story"]').element.textContent).toContain('<img src=x onerror=alert(1)>');
     expect(w.text()).toContain('Real <b>Project</b>');
-    expect(w.find('script').exists()).toBe(false);
-    expect(w.find('img').exists()).toBe(false);
-    expect(w.find('b').exists()).toBe(false);
+    await goTo(w, 'roadmap');
+    expect(w.get('[data-testid="roadmap-text"]').element.textContent).toContain('<script>window.__pwn=1</script>');
+    const injected = await sweep(w, () => ['script', 'img', 'b'].some((t) => w.find(t).exists()));
+    expect(injected).toEqual([false, false, false, false, false]);
     expect((window as unknown as { __pwn?: number }).__pwn).toBeUndefined();
   });
 
@@ -222,8 +231,10 @@ describe('App in LIVE mode (default)', () => {
     })));
     const w = mount(App);
     await flushPromises();
+    await goTo(w, 'mission');
     expect(w.get('#mission').text()).toContain('NOT AVAILABLE');
     expect(w.get('#mission').text()).not.toContain('No active missions.');
+    await goTo(w, 'checkpoints');
     expect(w.get('#checkpoints').text()).toContain('NOT AVAILABLE');
   });
 
@@ -266,9 +277,11 @@ describe('App in LIVE mode (default)', () => {
     const spy = stubFetch(json(model()), json(updated));
     const w = mount(App);
     await flushPromises();
+    await goTo(w, 'mission');
     expect(w.text()).toContain('Live mission');
     await w.get('[data-testid="refresh"]').trigger('click');
     await flushPromises();
+    // The selected section survives the refresh.
     expect(spy).toHaveBeenCalledTimes(2);
     expect(w.text()).toContain('Updated title');
     expect(w.text()).not.toContain('Live mission');
@@ -278,6 +291,7 @@ describe('App in LIVE mode (default)', () => {
     stubFetch(json(model()), json({ error: { code: 'INTERNAL_ERROR' } }, 500));
     const w = mount(App);
     await flushPromises();
+    await goTo(w, 'mission');
     expect(w.text()).toContain('Live mission');
     await w.get('[data-testid="refresh"]').trigger('click');
     await flushPromises();

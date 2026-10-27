@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CheckpointsPanel from './components/CheckpointsPanel.vue';
 import CurrentMission from './components/CurrentMission.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
@@ -8,6 +8,8 @@ import RoadmapPanel from './components/RoadmapPanel.vue';
 import SideNav from './components/SideNav.vue';
 import { scenarioIds, scenarios } from './fixtures/dashboard';
 import { toDashboardData } from './live/adapter';
+import { DEFAULT_SECTION, isSectionId, sectionFromHash } from './sections';
+import type { SectionId } from './sections';
 import { DashboardLoadError, fetchDashboard } from './live/client';
 import type { DashboardLoadState } from './live/client';
 import type { ScenarioId } from './types/dashboard';
@@ -40,8 +42,45 @@ async function load(): Promise<void> {
   }
 }
 
+// The active section lives in the URL hash and is only a view choice: the data
+// above is loaded once and never refetched when sections change.
+const section = ref<SectionId>(sectionFromHash(window.location.hash));
+
+// An unknown hash is replaced, not pushed: Back must not return to it.
+function normalizeHash(): void {
+  const hash = window.location.hash;
+  if (hash !== '' && !isSectionId(hash.slice(1))) {
+    window.history.replaceState(window.history.state, '', `#${DEFAULT_SECTION}`);
+  }
+}
+
+function syncFromHash(): void {
+  normalizeHash();
+  section.value = sectionFromHash(window.location.hash);
+}
+
+function selectSection(id: SectionId): void {
+  if (id === section.value && window.location.hash === `#${id}`) return;
+  // pushState adds a history entry without the browser scrolling to an anchor.
+  window.history.pushState(window.history.state, '', `#${id}`);
+  section.value = id;
+}
+
+// Scroll back to the top once the old section is gone, so the new one starts in view.
+function onSectionLeft(): void {
+  if (window.scrollY > 0) window.scrollTo({ top: 0 });
+}
+
 onMounted(() => {
+  normalizeHash();
+  window.addEventListener('hashchange', syncFromHash);
+  window.addEventListener('popstate', syncFromHash);
   if (!demo) void load();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', syncFromHash);
+  window.removeEventListener('popstate', syncFromHash);
 });
 
 const data = computed(() => {
@@ -53,7 +92,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
 
 <template>
   <div class="shell">
-    <SideNav :sections="data !== null" />
+    <SideNav :sections="data !== null" :active="section" @select="selectSection" />
     <div class="shell-main">
       <header class="topbar">
         <div class="project">{{ data?.overview.name ?? 'UNKNOWN' }}</div>
@@ -71,11 +110,13 @@ const loading = computed(() => !demo && live.value.status === 'loading');
         </div>
       </header>
       <main v-if="data" class="content">
-        <ProjectOverview :overview="data.overview" />
-        <CurrentMission :missions="data.missions" />
-        <CheckpointsPanel :checkpoints="data.checkpoints" />
-        <RoadmapPanel :text="data.roadmapText" />
-        <DiagnosticsPanel :data="data" />
+        <Transition name="section-fade" mode="out-in" @after-leave="onSectionLeft">
+          <ProjectOverview v-if="section === 'overview'" key="overview" :overview="data.overview" />
+          <CurrentMission v-else-if="section === 'mission'" key="mission" :missions="data.missions" />
+          <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
+          <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" />
+          <DiagnosticsPanel v-else key="diagnostics" :data="data" />
+        </Transition>
       </main>
       <main v-else class="content">
         <section v-if="live.status === 'error'" class="panel" role="alert" data-testid="load-error">

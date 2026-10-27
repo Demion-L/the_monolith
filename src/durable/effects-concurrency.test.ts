@@ -20,6 +20,8 @@ import { MemoryEventStore } from './memory-store.js';
 import { EffectInDoubtError, LogCorruptError, StaleFenceError } from './errors.js';
 import type { EventStore } from './types.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 const dirs: string[] = [];
 afterEach(() => {
   while (dirs.length) rmSync(dirs.pop() as string, { recursive: true, force: true });
@@ -47,7 +49,7 @@ const backends: Array<[string, () => EventStore]> = [
     () => {
       const dir = mkdtempSync(join(tmpdir(), 'durable-eff-'));
       dirs.push(dir);
-      return new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' });
+      return initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }));
     },
   ],
 ];

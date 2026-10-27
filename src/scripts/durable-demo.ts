@@ -45,8 +45,12 @@ const scenario = (arg('--scenario') ?? 'direct') as Scenario;
 const clockOffsetMs = Number(arg('--clock-offset-days') ?? 0) * DAY;
 
 function openRuntime(): DurableTasks {
+  const store = new FsEventStore({ target: { scope: 'trusted-directory', dir: join(dir, 'durable') } });
+  // This program is an explicit, operator-run demonstration over a store of its own: it initializes it (a no-op when
+  // already initialized). A real deployment does this once, deliberately, never as a side effect of opening the store.
+  store.initializeProtocolSync();
   return new DurableTasks({
-    store: new FsEventStore({ target: { scope: 'trusted-directory', dir: join(dir, 'durable') } }),
+    store,
     now: () => new Date(Date.now() + clockOffsetMs),
     defaultLeaseMs: 60_000,
   });

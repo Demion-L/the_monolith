@@ -15,6 +15,8 @@ import { spawn, type ChildProcess } from 'child_process';
 import ts from 'typescript';
 import { DurableTasks } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
+
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 import { RetentionRefusedError } from './errors.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -86,7 +88,7 @@ const tmp = (p: string): string => {
   return d;
 };
 const openRt = (dir: string, now?: () => Date): DurableTasks =>
-  new DurableTasks({ store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }), referenceGraceMs: GRACE, ...(now ? { now } : {}) });
+  new DurableTasks({ store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })), referenceGraceMs: GRACE, ...(now ? { now } : {}) });
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const waitFor = async (p: string, ms = 15000): Promise<void> => {
   const t0 = Date.now();
@@ -156,12 +158,17 @@ describe('pending prune with real processes (N-6)', () => {
     const pruner = await prunerStoppedAfterTombstone(dir, ctl, ['C']);
     pruner.proc.kill('SIGKILL');
     await pruner.out;
-    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(true);
+    const prepared = join(dir, 'tasks', 'P', 'prune-1.prepare.json');
+    const decided = join(dir, 'tasks', 'P', 'prune-1.decision.json');
+    expect(existsSync(prepared)).toBe(true); // the attempt is open: PREPARING in the register
+    expect(existsSync(decided)).toBe(false);
+    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(false); // tombstone.json exists only after a commit
     const rt = openRt(dir); // "restart"
     expect((await rt.assess('C')).claimable).toBe(false); // read-only view: pending
-    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(true);
+    expect(existsSync(decided)).toBe(false); // assess wrote nothing
     expect((await rt.findResumable()).map((x) => x.taskId)).toEqual(['C']);
     expect((await rt.claim('C', { owner: 'w' })).epoch).toBe(1);
+    expect(existsSync(decided)).toBe(true); // the claim closed the attempt with an abort
     expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(false);
     expect((await rt.verify()).every((r) => r.ok)).toBe(true);
   }, 60_000);

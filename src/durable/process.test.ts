@@ -15,6 +15,8 @@ import ts from 'typescript';
 import { DurableTasks } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
 let build: string;
@@ -117,7 +119,7 @@ function run(args: string[]): Promise<Done> {
     c.on('close', (code, signal) => resolve({ code, signal, stdout }));
   });
 }
-const openRt = (dir: string): DurableTasks => new DurableTasks({ store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }) });
+const openRt = (dir: string): DurableTasks => new DurableTasks({ store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })) });
 
 describe('multiple OS processes', () => {
   it('6 processes appending 20 events each lose nothing and keep one valid chain', async () => {

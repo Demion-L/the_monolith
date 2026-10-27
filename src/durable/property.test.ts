@@ -16,6 +16,8 @@ import { foldEvents, foldUntil } from './projection.js';
 import { canonicalize, type Json } from './canonical.js';
 import type { EventStore } from './types.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 function rng(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
@@ -130,7 +132,7 @@ describe('randomized sequences', () => {
       const dir = mkdtempSync(join(tmpdir(), 'durable-fuzz-'));
       dirs.push(dir);
       try {
-        await oneSequence(seed, () => new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }), 90);
+        await oneSequence(seed, () => initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })), 90);
       } catch (err) {
         throw new Error(`seed ${seed}: ${(err as Error).stack ?? err}`);
       }

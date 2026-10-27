@@ -26,7 +26,10 @@ export type DurableErrorCode =
   | 'EFFECT_FAILED'
   | 'EFFECT_CONFLICT'
   | 'EFFECT_NOT_EXECUTED'
-  | 'RETENTION_REFUSED';
+  | 'RETENTION_REFUSED'
+  | 'PRUNE_DECISION_CORRUPT'
+  | 'PRUNE_ATTEMPT_LIMIT'
+  | 'STORE_PROTOCOL';
 
 export class DurableError extends Error {
   readonly code: DurableErrorCode;
@@ -237,5 +240,62 @@ export class RetentionRefusedError extends DurableError {
   constructor(readonly taskId: string, readonly why: string) {
     super('RETENTION_REFUSED', `refusing to prune task "${taskId}": ${why}`);
     this.name = 'RetentionRefusedError';
+  }
+}
+
+/** Why the prune decision register of a task cannot be trusted (Design A, section 20.4). */
+export type PruneCorruptReason =
+  | 'register'
+  | 'gap'
+  | 'unknown-artifact'
+  | 'commit-audit'
+  | 'multiple-commit'
+  | 'history'
+  | 'task-dir-missing'
+  | 'tombstone-without-commit'
+  | 'legacy-tombstone-unmigrated';
+
+/**
+ * The persisted prune decision register of a task is corrupt, or the task directory is missing, or it is an
+ * unmigrated legacy tombstone. Fail closed: nothing is deleted and nobody is cancelled; an operator decides.
+ * Never mapped to `TaskOrphanedError`, `RetentionRefusedError` or a quarantine, and never retryable.
+ * `published` is true when a write the caller made is already visible (the outcome of that write is unknown).
+ */
+export class PruneDecisionCorruptError extends DurableError {
+  readonly retryable = false;
+  constructor(
+    readonly taskId: string,
+    readonly reason: PruneCorruptReason,
+    readonly file: string | null = null,
+    readonly attempt: number | null = null,
+    readonly published = false,
+  ) {
+    super(
+      'PRUNE_DECISION_CORRUPT',
+      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}); nothing was deleted or cancelled.`,
+    );
+    this.name = 'PruneDecisionCorruptError';
+  }
+}
+
+/** The attempt number would exceed `MAX_PRUNE_ATTEMPTS`. A liveness limit: numbers are never reused or reset. */
+export class PruneAttemptLimitError extends DurableError {
+  constructor(readonly taskId: string, readonly attempts: number) {
+    super('PRUNE_ATTEMPT_LIMIT', `task "${taskId}" has used all ${attempts} prune attempts; raise the limit or find out why they keep being aborted.`);
+    this.name = 'PruneAttemptLimitError';
+  }
+}
+
+export type StoreProtocolCode = 'PROTOCOL_NOT_INITIALIZED' | 'PROTOCOL_UNSUPPORTED' | 'PROTOCOL_STORE_NOT_EMPTY';
+
+/**
+ * The store does not carry a usable `durable-protocol.json`: it is uninitialized (read-only diagnostics only), has a
+ * version this build does not understand, or cannot be initialized because it already holds tasks. The marker is
+ * created only by an explicit operator action, never by opening the store.
+ */
+export class StoreProtocolError extends DurableError {
+  constructor(message: string, readonly detailCode: StoreProtocolCode) {
+    super('STORE_PROTOCOL', message);
+    this.name = 'StoreProtocolError';
   }
 }

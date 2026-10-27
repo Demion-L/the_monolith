@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, symlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { runDurable, openDurable } from './cli.js';
+import { runDurable, openDurable, initializeDurable } from './cli.js';
 
 let proj: string;
 beforeEach(() => {
@@ -20,6 +20,7 @@ async function cli(...args: string[]): Promise<{ code: number; out: string; err:
 
 describe('monolith durable', () => {
   it('lists, shows, assesses and prints a resume packet', async () => {
+    initializeDurable(proj);
     const rt = openDurable(proj);
     await rt.createTask({ taskId: 'job1', kind: 'k', goal: 'g' });
     const f = await rt.claim('job1', { owner: 'w' });
@@ -45,6 +46,7 @@ describe('monolith durable', () => {
   });
 
   it('verify exits 2 on a damaged log and names the task', async () => {
+    initializeDurable(proj);
     const rt = openDurable(proj);
     await rt.createTask({ taskId: 'good', kind: 'k', goal: 'g' });
     await rt.createTask({ taskId: 'bad', kind: 'k', goal: 'g' });
@@ -57,6 +59,7 @@ describe('monolith durable', () => {
   });
 
   it('retention is a dry run unless --apply is given', async () => {
+    initializeDurable(proj);
     const rt = openDurable(proj);
     await rt.createTask({ taskId: 'old', kind: 'k', goal: 'g' });
     const f = await rt.claim('old', { owner: 'w' });

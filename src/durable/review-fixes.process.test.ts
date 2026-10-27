@@ -16,6 +16,8 @@ import ts from 'typescript';
 import { DurableTasks } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 const here = dirname(fileURLToPath(import.meta.url));
 const srcRoot = join(here, '..');
 let build: string;
@@ -157,7 +159,7 @@ const tmp = (prefix: string): string => {
   dirs.push(d);
   return d;
 };
-const openRt = (dir: string): DurableTasks => new DurableTasks({ store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }) });
+const openRt = (dir: string): DurableTasks => new DurableTasks({ store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })) });
 
 interface Child {
   proc: ChildProcess;
@@ -307,8 +309,9 @@ describe('D-7 across real processes', () => {
     const creator = spawnChild([dir, 'create-child', ctl, 'C', 'gate-after-pin']);
     await waitFor(() => exists(ctl, 'pinned')); // pin published, child not yet
     writeFileSync(join(ctl, 'go-prune'), '');
-    await waitFor(() => exists(ctl, 'marked')); // tombstone is up
-    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(true);
+    await waitFor(() => exists(ctl, 'marked')); // the prune attempt is open
+    expect(existsSync(join(dir, 'tasks', 'P', 'prune-1.prepare.json'))).toBe(true);
+    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(false); // published only from a commit
     writeFileSync(join(ctl, 'go-publish'), ''); // the creator publishes while the tombstone is up
     await waitFor(() => existsSync(join(dir, 'tasks', 'C', 'events', '000000001.json')));
     writeFileSync(join(ctl, 'go-scan'), ''); // now the pruner looks again

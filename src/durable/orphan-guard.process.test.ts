@@ -14,6 +14,8 @@ import { spawn, type ChildProcess } from 'child_process';
 import ts from 'typescript';
 import { DurableTasks } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
+
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 import { TaskOrphanedError, TaskPrunedError } from './errors.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -88,7 +90,7 @@ const tmp = (p: string): string => {
   return d;
 };
 const openRt = (dir: string, now?: () => Date): DurableTasks =>
-  new DurableTasks({ store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }), referenceGraceMs: GRACE, ...(now ? { now } : {}) });
+  new DurableTasks({ store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })), referenceGraceMs: GRACE, ...(now ? { now } : {}) });
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const waitFor = async (p: string, ms = 15000): Promise<void> => {
   const t0 = Date.now();

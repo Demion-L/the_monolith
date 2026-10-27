@@ -20,6 +20,8 @@ import { MemoryEventStore } from './memory-store.js';
 import { RetentionRefusedError, TaskNotFoundError, TaskPrunedError, ValidationError } from './errors.js';
 import type { EventStore, TaskEvent, Tombstone } from './types.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 const dirs: string[] = [];
 afterEach(() => {
   while (dirs.length) rmSync(dirs.pop() as string, { recursive: true, force: true });
@@ -74,7 +76,7 @@ const backends: Array<[string, () => { store: EventStore; dir: string | null }]>
     () => {
       const dir = mkdtempSync(join(tmpdir(), 'durable-race-'));
       dirs.push(dir);
-      return { store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }), dir };
+      return { store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })), dir };
     },
   ],
 ];
@@ -246,7 +248,7 @@ describe('prune vs. child creation: filesystem specifics', () => {
   function fsSetup() {
     const dir = mkdtempSync(join(tmpdir(), 'durable-race-'));
     dirs.push(dir);
-    const store = new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' });
+    const store = initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }));
     const clock = new Clock();
     return { dir, store, clock, rt: new DurableTasks({ store, now: clock.now }) };
   }
@@ -280,11 +282,13 @@ describe('prune vs. child creation: filesystem specifics', () => {
       prunedAt: clock.now().toISOString(), headSeq: state.headSeq, headHash: state.headHash, outcomeDigest: '0'.repeat(64),
     };
     await (store.pinReference as NonNullable<EventStore['pinReference']>)('P', 'X', clock.now().toISOString());
-    await (store.markPruned as NonNullable<EventStore['markPruned']>)(tomb);
+    // The pruner decided (commit) and died in the middle of the removal. Data can only go missing after a commit.
+    const attempt = await (store.preparePrune as NonNullable<EventStore['preparePrune']>)(tomb);
+    await (store.decidePrune as NonNullable<EventStore['decidePrune']>)('P', attempt.attempt, 'commit', tomb);
     unlinkSync(join(dir, 'tasks', 'P', 'events', '000000002.json')); // an interrupted removal got this far
 
     await expect(rt.pruneTask('P', POLICY)).rejects.toThrow(/partly removed/);
-    expect(existsSync(join(dir, 'tasks', 'P', 'tombstone.json'))).toBe(true);
+    expect((await (store.pruneState as NonNullable<EventStore['pruneState']>)('P')).kind).toBe('committed'); // never withdrawn
     expect(existsSync(join(dir, 'tasks', 'P', 'events', '000000001.json'))).toBe(true); // not touched further
   });
 });

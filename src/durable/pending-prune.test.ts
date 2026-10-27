@@ -18,6 +18,8 @@ import { MemoryEventStore } from './memory-store.js';
 import { RequiredTaskPendingError, RetentionRefusedError, StoreIoError, TaskOrphanedError, TaskPrunedError, ValidationError } from './errors.js';
 import type { EventStore, TaskEvent, Tombstone } from './types.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 const POLICY = { terminalRetentionMs: 0 };
 const dirs: string[] = [];
 afterEach(() => {
@@ -61,7 +63,7 @@ const backends: Array<[string, () => { store: EventStore; dir: string | null }]>
     () => {
       const dir = mkdtempSync(join(tmpdir(), 'durable-pending-'));
       dirs.push(dir);
-      return { store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }), dir };
+      return { store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })), dir };
     },
   ],
 ];
@@ -281,17 +283,22 @@ describe.each(backends)('pending prune on %s store', (name, make) => {
     it('TEST-5/TEST-3: a prune that already removed event files is committed: gone, even though complete-looking pieces remain', async () => {
       const s = setup();
       await parentWithChild(s);
-      await tombstoneOnly(s);
+      const tomb = await tombstoneOnly(s);
+      // The pruner passed its checks and COMMITTED, then died in the middle of the removal. Data can only go missing
+      // after a commit: a missing file next to an open attempt would be damage, not a prune (it is never read as one).
+      const att = await (s.inner.preparePrune as NonNullable<EventStore['preparePrune']>)(tomb);
+      await (s.inner.decidePrune as NonNullable<EventStore['decidePrune']>)('P', att.attempt, 'commit', tomb);
       const evDir = join(s.dir as string, 'tasks', 'P', 'events');
       const files = readdirSync(evDir).sort();
       unlinkSync(join(evDir, files[0] as string)); // SIGKILL of the pruner in the middle of the removal
       expect((await s.inner.readLog('P')).diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE')).toBe(true);
       await expect(s.fresh().claim('C', { owner: 'w' })).rejects.toBeInstanceOf(TaskOrphanedError);
       expect((await s.fresh().getState('C')).status).toBe('cancelled');
-      expect(existsSync(join(s.dir as string, 'tasks', 'P', 'tombstone.json'))).toBe(true); // never withdrawn
-      // and the retention pass can finish the removal; repeating it is harmless
+      expect((await (s.inner.pruneState as NonNullable<EventStore['pruneState']>)('P')).kind).toBe('committed'); // never withdrawn
+      // and the retention pass can finish the removal (it publishes tombstone.json from the commit); repeating it is harmless
       await s.fresh().applyRetention(POLICY);
       await s.fresh().applyRetention(POLICY);
+      expect(existsSync(join(s.dir as string, 'tasks', 'P', 'tombstone.json'))).toBe(true);
       expect((await s.inner.readLog('P')).diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE')).toBe(false);
     });
   }

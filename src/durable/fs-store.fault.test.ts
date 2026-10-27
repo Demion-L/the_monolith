@@ -20,6 +20,8 @@ import {
 } from './errors.js';
 import { GENESIS_HASH, type EventStore, type TaskEvent, type Tombstone } from './types.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 let dir: string;
 const extra: string[] = [];
 beforeEach(() => {
@@ -31,7 +33,7 @@ afterEach(() => {
 });
 
 const storeOf = (o: Partial<ConstructorParameters<typeof FsEventStore>[0]> = {}) =>
-  new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
+  initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o }));
 
 function chain(taskId: string, n: number): TaskEvent[] {
   const out: TaskEvent[] = [];
@@ -71,6 +73,7 @@ describe('crash between link() and unlink(tmp): a complete event with two names'
   it('leaves nlink 2, which the strict reader would refuse forever — and the store repairs it', async () => {
     const warnings: string[] = [];
     const s = storeOf({ ops: failStaging, onWarning: (w) => warnings.push(w.code) });
+    warnings.length = 0; // initializing the store (the marker file) went through the same faulty unlink
     const evs = chain('t1', 3);
     await s.append(evs[0] as TaskEvent);
     await s.append(evs[1] as TaskEvent);
@@ -286,7 +289,7 @@ describe('a paused (zombie) writer cannot fork or resurrect a log', () => {
 });
 
 describe('zombie vs prune when the events directory survives', () => {
-  it('its link succeeds, the post-publication fence sees the tombstone and takes the file back', async () => {
+  it('its link succeeds, G2 sees the commit: TaskPrunedError, the file is NOT taken back (F-1) and the roll-forward removes it', async () => {
     const s = storeOf();
     const evs = await fill(s, 't1', 3);
     writeFileSync(join(eventsDir('t1'), 'README-keep-dir-alive'), 'x'); // prune leaves a directory with strangers in it
@@ -304,8 +307,16 @@ describe('zombie vs prune when the events directory survives', () => {
     expect(existsSync(eventsDir('t1'))).toBe(true);
     release();
     await expect(pending).rejects.toBeInstanceOf(TaskPrunedError);
+    // A published file is shared state: a writer that learns the task is pruned reports it and removes NOTHING (class A).
+    expect(existsSync(eventFile('t1', 4))).toBe(true);
+    const done = await s.pruneState('t1');
+    expect(done).toMatchObject({ kind: 'committed', residue: 1 }); // DELETING: a late publication after the cleanup
+    // The cleanup (class C) is the only thing that removes it, and it is the same call again.
+    const tomb = done.tombstone as Tombstone;
+    expect((await s.prune(tomb)).removedFiles).toBe(1);
     expect(existsSync(eventFile('t1', 4))).toBe(false);
     expect(readdirSync(eventsDir('t1'))).toEqual(['README-keep-dir-alive']);
+    expect(await s.pruneState('t1')).toMatchObject({ kind: 'committed', residue: 0 }); // GONE
   });
 });
 
@@ -397,7 +408,25 @@ describe('interrupted maintenance is a consistent state that can be completed', 
     await expect(s.readLog('t1')).rejects.toBeInstanceOf(LogCorruptError);
   });
 
-  it('prune that died after the tombstone: the task already reads as pruned and finishing is idempotent', async () => {
+  it('prune that died after the commit: the task already reads as pruned and finishing is idempotent', async () => {
+    const s = storeOf();
+    const evs = await fill(s, 't1', 4);
+    const tomb: Tombstone = {
+      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c', headSeq: 4,
+      headHash: (evs[3] as TaskEvent).hash, outcomeDigest: 'd',
+    };
+    const { attempt } = await s.preparePrune(tomb);
+    expect(await s.decidePrune('t1', attempt, 'commit', tomb)).toBe('commit'); // ... and the pruner died here
+    expect((await s.readLog('t1')).tombstone?.headHash).toBe(tomb.headHash);
+    expect(readdirSync(eventsDir('t1'))).toHaveLength(4); // data still there, but unreachable
+    const out = await s.prune(tomb);
+    expect(out.removedFiles).toBe(4);
+    expect(existsSync(eventsDir('t1'))).toBe(false);
+    expect(existsSync(join(dir, 'tasks', 't1', 'tombstone.json'))).toBe(true); // published from the commit, before the first unlink
+    expect((await s.prune(tomb)).removedFiles).toBe(0); // and a second run is a no-op
+  });
+
+  it('a legacy tombstone.json without a register is LEGACY_TOMBSTONE: every operation refuses, nothing is deleted or committed', async () => {
     const s = storeOf();
     const evs = await fill(s, 't1', 4);
     const tomb: Tombstone = {
@@ -405,11 +434,11 @@ describe('interrupted maintenance is a consistent state that can be completed', 
       headHash: (evs[3] as TaskEvent).hash, outcomeDigest: 'd',
     };
     writeFileSync(join(dir, 'tasks', 't1', 'tombstone.json'), `${JSON.stringify(tomb)}\n`);
-    expect((await s.readLog('t1')).tombstone?.headHash).toBe(tomb.headHash);
-    expect(readdirSync(eventsDir('t1'))).toHaveLength(4); // data still there, but unreachable
-    const out = await s.prune(tomb);
-    expect(out.removedFiles).toBe(4);
-    expect(existsSync(eventsDir('t1'))).toBe(false);
+    expect(await s.pruneState('t1')).toMatchObject({ kind: 'legacy', basis: 'lookup' });
+    await expect(s.prune(tomb)).rejects.toMatchObject({ code: 'PRUNE_DECISION_CORRUPT', reason: 'legacy-tombstone-unmigrated' });
+    await expect(s.preparePrune(tomb)).rejects.toMatchObject({ code: 'PRUNE_DECISION_CORRUPT' });
+    expect(readdirSync(eventsDir('t1'))).toHaveLength(4); // untouched
+    expect(readdirSync(join(dir, 'tasks', 't1')).filter((n) => n.startsWith('prune-'))).toEqual([]); // no commit was invented
   });
 
   it('a different tombstone already present is refused', async () => {

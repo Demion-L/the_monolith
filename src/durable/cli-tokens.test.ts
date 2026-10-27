@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { runDurable, openDurable } from './cli.js';
+import { runDurable, openDurable, initializeDurable } from './cli.js';
 
 let proj: string;
 beforeEach(() => {
@@ -20,6 +20,7 @@ async function cli(...args: string[]): Promise<string> {
 
 describe('token redaction in CLI output', () => {
   it('show and packet hide the secret part; --reveal-tokens prints it; the API still returns it', async () => {
+    initializeDurable(proj);
     const rt = openDurable(proj);
     await rt.createTask({ taskId: 'job1', kind: 'k', goal: 'g' });
     const f = await rt.claim('job1', { owner: 'w' });

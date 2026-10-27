@@ -16,6 +16,8 @@ import { DurableTasks } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
 import { RetentionRefusedError, StoreIoError, TaskPrunedError } from './errors.js';
 
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
+
 const dirs: string[] = [];
 afterEach(() => {
   while (dirs.length) {
@@ -42,7 +44,7 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), 'durable-ret-'));
   dirs.push(dir);
   const clock = new Clock();
-  const open = (): DurableTasks => new DurableTasks({ store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }), now: clock.now });
+  const open = (): DurableTasks => new DurableTasks({ store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })), now: clock.now });
   return { dir, clock, open, rt: open() };
 }
 const eventsDir = (dir: string, id: string): string => join(dir, 'tasks', id, 'events');

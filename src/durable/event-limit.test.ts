@@ -45,7 +45,7 @@ const backends: Array<[string, () => EventStore]> = [
     () => {
       const dir = mkdtempSync(join(tmpdir(), 'durable-lim-'));
       dirs.push(dir);
-      return new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' });
+      return initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }));
     },
   ],
 ];
@@ -236,6 +236,7 @@ describe('a full disk is not the logical limit', () => {
         }) as typeof import('fs').writeSync,
       },
     });
+    store.initializeProtocolSync();
     const rt = new DurableTasks({ store });
     await rt.createTask({ taskId: 'job1', kind: 'k', goal: 'g' });
     const f = await rt.claim('job1', { owner: 'w' });
@@ -248,7 +249,7 @@ describe('a full disk is not the logical limit', () => {
     expect((err as StoreIoError).errnoCode).toBe('ENOSPC');
     expect((err as StoreIoError).message).toMatch(/ENOSPC|no space/);
 
-    const mid = new DurableTasks({ store: new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' }) });
+    const mid = new DurableTasks({ store: initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' })) });
     const s = await mid.getState('job1');
     expect(s).toMatchObject({ status: 'active', headSeq: head }); // nothing half-written is visible
 
@@ -266,4 +267,6 @@ describe('a full disk is not the logical limit', () => {
 });
 
 import * as fsReal from 'fs';
+
+const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 const realWrite = fsReal.writeSync;

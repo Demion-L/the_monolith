@@ -6,6 +6,7 @@
   --surface: rgba(12, 16, 40, 0.74);
   --surface-2: rgba(30, 34, 76, 0.62);
   --border: rgba(190, 200, 255, 0.2);
+  --control-border: rgba(204, 212, 255, 0.52);
   --text: #f1f4ff;
   --muted: #b8c3df;
   --accent: #b4a9ff;
@@ -115,7 +116,7 @@
 :root[data-skin="cosmic-glass"] button,
 :root[data-skin="cosmic-glass"] select {
   background: var(--glass-dense);
-  border-color: rgba(190, 200, 255, 0.32);
+  border-color: var(--control-border);
 }
 :root[data-skin="cosmic-glass"] button:hover:not(:disabled) { border-color: var(--accent); background: rgba(60, 56, 130, 0.7); }
 :root[data-skin="cosmic-glass"] button:disabled { opacity: 1; color: #8f9abb; border-style: dashed; cursor: not-allowed; }

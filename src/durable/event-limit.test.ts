@@ -19,6 +19,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { DurableTasks, type Fence } from './runtime.js';
 import { FsEventStore } from './fs-store.js';
+import { createFsStoreWithSeams } from './testing.js';
 import { MemoryEventStore } from './memory-store.js';
 import { LogTooLargeError, StoreIoError } from './errors.js';
 import { MAX_EVENT_BYTES } from './log.js';
@@ -226,7 +227,7 @@ describe('a full disk is not the logical limit', () => {
     const dir = mkdtempSync(join(tmpdir(), 'durable-enospc-'));
     dirs.push(dir);
     let full = false;
-    const store = new FsEventStore({
+    const store = createFsStoreWithSeams({
       target: { scope: 'trusted-directory', dir },
       durability: 'file',
       ops: {

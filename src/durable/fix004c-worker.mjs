@@ -112,9 +112,12 @@ fs.closeSync = function wrappedClose(fd) {
 syncBuiltinESMExports();
 
 const { FsEventStore } = await import('./durable/fs-store.js');
+const { createFsStoreWithSeams } = await import('./durable/testing.js');
 const { DurableTasks } = await import('./durable/runtime.js');
 
-const store = new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file' });
+// `rawRegister`: a pruner of the register-protocol tests, without the F-1 precondition (see FsStoreSeams).
+const storeOpts = { target: { scope: 'trusted-directory', dir }, durability: 'file' };
+const store = cfg.rawRegister ? createFsStoreWithSeams({ ...storeOpts, skipPrunePrecondition: true }) : new FsEventStore(storeOpts);
 const rt = new DurableTasks({ store });
 
 const logFile = join(ctl, `${id}.log`);

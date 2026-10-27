@@ -19,6 +19,7 @@ import { FsEventStore } from './fs-store.js';
 import { MemoryEventStore } from './memory-store.js';
 import { RetentionRefusedError, TaskNotFoundError, TaskPrunedError, ValidationError } from './errors.js';
 import type { EventStore, TaskEvent, Tombstone } from './types.js';
+import { tombstoneFor } from './prune-check.js';
 
 const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 
@@ -277,10 +278,7 @@ describe('prune vs. child creation: filesystem specifics', () => {
     await rt.createTask({ taskId: 'X', kind: 'k', goal: 'g' }); // an active task that has a pin on P
     clock.advance(DAY);
     const state = await rt.getState('P');
-    const tomb: Tombstone = {
-      v: 1, taskId: 'P', kind: 'k', finalStatus: 'completed', createdAt: state.createdAt, closedAt: state.closedAt as string,
-      prunedAt: clock.now().toISOString(), headSeq: state.headSeq, headHash: state.headHash, outcomeDigest: '0'.repeat(64),
-    };
+    const tomb: Tombstone = tombstoneFor(state, clock.now().toISOString());
     await (store.pinReference as NonNullable<EventStore['pinReference']>)('P', 'X', clock.now().toISOString());
     // The pruner decided (commit) and died in the middle of the removal. Data can only go missing after a commit.
     const attempt = await (store.preparePrune as NonNullable<EventStore['preparePrune']>)(tomb);

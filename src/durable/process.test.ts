@@ -53,6 +53,7 @@ beforeAll(() => {
     `
 import { unlinkSync } from 'fs';
 import { DurableTasks, FsEventStore } from './durable/index.js';
+import { createFsStoreWithSeams } from './durable/testing.js';
 const [dir, mode, idx] = process.argv.slice(2);
 const target = { scope: 'trusted-directory', dir };
 const killInWindow = {
@@ -61,7 +62,7 @@ const killInWindow = {
     return unlinkSync(p, ...r);
   },
 };
-const store = new FsEventStore({ target, durability: 'file', ...(mode === 'killwindow' ? { ops: killInWindow } : {}) });
+const store = createFsStoreWithSeams({ target, durability: 'file', ...(mode === 'killwindow' ? { ops: killInWindow } : {}) });
 const rt = new DurableTasks({ store });
 if (mode === 'observe') {
   for (let i = 0; i < Number(process.argv[5] ?? 20); i++) await rt.observe('job1', { key: 'p' + idx + '-' + i, value: i, source: 'p' + idx });

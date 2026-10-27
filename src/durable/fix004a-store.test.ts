@@ -16,8 +16,11 @@ import { tmpdir } from 'os';
 import { join, relative } from 'path';
 import { createHash } from 'crypto';
 import { FsEventStore } from './fs-store.js';
+import { createFsStoreWithSeams } from './testing.js';
 import { MemoryEventStore } from './memory-store.js';
 import { stampEvent, serializeEvent } from './log.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 import { GENESIS_HASH, type EventStore, type TaskEvent, type Tombstone } from './types.js';
 import { AppendOutcomeUnknownError } from './fs-store.js';
 import { LogCorruptError, PruneDecisionCorruptError, StoreIoError, StoreProtocolError, TaskPrunedError } from './errors.js';
@@ -32,14 +35,14 @@ const newDir = (): string => {
   return d;
 };
 const open = (dir: string, o: Partial<ConstructorParameters<typeof FsEventStore>[0]> = {}): FsEventStore =>
-  new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
+  createFsStoreWithSeams({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
 const fsAt = (dir: string, o: Partial<ConstructorParameters<typeof FsEventStore>[0]> = {}): FsEventStore => {
   const s = open(dir, o);
   s.initializeProtocolSync();
   return s;
 };
 
-function chain(taskId: string, n: number): TaskEvent[] {
+function chainOpen(taskId: string, n: number): TaskEvent[] {
   const out: TaskEvent[] = [];
   let prev = GENESIS_HASH;
   for (let seq = 1; seq <= n; seq++) {
@@ -56,14 +59,21 @@ function chain(taskId: string, n: number): TaskEvent[] {
   }
   return out;
 }
+
+function chain(taskId: string, n: number): TaskEvent[] {
+  // A task a prune may remove ends in a terminal event; a single-event chain stays active.
+  if (n < 2) return chainOpen(taskId, n);
+  const evs = chainOpen(taskId, n - 1);
+  const done = stampEvent(taskId, n, `2026-01-01T00:00:${String(n).padStart(2, '0')}.000Z`, evs[evs.length - 1]!.hash, {
+    type: 'task.completed', actor: 'x', data: { result: null },
+  });
+  return [...evs, done];
+}
 const rival = (evs: TaskEvent[], seq: number): TaskEvent =>
   stampEvent(evs[0]!.taskId, seq, '2026-02-02T00:00:00.000Z', seq === 1 ? GENESIS_HASH : evs[seq - 2]!.hash, {
     type: 'fact.observed', actor: 'rival', data: { key: 'other', fingerprint: 'zz', value: 1, source: null },
   });
-const tombstoneOf = (evs: TaskEvent[]): Tombstone => ({
-  v: 1, taskId: evs[0]!.taskId, kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c',
-  headSeq: evs.length, headHash: evs[evs.length - 1]!.hash, outcomeDigest: 'd',
-});
+const tombstoneOf = (evs: TaskEvent[]): Tombstone => tombstoneFor(foldEvents(evs), 'c');
 async function fill(store: EventStore, id: string, n: number): Promise<TaskEvent[]> {
   const evs = chain(id, n);
   for (const e of evs) expect(await store.append(e)).toBe('appended');
@@ -611,12 +621,15 @@ describe('canonical event identity (section 36.1 under Amendment-004G)', () => {
     const evs = await fill(s, 't1', 2);
     await s.markPruned!(tombstoneOf(evs)); // an open attempt
     fault = 'prune-1.prepare.json';
-    const next = chain('t1', 3)[2] as TaskEvent;
+    // a late write behind the finished task: the store takes any event that extends the chain
+    const next = stampEvent('t1', 3, '2026-01-01T00:00:03.000Z', (evs[1] as TaskEvent).hash, {
+      type: 'fact.observed', actor: 'x', data: { key: 'k3', fingerprint: 'f3', value: 3, source: null },
+    });
     await expect(s.append(next)).rejects.toBeInstanceOf(AppendOutcomeUnknownError);
     expect(existsSync(slot(dir, 't1', 3))).toBe(true); // the file stays (F-1)
     fault = null;
     expect(await s.append(next)).toBe('adopted'); // the retry closes the attempt and finds the slot: no right is derived
-    expect((await s.readLog('t1')).events).toEqual(chain('t1', 3));
+    expect((await s.readLog('t1')).events).toEqual([...evs, next]);
   });
 
   it('a hook that throws between the publication and the check is not a SIGKILL, but the retry still recomputes from scratch (criterion 53, partial)', async () => {

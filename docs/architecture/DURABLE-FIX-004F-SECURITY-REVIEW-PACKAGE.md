@@ -70,3 +70,12 @@ npx vitest run src/durable                                    # весь durable
 4. Обходит ли прямой `fs.unlinkSync` (мимо `ops`) в `fs-store.ts` (строки ~411, ~728, ~1133, ~1223) какие-либо инварианты, которые spy на `ops.unlinkSync` не видит?
 5. Корректен ли порядок «читаем слот → листинг segments» (§35.3) при компакторе, прерванном между `link` сегмента и cleanup?
 6. Есть ли путь, при котором `MISSING` после публикации даёт `'appended'`/`'adopted'` вместо ошибки?
+
+---
+
+## Addendum: DURABLE-SECURITY-FIX-001
+
+По итогам `DURABLE-SECURITY-REVIEW-001` исправлены воспроизведённые находки **F-1** (публичный prune принимал неподтверждённое состояние задачи) и **F-2** (внутренние
+test seams в публичных `.d.ts`). Пакет выше описывает состояние до исправления; места, где публичный конструктор принимал `ops`, `beforePublish`, `afterListing`,
+`earlyPruneCheck`, `maxPruneAttempts`, `registerListing`, `readFault`, устарели: эти поля больше не часть `FsStoreOptions`, а `MemoryEventStore` не принимает опций.
+Критерий 23 остаётся **открытым**: исправление требует повторной независимой проверки.

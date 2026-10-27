@@ -33,6 +33,7 @@ import { AppendOutcomeUnknownError } from './fs-store.js';
 import { assertId, assertNonEmpty, stampEvent, verifyChain } from './log.js';
 import { applyEvent, cloneState, deliveryKey, foldEvents, foldUntil, planProblem } from './projection.js';
 import { planRetention } from './retention.js';
+import { tombstoneFor } from './prune-check.js';
 import { GENESIS_HASH, TERMINAL_EVENT_TYPES, adoptedIsSuccess, } from './types.js';
 import { sha256Hex } from './canonical.js';
 const KIND_MAX = 100;
@@ -1239,12 +1240,7 @@ export class DurableTasks {
         const early = await this.activeReferrer(taskId);
         if (early !== null)
             throw new RetentionRefusedError(taskId, `active task "${early}" refers to it`);
-        const outcome = state.status === 'completed' ? state.result : { error: state.error };
-        const tomb = {
-            v: 1, taskId, kind: state.kind, finalStatus: state.status, createdAt: state.createdAt, closedAt: state.closedAt,
-            prunedAt: this.now().toISOString(), headSeq: state.headSeq, headHash: state.headHash,
-            outcomeDigest: sha256Hex(canonicalize((outcome ?? null))),
-        };
+        const tomb = tombstoneFor(state, this.now().toISOString());
         // The check above can be overtaken: another process may create a task that refers to this one between the
         // check and the removal. So publish the tombstone first (new creations now refuse), then look again
         // (creations that pinned before the tombstone are visible), and take the tombstone back if one is found.

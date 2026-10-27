@@ -8,17 +8,15 @@
  * filesystem layout.
  */
 import type { AppendOutcome, CompactionResult, DecisionBy, EventStore, LogRead, PruneOutcome, PruneState, TaskEvent, Tombstone } from './types.js';
-export interface MemoryStoreOptions {
-    /** @internal lowers `MAX_PRUNE_ATTEMPTS` so a test need not write a thousand attempts. */
-    maxPruneAttempts?: number;
-}
 export declare class MemoryEventStore implements EventStore {
     private readonly tasks;
     private readonly maxAttempts;
-    constructor(opts?: MemoryStoreOptions);
+    constructor();
     private derive;
     private refusal;
     pruneState(taskId: string): Promise<PruneState>;
+    /** F-1: the log is that of a finished task whose head is the one the tombstone names. No `await` between check and write. */
+    private assertPrunable;
     preparePrune(tombstone: Tombstone): Promise<{
         attempt: number;
         created: boolean;

@@ -36,6 +36,8 @@ import { dirname, join } from 'path';
 import { sha256Hex } from './canonical.js';
 import { LogCorruptError, PruneAttemptLimitError, PruneDecisionCorruptError, RetentionRefusedError, StoreIoError, StoreProtocolError, StoreSecurityError, TaskPrunedError, TombstoneCommittedError, } from './errors.js';
 import { MAX_REGISTER_BYTES, MAX_WRITE_RESOLVE, PROTOCOL_MARKER_FILE, STAGING_RE, TOMBSTONE_FILE, decisionFile, derivePruneState, encodeDecision, encodePrepare, encodeTombstone, parseDecision, parsePrepare, parseTombstoneFile, prepareFile, sameTombstone, } from './register.js';
+import { tombstoneProblem } from './prune-check.js';
+import { takeFsSeams } from './seams.js';
 import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent } from './log.js';
 import { MAX_PRUNE_ATTEMPTS } from './types.js';
 import { SafeWriteError, createFile, openParent, projectBoundary, readBoundedFile, trustedDirectoryBoundary, } from '../root/index.js';
@@ -85,11 +87,14 @@ export class FsEventStore {
     /** True once a valid marker was seen. Only then may a read repair anything (it is a mutation). Never reset: the marker is never removed. */
     ready = false;
     maxAttempts;
+    seams;
     constructor(opts) {
-        this.opts = opts;
+        // Only the public fields are taken from `opts`; seams arrive through `createFsStoreWithSeams` alone.
+        this.opts = { target: opts.target, ...(opts.onWarning ? { onWarning: opts.onWarning } : {}), ...(opts.durability ? { durability: opts.durability } : {}) };
+        this.seams = takeFsSeams();
         this.root = opts.target.dir;
         this.boundaryDir = opts.target.scope === 'project' ? opts.target.projectRoot : opts.target.dir;
-        this.maxAttempts = opts.maxPruneAttempts ?? MAX_PRUNE_ATTEMPTS;
+        this.maxAttempts = this.seams.maxPruneAttempts ?? MAX_PRUNE_ATTEMPTS;
     }
     /**
      * The trust boundary. In `trusted-directory` scope the directory is the boundary and is created on the
@@ -208,9 +213,9 @@ export class FsEventStore {
         if (this.hasTasks()) {
             throw new StoreProtocolError('the store already holds tasks; a store with tasks and no marker is only for diagnostics until the operator migrates it.', 'PROTOCOL_STORE_NOT_EMPTY');
         }
-        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.root, { create: true, ops: this.opts.ops }));
+        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.root, { create: true, ops: this.seams.ops }));
         try {
-            const out = createFile(parent, PROTOCOL_MARKER_FILE, '{"v":2}\n', { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: 1024, ops: this.opts.ops });
+            const out = createFile(parent, PROTOCOL_MARKER_FILE, '{"v":2}\n', { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: 1024, ops: this.seams.ops });
             for (const w of out.warnings)
                 this.opts.onWarning?.(w);
         }
@@ -254,7 +259,7 @@ export class FsEventStore {
         if (!boundary)
             return false;
         try {
-            openParent(boundary, dir, { ops: this.opts.ops });
+            openParent(boundary, dir, { ops: this.seams.ops });
             return true;
         }
         catch (err) {
@@ -367,7 +372,7 @@ export class FsEventStore {
      * "not there" (`absent`) from "there and wrong" (`bad`: evidence) from "could not find out" (`ioerr`: never evidence).
      */
     readFileObs(abs, label, maxBytes, repair = false) {
-        const fault = this.opts.readFault?.(abs);
+        const fault = this.seams.readFault?.(abs);
         if (fault)
             return { k: 'ioerr', reason: `${fault}:${label}` };
         if (!fs.existsSync(this.boundaryDir))
@@ -442,8 +447,8 @@ export class FsEventStore {
         let names;
         try {
             names = fs.readdirSync(dir);
-            if (this.opts.registerListing)
-                names = this.opts.registerListing(taskId, names);
+            if (this.seams.registerListing)
+                names = this.seams.registerListing(taskId, names);
         }
         catch (err) {
             if (errno(err) === 'ENOENT')
@@ -477,9 +482,9 @@ export class FsEventStore {
         return this.derive(taskId);
     }
     publishRecord(taskId, name, data) {
-        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.taskDir(taskId), { ops: this.opts.ops }));
+        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.taskDir(taskId), { ops: this.seams.ops }));
         try {
-            const out = createFile(parent, name, data, { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: MAX_REGISTER_BYTES, ops: this.opts.ops });
+            const out = createFile(parent, name, data, { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: MAX_REGISTER_BYTES, ops: this.seams.ops });
             for (const w of out.warnings)
                 this.opts.onWarning?.(w);
             return 'created';
@@ -489,6 +494,23 @@ export class FsEventStore {
                 return 'exists';
             throw this.mapWriteError(err);
         }
+    }
+    /**
+     * The precondition of an irreversible prune (F-1): the log, read now, is that of a finished task whose head is the one
+     * the tombstone names. Meaningful only for an attempt that is already visible in the register (or, as a refusal that
+     * leaves no residue, just before one is published): from the moment the prepare is visible, an append that lands after
+     * this read settles through G2, finds the open attempt and closes it with `abort`, so a commit can never follow it.
+     */
+    assertPrunable(tombstone) {
+        if (this.seams.skipPrunePrecondition)
+            return;
+        const taskId = tombstone.taskId;
+        const log = this.readLogImpl(taskId, { rawEvents: true });
+        if (!log.exists)
+            throw new LogCorruptError(taskId, null, 'cannot prune an unknown task');
+        const problem = tombstoneProblem(taskId, log.events, tombstone);
+        if (problem !== null)
+            throw new RetentionRefusedError(taskId, problem);
     }
     async preparePrune(tombstone) {
         this.gate('write');
@@ -504,8 +526,19 @@ export class FsEventStore {
                     const n = (st.attempt ?? 0) + 1;
                     if (n > this.maxAttempts)
                         throw new PruneAttemptLimitError(taskId, this.maxAttempts);
-                    if (this.publishRecord(taskId, prepareFile(n), encodePrepare(n, tombstone)) === 'created')
+                    this.assertPrunable(tombstone); // early refusal: nothing is written
+                    if (this.publishRecord(taskId, prepareFile(n), encodePrepare(n, tombstone)) === 'created') {
+                        try {
+                            this.assertPrunable(tombstone); // authoritative: the prepare is visible now
+                        }
+                        catch (err) {
+                            // Whatever the reason (finished-ness, head, a log that does not verify, a read that failed), an attempt that
+                            // cannot be justified is closed: abort is always safe, and it is the pruner's own attempt.
+                            await this.decidePrune(taskId, n, 'abort', undefined, 'pruner').catch(() => undefined);
+                            throw err;
+                        }
                         return { attempt: n, created: true };
+                    }
                     continue; // somebody opened attempt n first: look again and accept theirs
                 }
                 default:
@@ -548,6 +581,10 @@ export class FsEventStore {
                 throw new PruneDecisionCorruptError(taskId, 'gap', decisionFile(attempt), attempt);
             return existing();
         }
+        // A commit is irreversible: the head it names must be the head of the log, checked while the prepare is visible.
+        // A decision that already exists is the value of the register and is returned as it is, not re-judged.
+        if (outcome === 'commit' && io.decision(attempt).k === 'absent')
+            this.assertPrunable(p.v.tombstone);
         const data = encodeDecision(attempt, outcome, p.v.tombstone, by);
         return this.publishRecord(taskId, decisionFile(attempt), data) === 'created' ? outcome : existing();
     }
@@ -641,9 +678,9 @@ export class FsEventStore {
      * decides nothing, and finishing a half-done run is the same call again.
      */
     rollForward(taskId, tombstone) {
-        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.taskDir(taskId), { ops: this.opts.ops }));
+        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.taskDir(taskId), { ops: this.seams.ops }));
         try {
-            const out = createFile(parent, TOMBSTONE_NAME, encodeTombstone(tombstone), { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: MAX_TOMBSTONE_BYTES, ops: this.opts.ops });
+            const out = createFile(parent, TOMBSTONE_NAME, encodeTombstone(tombstone), { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: MAX_TOMBSTONE_BYTES, ops: this.seams.ops });
             for (const w of out.warnings)
                 this.opts.onWarning?.(w);
         }
@@ -693,7 +730,7 @@ export class FsEventStore {
      */
     earlyCheck(taskId) {
         const st = this.derive(taskId);
-        if (this.opts.earlyPruneCheck === false)
+        if (this.seams.earlyPruneCheck === false)
             return st;
         if (st.kind === 'committed' || st.kind === 'corrupt' || st.kind === 'legacy' || st.kind === 'unreadable')
             throw this.refusal(taskId, st);
@@ -786,7 +823,7 @@ export class FsEventStore {
             // other order lets a reader that is slow between the two listings see a hole on every attempt.
             const eventEntries = this.listDir(this.eventsDir(taskId)) ?? [];
             const segEntries = this.listDir(this.segmentsDir(taskId)) ?? [];
-            this.opts.afterListing?.(attempt);
+            this.seams.afterListing?.(attempt);
             const segments = [];
             for (const e of segEntries) {
                 const m = SEGMENT_NAME.exec(e.name);
@@ -1031,8 +1068,8 @@ export class FsEventStore {
                 throw this.refuseWrite(taskId, new LogCorruptError(taskId, seq, 'predecessor event is missing; refusing to publish past a hole'));
         }
         this.earlyCheck(taskId);
-        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.eventsDir(taskId), { create: true, ops: this.opts.ops }));
-        await this.opts.beforePublish?.(event);
+        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.eventsDir(taskId), { create: true, ops: this.seams.ops }));
+        await this.seams.beforePublish?.(event);
         let mode = 'own';
         let slot = line;
         for (let attempt = 0;; attempt++) {
@@ -1041,7 +1078,7 @@ export class FsEventStore {
                     mode: 0o600,
                     durability: this.opts.durability ?? 'full',
                     maxBytes: MAX_EVENT_BYTES + 4096,
-                    ops: this.opts.ops,
+                    ops: this.seams.ops,
                 });
                 for (const w of out.warnings)
                     this.opts.onWarning?.(w);
@@ -1161,9 +1198,9 @@ export class FsEventStore {
         }
         // K3: publish
         const name = `S${pad(first.seq)}-${pad(last.seq)}.jsonl`;
-        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.segmentsDir(taskId), { create: true, ops: this.opts.ops }));
+        const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.segmentsDir(taskId), { create: true, ops: this.seams.ops }));
         try {
-            const out = createFile(parent, name, data, { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: MAX_SEGMENT_BYTES, ops: this.opts.ops });
+            const out = createFile(parent, name, data, { mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: MAX_SEGMENT_BYTES, ops: this.seams.ops });
             for (const w of out.warnings)
                 this.opts.onWarning?.(w);
         }
@@ -1266,9 +1303,9 @@ export class FsEventStore {
             return 'parent-missing';
         const name = `${childId}.json`;
         try {
-            const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.refsDir(parentId), { create: true, ops: this.opts.ops }));
+            const parent = this.wrapSafe(() => openParent(this.boundaryFor(true), this.refsDir(parentId), { create: true, ops: this.seams.ops }));
             const out = createFile(parent, name, `${JSON.stringify({ v: 1, childId, at })}\n`, {
-                mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: 1024, ops: this.opts.ops,
+                mode: 0o600, durability: this.opts.durability ?? 'full', maxBytes: 1024, ops: this.seams.ops,
             });
             for (const w of out.warnings)
                 this.opts.onWarning?.(w);

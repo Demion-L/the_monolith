@@ -33,7 +33,7 @@
  */
 import { StoreIoError } from './errors.js';
 import { type DecisionBy, type PruneOutcome, type PruneState } from './types.js';
-import { type FsOps, type WriteWarning } from '../root/index.js';
+import { type WriteWarning } from '../root/index.js';
 import type { AppendOutcome, CompactionResult, EventStore, LogRead, TaskEvent, Tombstone } from './types.js';
 export type FsStoreTarget = {
     scope: 'project';
@@ -49,20 +49,6 @@ export interface FsStoreOptions {
     onWarning?: (w: WriteWarning) => void;
     /** `'full'` (default) fsyncs file and directory; `'file'` only the file. */
     durability?: 'full' | 'file';
-    /** @internal fault injection for tests. */
-    ops?: Partial<FsOps>;
-    /** @internal test seam: called between the pre-publish checks and the publication of an event. */
-    beforePublish?: (event: TaskEvent) => void | Promise<void>;
-    /** @internal test seam: called in `readLog` right after the directory listings, before any file is read. */
-    afterListing?: (attempt: number) => void;
-    /** @internal Design A G1 (section 24.6): refuse early on a pruned or corrupt task before publishing. Default `true`. Safety does not depend on it. */
-    earlyPruneCheck?: boolean;
-    /** @internal lowers `MAX_PRUNE_ATTEMPTS` so a test need not write a thousand attempts. */
-    maxPruneAttempts?: number;
-    /** @internal returns a different (e.g. incomplete) listing of a task directory for the register: listings are not atomic (A7). */
-    registerListing?: (taskId: string, names: string[]) => string[];
-    /** @internal simulate an I/O error on reading a file of the store: return an errno code (`'EIO'`) to fail with, or nothing. */
-    readFault?: (abs: string) => string | null | undefined;
 }
 /** Packed segments stay well below this; it is the reader's ceiling. */
 export declare const MAX_SEGMENT_BYTES: number;
@@ -97,6 +83,7 @@ export declare class FsEventStore implements EventStore {
     /** True once a valid marker was seen. Only then may a read repair anything (it is a mutation). Never reset: the marker is never removed. */
     private ready;
     private readonly maxAttempts;
+    private readonly seams;
     constructor(opts: FsStoreOptions);
     /**
      * The trust boundary. In `trusted-directory` scope the directory is the boundary and is created on the
@@ -154,6 +141,13 @@ export declare class FsEventStore implements EventStore {
     private refusal;
     pruneState(taskId: string): Promise<PruneState>;
     private publishRecord;
+    /**
+     * The precondition of an irreversible prune (F-1): the log, read now, is that of a finished task whose head is the one
+     * the tombstone names. Meaningful only for an attempt that is already visible in the register (or, as a refusal that
+     * leaves no residue, just before one is published): from the moment the prepare is visible, an append that lands after
+     * this read settles through G2, finds the open attempt and closes it with `abort`, so a commit can never follow it.
+     */
+    private assertPrunable;
     preparePrune(tombstone: Tombstone): Promise<{
         attempt: number;
         created: boolean;

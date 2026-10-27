@@ -8,14 +8,16 @@
  * filesystem layout.
  */
 import { LogCorruptError, PruneAttemptLimitError, PruneDecisionCorruptError, RetentionRefusedError, StoreIoError, TaskPrunedError, TombstoneCommittedError, } from './errors.js';
+import { tombstoneProblem } from './prune-check.js';
+import { takeMemorySeams } from './seams.js';
 import { serializeEvent } from './log.js';
 import { MAX_PRUNE_ATTEMPTS } from './register.js';
 const MAX_WRITE_RESOLVE = 3;
 export class MemoryEventStore {
     tasks = new Map();
     maxAttempts;
-    constructor(opts = {}) {
-        this.maxAttempts = opts.maxPruneAttempts ?? MAX_PRUNE_ATTEMPTS;
+    constructor() {
+        this.maxAttempts = takeMemorySeams().maxPruneAttempts ?? MAX_PRUNE_ATTEMPTS;
     }
     // ----- the register ---------------------------------------------------------------------------------------------
     derive(taskId) {
@@ -57,6 +59,12 @@ export class MemoryEventStore {
     async pruneState(taskId) {
         return this.derive(taskId);
     }
+    /** F-1: the log is that of a finished task whose head is the one the tombstone names. No `await` between check and write. */
+    assertPrunable(entry, tombstone) {
+        const problem = tombstoneProblem(tombstone.taskId, entry.events, tombstone);
+        if (problem !== null)
+            throw new RetentionRefusedError(tombstone.taskId, problem);
+    }
     async preparePrune(tombstone) {
         const taskId = tombstone.taskId;
         const st = this.derive(taskId);
@@ -70,6 +78,7 @@ export class MemoryEventStore {
         const n = entry.attempts.length + 1;
         if (n > this.maxAttempts)
             throw new PruneAttemptLimitError(taskId, this.maxAttempts);
+        this.assertPrunable(entry, tombstone); // synchronous up to the push: nothing can append in between
         entry.attempts.push({ tombstone: structuredClone(tombstone), decision: null });
         return { attempt: n, created: true };
     }
@@ -83,6 +92,8 @@ export class MemoryEventStore {
         if (outcome === 'commit' && (!tombstone || JSON.stringify(sortKeys(tombstone)) !== JSON.stringify(sortKeys(a.tombstone)))) {
             throw new LogCorruptError(taskId, null, 'a commit must carry the tombstone of its attempt');
         }
+        if (!a.decision && outcome === 'commit')
+            this.assertPrunable(entry, a.tombstone);
         if (!a.decision)
             a.decision = outcome === 'abort' ? { outcome, ...(by ? { by } : {}) } : { outcome };
         return a.decision.outcome;

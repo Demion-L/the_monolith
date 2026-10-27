@@ -16,18 +16,28 @@ Update this file at the end of each work session before closing.
 
 ## Active Story
 
-None. CONTEXT-001A (`monolith brief`) was finalized on 2026-10-22.
+None recorded. CONTEXT-001A (`monolith brief`) was the last story finalized (2026-10-22).
+
+This is **not** a statement that nothing happened since: `main` gained ~60 commits
+(SEC-001A/B, SEC-002, UI-000…UI-002D, Durable State design docs) that were never
+registered as stories. See `roadmap-index.md` ("Work merged to `main` after
+CONTEXT-001A") for the git-derived list, and `STATE-DRIFT-001` in `tech-debt.md`.
 
 ---
 
 ## Objective
 
 COORDINATORIUM-001, COORDINATORIUM-002, Init Safety and CONTEXT-001A are
-closed. No active work.
+closed as stories. Reconciliation of the story documents with git is in
+progress on branch `feat/monolith-self-awareness-001` (SELF-AWARENESS-001): this
+file, `active.md`, `roadmap-index.md` and the counts in `AGENTS.md` were brought
+back in line with git on 2026-10-27, and `monolith brief` gained a `Freshness`
+check so the next drift is reported instead of hidden. Whether the post-2026-10-22
+work was formally finalized is UNKNOWN.
 
 ---
 
-## Completed This Session
+## Completed in the CONTEXT-001A session (2026-10-22)
 
 - Integrated CONTEXT-001A into `main` by local fast-forward merge of
   `feat/context-001a-brief` (commits `3a68109` implementation, `ac85bf5`
@@ -73,7 +83,9 @@ closed. No active work.
 
 ## Next Step
 
-Ask the user. Candidates (none started, none decided): CONTEXT-001B
+Ask the user. First decide whether to register the unrecorded post-2026-10-22 work
+as stories (or accept the git-derived list in `roadmap-index.md` as its record) and
+whether SELF-AWARENESS-001 gets a story entry. Candidates (none started, none decided): CONTEXT-001B
 (`monolith context <topic>`), SEC-001, an ADR for the Context Gateway
 decisions, corpus relationship density, Engineering Gate runtime.
 
@@ -81,4 +93,8 @@ decisions, corpus relationship density, Engineering Gate runtime.
 
 ## Files in Flight
 
-None. Local-only; not pushed.
+Branch `feat/monolith-self-awareness-001` (worktree
+`worktrees/monolith-self-awareness-001`): `src/brief/freshness*.ts`,
+`src/brief/git-signals.ts`, brief wiring, state-document sync. Uncommitted, not
+merged, not pushed. Other worktrees (Durable State, UI) are independent and
+untouched.

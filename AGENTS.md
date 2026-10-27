@@ -127,11 +127,13 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/coordinatorium/mission.ts`   | `startMission()`, `listMissions()`, `getMission()`, `finishMission()` |
 | `src/coordinatorium/checkpoint.ts` | `createCheckpoint()`, `listCheckpoints()`, `getCheckpoint()` — append-only |
 | `src/coordinatorium/cli.ts`       | `monolith mission` command handlers (incl. `checkpoint`/`checkpoints`) |
-| `src/coordinatorium/*.test.ts`    | Vitest test suite (93 tests, incl. real multi-process concurrency and a real-historical-code compat test) |
+| `src/coordinatorium/*.test.ts`    | Vitest test suite (191 tests, incl. real multi-process concurrency and a real-historical-code compat test) |
 | `src/brief/collect.ts`            | `collect()` — read-only gathering for `monolith brief` (state.json read once) |
 | `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
+| `src/brief/freshness.ts`          | `evaluateFreshness()` — pure FRESH/STALE/UNKNOWN verdict + state-document parsers (SELF-AWARENESS-001) |
+| `src/brief/git-signals.ts`        | `readGitSignals()` — read-only `git log` signals for the freshness check |
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
-| `src/brief/*.test.ts`             | Vitest test suite (122 tests, incl. end-to-end CLI runs on real directories) |
+| `src/brief/*.test.ts`             | Vitest test suite (168 tests, incl. end-to-end CLI runs on real directories) |
 | `src/root/index.ts`               | `resolveMonolithRoot()` containment (ADR-009) + the unified safe reader `readBoundedFile()` and its wrappers `checkProjectFile()`/`readProjectFile()` (ADR-011, ADR-014) |
 | `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
 | `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
@@ -142,7 +144,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 
 ## Current Scope
 
-What MONOLITH does today (865 tests passing, typecheck clean):
+What MONOLITH does today (1020 tests passing in the core suite as of 2026-10-27, typecheck clean):
 
 **Scriptorium** (`compileMarkdownArtifact`):
 - Parses YAML frontmatter → extracts `id`, `title`, `type` fields
@@ -154,7 +156,7 @@ What MONOLITH does today (865 tests passing, typecheck clean):
 - Pass 1: builds `GraphNode` per compiled document (explicit `id:` required)
 - Pass 2: resolves relationship candidates to real node edges (explicit-only, no fuzzy matching)
 - Pass 2.5: registers aliases — `id:` → documentId, `title:` → documentTitle; first-document-wins on collision
-- Validation: 481 real nodes, 0 synthesized nodes, 32 explicit edges from MONOLITH corpus
+- Validation (measured 2026-06-28, not re-measured since; the corpus has grown): 481 real nodes, 0 synthesized nodes, 32 explicit edges from MONOLITH corpus
 - ADR-007: explicit-only identity resolution (no fuzzy matching, no inferred aliases)
 
 **Webway** (`analyzeArtifact`) — extracted to its own repository:
@@ -242,6 +244,28 @@ Missions, and a pointer block. Every section names its source.
 - **Sanitization:** all project-controlled strings are escaped so project
   data cannot forge brief structure; the Story excerpt is the only
   multi-line field.
+
+**Freshness (SELF-AWARENESS-001).** `brief` prints `Freshness: FRESH | STALE | UNKNOWN`
+on its second line and a `## Freshness` block (evidence, warnings, recommendation).
+It is independent of `Completeness` — `COMPLETE` + `STALE` is valid — never changes an
+exit code, and never makes `--strict` fail.
+
+| Value | Meaning |
+|---|---|
+| `STALE` | A concrete discrepancy: the state documents contradict each other (`active.md` vs `roadmap-index.md` vs `story-index.md`), or commits after the last state update reference work-item ids (e.g. `UI-002D`) that no state document mentions |
+| `FRESH` | Positive evidence only: git readable, last state update located, and every later commit either touches only state documents or references a work item the documents mention |
+| `UNKNOWN` | Anything else: no git / git unavailable, state never committed, history cut at the 500-commit read limit, or later commits that name no work item |
+
+State documents (their last commit = "last state update"): `active.md`,
+`roadmap-index.md`, `story-index.md`, `HANDOFF.md`. Git is a signal, not the source of
+truth; commit dates are never compared with "now"; "no active story" is reported as
+"none recorded (this does not mean the project is complete)". The check runs only
+`git log`/`git rev-parse` (no shell, helper-launching config disabled, nothing written)
+and degrades to `UNKNOWN` if git fails. `monolith validate` deliberately does **not**
+run it: validate is a static, file-only gate (SEC-002/ADR-011) with no subprocess, and
+freshness is advisory, not pass/fail. Limits: work-item ids are recognized by a narrow
+pattern (`UI-002D`, `SEC-001B.1-R`); uncommitted edits to state documents are invisible
+to it; "mentioned" is not "correct".
 
 **File read contract (SEC-001B.1):** `state.json`, the lock record,
 `active.md` and the Markdown documents `brief` scans are read through the
@@ -367,7 +391,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 - Graph database (Neo4j, etc.)
 - Corpus-level pattern learning
 - Real semantic similarity (cosine, dot product, etc.)
-- UI or API layer
+- Write-capable UI or API (only the read-only Mission Control UI/API of ADR-010 exists; see `docs/adr/ADR-010-mission-control-ui.md`)
 - Engineering Gate runtime (ADR-003 formalized, not implemented)
 
 ---

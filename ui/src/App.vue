@@ -5,7 +5,7 @@ import CurrentMission from './components/CurrentMission.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
 import ProjectOverview from './components/ProjectOverview.vue';
 import RoadmapPanel from './components/RoadmapPanel.vue';
-import SkinSwitcher from './components/SkinSwitcher.vue';
+import SideNav from './components/SideNav.vue';
 import { scenarioIds, scenarios } from './fixtures/dashboard';
 import { toDashboardData } from './live/adapter';
 import { DashboardLoadError, fetchDashboard } from './live/client';
@@ -52,51 +52,42 @@ const loading = computed(() => !demo && live.value.status === 'loading');
 </script>
 
 <template>
-  <header class="topbar">
-    <div class="brand">
-      <strong>MONOLITH</strong>
-      <span class="muted">Mission Control</span>
+  <div class="shell">
+    <SideNav :sections="data !== null" />
+    <div class="shell-main">
+      <header class="topbar">
+        <div class="project">{{ data?.overview.name ?? 'UNKNOWN' }}</div>
+        <div class="topbar-right">
+          <label v-if="demo" class="scenario">
+            Scenario
+            <select v-model="scenario" data-testid="scenario-select">
+              <option v-for="id in scenarioIds" :key="id" :value="id">{{ id }}</option>
+            </select>
+          </label>
+          <button v-else type="button" data-testid="refresh" :disabled="loading" @click="load">Refresh</button>
+          <span v-if="demo" class="demo-badge" data-testid="demo-badge">DEMO DATA</span>
+          <span v-else-if="data" class="live-badge" data-testid="live-badge">LIVE DATA</span>
+          <span v-else class="live-badge live-badge-off" data-testid="live-badge">LIVE · NO DATA</span>
+        </div>
+      </header>
+      <main v-if="data" class="content">
+        <ProjectOverview :overview="data.overview" />
+        <CurrentMission :missions="data.missions" />
+        <CheckpointsPanel :checkpoints="data.checkpoints" />
+        <RoadmapPanel :text="data.roadmapText" />
+        <DiagnosticsPanel :data="data" />
+      </main>
+      <main v-else class="content">
+        <section v-if="live.status === 'error'" class="panel" role="alert" data-testid="load-error">
+          <h2>Live data could not be loaded</h2>
+          <p>{{ live.message }}</p>
+          <p class="muted">No data is shown. Demo data is never substituted for live data.</p>
+          <button type="button" data-testid="retry" @click="load">Retry</button>
+        </section>
+        <section v-else class="panel" role="status" data-testid="loading">
+          <p class="muted">Loading live data…</p>
+        </section>
+      </main>
     </div>
-    <div class="project">{{ data?.overview.name ?? 'UNKNOWN' }}</div>
-    <div class="topbar-right">
-      <SkinSwitcher />
-      <label v-if="demo" class="scenario">
-        Scenario
-        <select v-model="scenario" data-testid="scenario-select">
-          <option v-for="id in scenarioIds" :key="id" :value="id">{{ id }}</option>
-        </select>
-      </label>
-      <button v-else type="button" data-testid="refresh" :disabled="loading" @click="load">Refresh</button>
-      <span v-if="demo" class="demo-badge" data-testid="demo-badge">DEMO DATA</span>
-      <span v-else-if="data" class="live-badge" data-testid="live-badge">LIVE DATA</span>
-      <span v-else class="live-badge live-badge-off" data-testid="live-badge">LIVE · NO DATA</span>
-    </div>
-  </header>
-  <template v-if="data">
-    <nav class="nav" aria-label="Sections">
-      <a href="#overview">Project Overview</a>
-      <a href="#mission">Current Mission</a>
-      <a href="#checkpoints">Checkpoints</a>
-      <a href="#roadmap">Roadmap</a>
-      <a href="#diagnostics">Diagnostics</a>
-    </nav>
-    <main class="content">
-      <ProjectOverview :overview="data.overview" />
-      <CurrentMission :missions="data.missions" />
-      <CheckpointsPanel :checkpoints="data.checkpoints" />
-      <RoadmapPanel :text="data.roadmapText" />
-      <DiagnosticsPanel :data="data" />
-    </main>
-  </template>
-  <main v-else class="content">
-    <section v-if="live.status === 'error'" class="panel" role="alert" data-testid="load-error">
-      <h2>Live data could not be loaded</h2>
-      <p>{{ live.message }}</p>
-      <p class="muted">No data is shown. Demo data is never substituted for live data.</p>
-      <button type="button" data-testid="retry" @click="load">Retry</button>
-    </section>
-    <section v-else class="panel" role="status" data-testid="loading">
-      <p class="muted">Loading live data…</p>
-    </section>
-  </main>
+  </div>
 </template>

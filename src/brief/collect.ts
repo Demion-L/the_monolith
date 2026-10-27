@@ -49,6 +49,7 @@ import {
   parseRoadmapStatuses,
   parseStoryIndexStatuses,
   type FreshnessResult,
+  type FreshnessEvidence,
 } from './freshness.js';
 import { readGitSignals } from './git-signals.js';
 
@@ -314,14 +315,14 @@ function collectFreshness(
   monolithRoot: string,
   root: ResolvedMonolithRoot,
   story: StorySummary,
-): FreshnessResult {
+): { result: FreshnessResult; evidence: FreshnessEvidence } {
   const docs = [ACTIVE_MD_REL, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL];
   const stateFiles = docs.map((rel) => posix.normalize(`${monolithRoot}/${rel}`));
   const content = new Map<string, string | null>(docs.map((rel) => [rel, readStateDocument(targetDir, monolithRoot, root, rel)]));
   const roadmap = content.get(ROADMAP_INDEX_REL) ?? null;
   const storyIndex = content.get(STORY_INDEX_REL) ?? null;
 
-  return evaluateFreshness({
+  const evidence: FreshnessEvidence = {
     git: readGitSignals(targetDir, stateFiles),
     activeStory: story.fileExists && story.hasCurrentStorySection ? parseActiveStoryClaim(story.excerpt) : { kind: 'unknown' },
     roadmapActiveStory: roadmap === null ? null : parseRoadmapActiveStory(roadmap),
@@ -329,7 +330,8 @@ function collectFreshness(
     storyIndexStatuses: storyIndex === null ? new Map() : parseStoryIndexStatuses(storyIndex),
     recordedText: [...content.values()].filter((c): c is string => c !== null).join('\n'),
     stateFiles: new Set(stateFiles),
-  });
+  };
+  return { result: evaluateFreshness(evidence), evidence };
 }
 
 export async function collect(targetDir: string): Promise<BriefModel> {
@@ -371,7 +373,7 @@ export async function collect(targetDir: string): Promise<BriefModel> {
   const missions = collectMissions(targetDir, config.monolithRoot, state, diagnostics);
   const checkpoints = collectCheckpoints(targetDir, config.monolithRoot, state, missions.active, diagnostics);
   const story = collectStory(targetDir, config.monolithRoot, root, diagnostics);
-  const freshness = collectFreshness(targetDir, config.monolithRoot, root, story);
+  const { result: freshness, evidence: freshnessEvidence } = collectFreshness(targetDir, config.monolithRoot, root, story);
 
   const protocolsRelDir = `${config.monolithRoot}/${PROTOCOLS_DIR}`;
   const mandatoryProtocols = {
@@ -396,5 +398,6 @@ export async function collect(targetDir: string): Promise<BriefModel> {
     adrs,
     diagnostics,
     freshness,
+    freshnessEvidence,
   };
 }

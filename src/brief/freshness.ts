@@ -35,6 +35,8 @@ export type FreshnessReasonCode =
 export interface FreshnessReason {
   code: FreshnessReasonCode;
   message: string;
+  /** STATE_CONTRADICTION only: the state documents (by file name) that disagree. */
+  documents?: string[];
 }
 
 /** One commit after the last state update, as seen by git. */
@@ -121,7 +123,7 @@ export function extractWorkItemIds(text: string): string[] {
   return [...seen];
 }
 
-function mentionsId(text: string, id: string): boolean {
+export function mentionsId(text: string, id: string): boolean {
   const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?<![A-Za-z0-9-])${escaped}(?![A-Za-z0-9]|\\.\\d|-[A-Z0-9])`).test(text);
 }
@@ -196,19 +198,33 @@ function isDone(status: string | undefined): boolean {
   return status === 'COMPLETED' || status === 'DONE';
 }
 
-function findContradictions(ev: FreshnessEvidence): string[] {
-  const out: string[] = [];
+interface Contradiction {
+  message: string;
+  documents: string[];
+}
+
+function findContradictions(ev: FreshnessEvidence): Contradiction[] {
+  const out: Contradiction[] = [];
 
   if (ev.activeStory.kind === 'none' && ev.roadmapActiveStory !== null && !NONE_RE.test(ev.roadmapActiveStory)) {
-    out.push(`active.md records no active story, but roadmap-index.md names "${ev.roadmapActiveStory}".`);
+    out.push({
+      message: `active.md records no active story, but roadmap-index.md names "${ev.roadmapActiveStory}".`,
+      documents: ['active.md', 'roadmap-index.md'],
+    });
   }
 
   if (ev.activeStory.kind === 'ids') {
     for (const id of ev.activeStory.ids) {
       if (isDone(ev.roadmapStatuses.get(id))) {
-        out.push(`active.md treats ${id} as current, but roadmap-index.md marks it ${ev.roadmapStatuses.get(id)}.`);
+        out.push({
+          message: `active.md treats ${id} as current, but roadmap-index.md marks it ${ev.roadmapStatuses.get(id)}.`,
+          documents: ['active.md', 'roadmap-index.md'],
+        });
       } else if (isDone(ev.storyIndexStatuses.get(id))) {
-        out.push(`active.md treats ${id} as current, but story-index.md marks it ${ev.storyIndexStatuses.get(id)}.`);
+        out.push({
+          message: `active.md treats ${id} as current, but story-index.md marks it ${ev.storyIndexStatuses.get(id)}.`,
+          documents: ['active.md', 'story-index.md'],
+        });
       }
     }
   }
@@ -216,7 +232,10 @@ function findContradictions(ev: FreshnessEvidence): string[] {
   for (const [id, roadmapStatus] of ev.roadmapStatuses) {
     const indexStatus = ev.storyIndexStatuses.get(id);
     if (indexStatus !== undefined && indexStatus !== roadmapStatus) {
-      out.push(`${id} is ${roadmapStatus} in roadmap-index.md but ${indexStatus} in story-index.md.`);
+      out.push({
+        message: `${id} is ${roadmapStatus} in roadmap-index.md but ${indexStatus} in story-index.md.`,
+        documents: ['roadmap-index.md', 'story-index.md'],
+      });
     }
   }
   return out;
@@ -237,7 +256,7 @@ export function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult {
 
   // 1. Internal contradictions need no git at all.
   const contradictions = findContradictions(ev);
-  for (const message of contradictions) reasons.push({ code: 'STATE_CONTRADICTION', message });
+  for (const c of contradictions) reasons.push({ code: 'STATE_CONTRADICTION', message: c.message, documents: c.documents });
 
   // 2. Git-derived signals.
   let gitVerdict: 'fresh' | 'unknown' | 'stale' | null = null;

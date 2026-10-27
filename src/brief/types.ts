@@ -11,6 +11,7 @@
 
 import type { Mission, Checkpoint } from '../coordinatorium/types.js';
 import type { ProjectFileErrorCode } from '../root/index.js';
+import type { FreshnessResult } from './freshness.js';
 
 export type DiagnosticSeverity = 'info' | 'warn' | 'error';
 
@@ -128,4 +129,9 @@ export interface BriefModel {
   adrs: AdrIndex;
   /** Collect-time diagnostics, in deterministic (collection-order) sequence. */
   diagnostics: BriefDiagnostic[];
+  /**
+   * SELF-AWARENESS-001: whether the recorded state can be trusted. Independent of
+   * Completeness. Optional so a hand-built model without it renders as before.
+   */
+  freshness?: FreshnessResult;
 }

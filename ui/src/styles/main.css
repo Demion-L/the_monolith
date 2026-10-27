@@ -3,6 +3,8 @@
   --surface: #161b22;
   --surface-2: #1d242d;
   --border: #2b3440;
+  /* Boundary of a control (select, button): needs 3:1 against its surroundings; --border is decorative. */
+  --control-border: #627185;
   --text: #e6edf3;
   --muted: #8b98a8;
   --accent: #58a6ff;
@@ -35,7 +37,7 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
   border-right: 1px solid var(--border);
 }
 .sidebar-head { padding: 14px 16px; }
-.sidebar-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; padding: 0 12px 16px; overflow-y: auto; }
+.sidebar-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; padding: 4px 12px 16px; overflow-y: auto; }
 .sidebar-panel .skin-switcher { margin-top: auto; padding: 12px 4px 0; border-top: 1px solid var(--border); }
 .nav-toggle { display: none; }
 
@@ -49,14 +51,15 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; gap: 10px; align-items: baseline; }
+.brand { display: flex; flex-wrap: wrap; gap: 0 10px; align-items: baseline; }
+.brand .muted { white-space: nowrap; }
 .brand strong { letter-spacing: 0.12em; }
 .project { font-weight: 600; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .scenario { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
 .scenario select {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
+  border: 1px solid var(--control-border); border-radius: 4px; padding: 2px 6px;
 }
 .demo-badge {
   background: var(--demo); color: #1a1300;
@@ -157,7 +160,7 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
 .story { white-space: pre-wrap; margin: 0; font: inherit; }
 button {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 4px;
+  border: 1px solid var(--control-border); border-radius: 4px;
   padding: 4px 12px; font: inherit; cursor: pointer;
 }
 button:disabled { opacity: 0.5; cursor: default; }

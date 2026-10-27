@@ -133,6 +133,25 @@ describe('section navigation', () => {
     expect(visible(w)).toEqual(['mission']);
   });
 
+  it('returns focus to the menu button when a choice closes the menu', async () => {
+    const w = mount(App, { attachTo: document.body });
+    const toggle = w.get('[data-testid="nav-toggle"]');
+    await toggle.trigger('click');
+    w.get<HTMLElement>('.nav a[href="#mission"]').element.focus();
+    await goTo(w, 'mission');
+    expect(document.activeElement).toBe(toggle.element);
+    w.unmount();
+  });
+
+  it('does not steal focus from the nav link when the menu is not open', async () => {
+    const w = mount(App, { attachTo: document.body });
+    const link = w.get<HTMLElement>('.nav a[href="#mission"]');
+    link.element.focus();
+    await goTo(w, 'mission');
+    expect(document.activeElement).toBe(link.element);
+    w.unmount();
+  });
+
   it('keeps the active section when the skin changes', async () => {
     const w = mount(App);
     await goTo(w, 'roadmap');
@@ -240,5 +259,19 @@ describe('motion', () => {
     const app = readFileSync(resolve(__dirname, '../App.vue'), 'utf8');
     expect(app).toContain('<Transition name="section-fade" mode="out-in"');
     expect(app).not.toMatch(/setTimeout/);
+  });
+});
+
+describe('sidebar layout (UI-002E)', () => {
+  const css = readFileSync(resolve(__dirname, '../styles/main.css'), 'utf8');
+
+  it('leaves room above the first nav link so its focus ring is not clipped', () => {
+    const rule = /\.sidebar-panel\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).toMatch(/overflow-y:\s*auto/);
+    expect(rule).toMatch(/padding:\s*[4-9]px /);
+  });
+
+  it('keeps the brand subtitle on one line', () => {
+    expect(css).toMatch(/\.brand \.muted\s*\{[^}]*white-space:\s*nowrap/);
   });
 });

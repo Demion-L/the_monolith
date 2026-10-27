@@ -14,7 +14,11 @@ function choose(event: MouseEvent, id: SectionId): void {
   if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
   emit('select', id);
-  open.value = false;
+  // The focused link is about to be hidden with the menu: hand focus to the toggle (as Escape does).
+  if (open.value) {
+    open.value = false;
+    toggle.value?.focus();
+  }
 }
 
 // Only meaningful on narrow screens; on desktop the panel is always visible.

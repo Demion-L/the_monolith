@@ -31,6 +31,6 @@ function onChange(event: Event): void {
 .skin-switcher { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
 .skin-switcher select {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
+  border: 1px solid var(--control-border); border-radius: 4px; padding: 2px 6px;
 }
 </style>

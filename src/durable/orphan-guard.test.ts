@@ -16,6 +16,8 @@ import { FsEventStore } from './fs-store.js';
 import { MemoryEventStore } from './memory-store.js';
 import { TaskOrphanedError, TaskPrunedError, StoreIoError, ValidationError } from './errors.js';
 import type { EventStore, TaskEvent } from './types.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 
 const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 
@@ -259,9 +261,6 @@ describe.each(backends)('orphan guard on %s store', (_n, make) => {
     // is covered by the dedicated schedules above. Here the required task is removed directly through the store.
     const log = await s.inner.readLog(required);
     const last = log.events[log.events.length - 1] as TaskEvent;
-    await s.inner.prune({
-      v: 1, taskId: required, kind: 'k', finalStatus: 'completed', createdAt: last.at, closedAt: last.at, prunedAt: last.at,
-      headSeq: last.seq, headHash: last.hash, outcomeDigest: 'x'.repeat(64),
-    });
+    await s.inner.prune(tombstoneFor(foldEvents(log.events), last.at));
   }
 });

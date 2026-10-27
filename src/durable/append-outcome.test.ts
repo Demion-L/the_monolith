@@ -8,8 +8,11 @@ import { mkdtempSync, rmSync, readdirSync, readFileSync, writeFileSync, unlinkSy
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { FsEventStore } from './fs-store.js';
+import { createFsStoreWithSeams } from './testing.js';
 import { MemoryEventStore } from './memory-store.js';
 import { stampEvent, serializeEvent } from './log.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 import { GENESIS_HASH, type EventStore, type TaskEvent, type Tombstone } from './types.js';
 import { LogCorruptError, RetentionRefusedError } from './errors.js';
 
@@ -24,12 +27,12 @@ const newDir = (): string => {
   return d;
 };
 const fsAt = (dir: string, o: Partial<ConstructorParameters<typeof FsEventStore>[0]> = {}): FsEventStore => {
-  const s = new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
+  const s = createFsStoreWithSeams({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
   s.initializeProtocolSync();
   return s;
 };
 
-function chain(taskId: string, n: number, actor = 'x'): TaskEvent[] {
+function chainOpen(taskId: string, n: number, actor = 'x'): TaskEvent[] {
   const out: TaskEvent[] = [];
   let prev = GENESIS_HASH;
   for (let seq = 1; seq <= n; seq++) {
@@ -47,16 +50,23 @@ function chain(taskId: string, n: number, actor = 'x'): TaskEvent[] {
   return out;
 }
 
+function chain(taskId: string, n: number, actor = 'x'): TaskEvent[] {
+  // A task a prune may remove ends in a terminal event; a single-event chain stays active.
+  if (n < 2) return chainOpen(taskId, n, actor);
+  const evs = chainOpen(taskId, n - 1, actor);
+  const done = stampEvent(taskId, n, `2026-01-01T00:00:${String(n).padStart(2, '0')}.000Z`, evs[evs.length - 1]!.hash, {
+    type: 'task.completed', actor: 'x', data: { result: null },
+  });
+  return [...evs, done];
+}
+
 /** A different event for the same slot as `evs[seq - 1]`. */
 const rival = (evs: TaskEvent[], seq: number): TaskEvent =>
   stampEvent(evs[0]!.taskId, seq, '2026-02-02T00:00:00.000Z', seq === 1 ? GENESIS_HASH : evs[seq - 2]!.hash, {
     type: 'fact.observed', actor: 'rival', data: { key: 'other', fingerprint: 'zz', value: 1, source: null },
   });
 
-const tombstoneOf = (evs: TaskEvent[]): Tombstone => ({
-  v: 1, taskId: evs[0]!.taskId, kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c',
-  headSeq: evs.length, headHash: evs[evs.length - 1]!.hash, outcomeDigest: 'd',
-});
+const tombstoneOf = (evs: TaskEvent[]): Tombstone => tombstoneFor(foldEvents(evs), 'c');
 
 const backends: Array<[string, () => { store: EventStore; reopen: () => EventStore }]> = [
   ['memory', () => { const s = new MemoryEventStore(); return { store: s, reopen: () => s }; }],

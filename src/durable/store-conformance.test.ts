@@ -9,6 +9,8 @@ import { FsEventStore } from './fs-store.js';
 import { MemoryEventStore } from './memory-store.js';
 import { stampEvent } from './log.js';
 import { GENESIS_HASH, type EventStore, type TaskEvent, type Tombstone } from './types.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 import { TaskPrunedError } from './errors.js';
 
 const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
@@ -30,7 +32,7 @@ const backends: Array<[string, () => EventStore]> = [
   ],
 ];
 
-function chain(taskId: string, n: number): TaskEvent[] {
+function chainOpen(taskId: string, n: number): TaskEvent[] {
   const out: TaskEvent[] = [];
   let prev = GENESIS_HASH;
   for (let seq = 1; seq <= n; seq++) {
@@ -47,6 +49,16 @@ function chain(taskId: string, n: number): TaskEvent[] {
     prev = e.hash;
   }
   return out;
+}
+
+function chain(taskId: string, n: number): TaskEvent[] {
+  // A task a prune may remove ends in a terminal event; a single-event chain stays active.
+  if (n < 2) return chainOpen(taskId, n);
+  const evs = chainOpen(taskId, n - 1);
+  const done = stampEvent(taskId, n, `2026-01-01T00:00:${String(n).padStart(2, '0')}.000Z`, evs[evs.length - 1]!.hash, {
+    type: 'task.completed', actor: 'x', data: { result: null },
+  });
+  return [...evs, done];
 }
 
 describe.each(backends)('EventStore contract: %s', (_name, make) => {
@@ -128,10 +140,7 @@ describe.each(backends)('EventStore contract: %s', (_name, make) => {
     const s = make();
     const evs = chain('t1', 3);
     for (const e of evs) await s.append(e);
-    const tomb: Tombstone = {
-      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c',
-      headSeq: 3, headHash: (evs[2] as TaskEvent).hash, outcomeDigest: 'd',
-    };
+    const tomb: Tombstone = tombstoneFor(foldEvents(evs), 'c');
     await s.prune(tomb);
     const r = await s.readLog('t1');
     expect(r.tombstone?.headHash).toBe(tomb.headHash);

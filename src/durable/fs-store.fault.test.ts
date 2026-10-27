@@ -10,6 +10,9 @@ import {
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { FsEventStore } from './fs-store.js';
+import { createFsStoreWithSeams } from './testing.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 import { DurableTasks } from './runtime.js';
 import { AppendOutcomeUnknownError } from './fs-store.js';
 import { readBoundedFile } from '../root/index.js';
@@ -33,9 +36,9 @@ afterEach(() => {
 });
 
 const storeOf = (o: Partial<ConstructorParameters<typeof FsEventStore>[0]> = {}) =>
-  initStore(new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o }));
+  initStore(createFsStoreWithSeams({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o }));
 
-function chain(taskId: string, n: number): TaskEvent[] {
+function chainOpen(taskId: string, n: number): TaskEvent[] {
   const out: TaskEvent[] = [];
   let prev = GENESIS_HASH;
   for (let seq = 1; seq <= n; seq++) {
@@ -51,6 +54,16 @@ function chain(taskId: string, n: number): TaskEvent[] {
     prev = e.hash;
   }
   return out;
+}
+
+function chain(taskId: string, n: number): TaskEvent[] {
+  // A task a prune may remove ends in a terminal event; a single-event chain stays active.
+  if (n < 2) return chainOpen(taskId, n);
+  const evs = chainOpen(taskId, n - 1);
+  const done = stampEvent(taskId, n, `2026-01-01T00:00:${String(n).padStart(2, '0')}.000Z`, evs[evs.length - 1]!.hash, {
+    type: 'task.completed', actor: 'x', data: { result: null },
+  });
+  return [...evs, done];
 }
 const eventsDir = (id: string) => join(dir, 'tasks', id, 'events');
 const eventFile = (id: string, seq: number) => join(eventsDir(id), `${String(seq).padStart(9, '0')}.json`);
@@ -277,10 +290,7 @@ describe('a paused (zombie) writer cannot fork or resurrect a log', () => {
       type: 'fact.observed', actor: 'zombie', data: { key: 'ghost', fingerprint: 'g', value: 1, source: null },
     });
     const pending = zombieStore.append(ghost);
-    const tomb: Tombstone = {
-      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c', headSeq: 3,
-      headHash: (evs[2] as TaskEvent).hash, outcomeDigest: 'd',
-    };
+    const tomb: Tombstone = tombstoneFor(foldEvents(evs.slice(0, 3)), 'c');
     await s.prune(tomb);
     release();
     await expect(pending).rejects.toBeInstanceOf(TaskPrunedError);
@@ -300,10 +310,7 @@ describe('zombie vs prune when the events directory survives', () => {
       type: 'fact.observed', actor: 'zombie', data: { key: 'ghost', fingerprint: 'g', value: 1, source: null },
     });
     const pending = zombieStore.append(ghost);
-    await s.prune({
-      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c', headSeq: 3,
-      headHash: (evs[2] as TaskEvent).hash, outcomeDigest: 'd',
-    });
+    await s.prune(tombstoneFor(foldEvents(evs), 'c'));
     expect(existsSync(eventsDir('t1'))).toBe(true);
     release();
     await expect(pending).rejects.toBeInstanceOf(TaskPrunedError);
@@ -411,10 +418,7 @@ describe('interrupted maintenance is a consistent state that can be completed', 
   it('prune that died after the commit: the task already reads as pruned and finishing is idempotent', async () => {
     const s = storeOf();
     const evs = await fill(s, 't1', 4);
-    const tomb: Tombstone = {
-      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c', headSeq: 4,
-      headHash: (evs[3] as TaskEvent).hash, outcomeDigest: 'd',
-    };
+    const tomb: Tombstone = tombstoneFor(foldEvents(evs.slice(0, 4)), 'c');
     const { attempt } = await s.preparePrune(tomb);
     expect(await s.decidePrune('t1', attempt, 'commit', tomb)).toBe('commit'); // ... and the pruner died here
     expect((await s.readLog('t1')).tombstone?.headHash).toBe(tomb.headHash);
@@ -429,10 +433,7 @@ describe('interrupted maintenance is a consistent state that can be completed', 
   it('a legacy tombstone.json without a register is LEGACY_TOMBSTONE: every operation refuses, nothing is deleted or committed', async () => {
     const s = storeOf();
     const evs = await fill(s, 't1', 4);
-    const tomb: Tombstone = {
-      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c', headSeq: 4,
-      headHash: (evs[3] as TaskEvent).hash, outcomeDigest: 'd',
-    };
+    const tomb: Tombstone = tombstoneFor(foldEvents(evs.slice(0, 4)), 'c');
     writeFileSync(join(dir, 'tasks', 't1', 'tombstone.json'), `${JSON.stringify(tomb)}\n`);
     expect(await s.pruneState('t1')).toMatchObject({ kind: 'legacy', basis: 'lookup' });
     await expect(s.prune(tomb)).rejects.toMatchObject({ code: 'PRUNE_DECISION_CORRUPT', reason: 'legacy-tombstone-unmigrated' });
@@ -444,11 +445,9 @@ describe('interrupted maintenance is a consistent state that can be completed', 
   it('a different tombstone already present is refused', async () => {
     const s = storeOf();
     const evs = await fill(s, 't1', 2);
-    const mk = (hash: string): Tombstone => ({
-      v: 1, taskId: 't1', kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c', headSeq: 2, headHash: hash, outcomeDigest: 'd',
-    });
-    await s.prune(mk((evs[1] as TaskEvent).hash));
-    await expect(s.prune(mk('f'.repeat(64)))).rejects.toBeInstanceOf(LogCorruptError);
+    const good = tombstoneFor(foldEvents(evs), 'c');
+    await s.prune(good);
+    await expect(s.prune({ ...good, headHash: 'f'.repeat(64) })).rejects.toBeInstanceOf(LogCorruptError);
   });
 });
 

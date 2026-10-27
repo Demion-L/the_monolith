@@ -17,6 +17,8 @@ import {
   TaskPrunedError,
   TombstoneCommittedError,
 } from './errors.js';
+import { tombstoneProblem } from './prune-check.js';
+import { takeMemorySeams } from './seams.js';
 import { serializeEvent } from './log.js';
 import { MAX_PRUNE_ATTEMPTS } from './register.js';
 import type {
@@ -48,19 +50,14 @@ interface Entry {
   refs: Map<string, string>;
 }
 
-export interface MemoryStoreOptions {
-  /** @internal lowers `MAX_PRUNE_ATTEMPTS` so a test need not write a thousand attempts. */
-  maxPruneAttempts?: number;
-}
-
 const MAX_WRITE_RESOLVE = 3;
 
 export class MemoryEventStore implements EventStore {
   private readonly tasks = new Map<string, Entry>();
   private readonly maxAttempts: number;
 
-  constructor(opts: MemoryStoreOptions = {}) {
-    this.maxAttempts = opts.maxPruneAttempts ?? MAX_PRUNE_ATTEMPTS;
+  constructor() {
+    this.maxAttempts = takeMemorySeams().maxPruneAttempts ?? MAX_PRUNE_ATTEMPTS;
   }
 
   // ----- the register ---------------------------------------------------------------------------------------------
@@ -104,6 +101,12 @@ export class MemoryEventStore implements EventStore {
     return this.derive(taskId);
   }
 
+  /** F-1: the log is that of a finished task whose head is the one the tombstone names. No `await` between check and write. */
+  private assertPrunable(entry: Entry, tombstone: Tombstone): void {
+    const problem = tombstoneProblem(tombstone.taskId, entry.events, tombstone);
+    if (problem !== null) throw new RetentionRefusedError(tombstone.taskId, problem);
+  }
+
   async preparePrune(tombstone: Tombstone): Promise<{ attempt: number; created: boolean }> {
     const taskId = tombstone.taskId;
     const st = this.derive(taskId);
@@ -113,6 +116,7 @@ export class MemoryEventStore implements EventStore {
     const entry = this.tasks.get(taskId) as Entry;
     const n = entry.attempts.length + 1;
     if (n > this.maxAttempts) throw new PruneAttemptLimitError(taskId, this.maxAttempts);
+    this.assertPrunable(entry, tombstone); // synchronous up to the push: nothing can append in between
     entry.attempts.push({ tombstone: structuredClone(tombstone), decision: null });
     return { attempt: n, created: true };
   }
@@ -125,6 +129,7 @@ export class MemoryEventStore implements EventStore {
     if (outcome === 'commit' && (!tombstone || JSON.stringify(sortKeys(tombstone)) !== JSON.stringify(sortKeys(a.tombstone)))) {
       throw new LogCorruptError(taskId, null, 'a commit must carry the tombstone of its attempt');
     }
+    if (!a.decision && outcome === 'commit') this.assertPrunable(entry, a.tombstone);
     if (!a.decision) a.decision = outcome === 'abort' ? { outcome, ...(by ? { by } : {}) } : { outcome };
     return a.decision.outcome;
   }

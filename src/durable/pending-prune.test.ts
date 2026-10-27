@@ -17,6 +17,7 @@ import { FsEventStore } from './fs-store.js';
 import { MemoryEventStore } from './memory-store.js';
 import { RequiredTaskPendingError, RetentionRefusedError, StoreIoError, TaskOrphanedError, TaskPrunedError, ValidationError } from './errors.js';
 import type { EventStore, TaskEvent, Tombstone } from './types.js';
+import { tombstoneFor } from './prune-check.js';
 
 const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 
@@ -84,10 +85,7 @@ describe.each(backends)('pending prune on %s store', (name, make) => {
   /** The pruner of the audit: it decided, published its tombstone, and stopped (SIGSTOP) or died (SIGKILL) there. */
   async function tombstoneOnly(s: S, id = 'P'): Promise<Tombstone> {
     const { state } = await s.fresh().getLog(id);
-    const t: Tombstone = {
-      v: 1, taskId: id, kind: 'k', finalStatus: 'completed', createdAt: state.createdAt, closedAt: state.closedAt as string,
-      prunedAt: state.closedAt as string, headSeq: state.headSeq, headHash: state.headHash, outcomeDigest: 'x'.repeat(64),
-    };
+    const t: Tombstone = tombstoneFor(state, state.closedAt as string);
     await (s.inner.markPruned as NonNullable<EventStore['markPruned']>)(t);
     return t;
   }
@@ -250,10 +248,7 @@ describe.each(backends)('pending prune on %s store', (name, make) => {
     const s = setup();
     await finished(s.rt, 'P');
     const { state } = await s.fresh().getLog('P');
-    const tomb: Tombstone = {
-      v: 1, taskId: 'P', kind: 'k', finalStatus: 'completed', createdAt: state.createdAt, closedAt: state.closedAt as string,
-      prunedAt: state.closedAt as string, headSeq: state.headSeq, headHash: state.headHash, outcomeDigest: 'x'.repeat(64),
-    };
+    const tomb: Tombstone = tombstoneFor(state, state.closedAt as string);
     s.fault.afterAppend = async (e) => {
       if (e.taskId === 'C') await (s.inner.markPruned as NonNullable<EventStore['markPruned']>)(tomb); // the pruner, stopped from here on
     };

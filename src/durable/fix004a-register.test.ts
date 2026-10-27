@@ -11,8 +11,12 @@ import { tmpdir } from 'os';
 import { join, relative } from 'path';
 import { createHash } from 'crypto';
 import { FsEventStore } from './fs-store.js';
+import { createFsStoreWithSeams } from './testing.js';
 import { MemoryEventStore } from './memory-store.js';
+import { createMemoryStoreWithSeams } from './testing.js';
 import { stampEvent } from './log.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 import { encodeTombstone } from './register.js';
 import { GENESIS_HASH, type EventStore, type TaskEvent, type Tombstone } from './types.js';
 import { PruneAttemptLimitError, RetentionRefusedError, StoreIoError, TaskPrunedError, LogCorruptError } from './errors.js';
@@ -27,12 +31,12 @@ const newDir = (): string => {
   return d;
 };
 const fsAt = (dir: string, o: Partial<ConstructorParameters<typeof FsEventStore>[0]> = {}): FsEventStore => {
-  const s = new FsEventStore({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
+  const s = createFsStoreWithSeams({ target: { scope: 'trusted-directory', dir }, durability: 'file', ...o });
   s.initializeProtocolSync();
   return s;
 };
 
-function chain(taskId: string, n: number): TaskEvent[] {
+function chainOpen(taskId: string, n: number): TaskEvent[] {
   const out: TaskEvent[] = [];
   let prev = GENESIS_HASH;
   for (let seq = 1; seq <= n; seq++) {
@@ -49,10 +53,17 @@ function chain(taskId: string, n: number): TaskEvent[] {
   }
   return out;
 }
-const tombstoneOf = (evs: TaskEvent[]): Tombstone => ({
-  v: 1, taskId: evs[0]!.taskId, kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c',
-  headSeq: evs.length, headHash: evs[evs.length - 1]!.hash, outcomeDigest: 'd',
-});
+
+function chain(taskId: string, n: number): TaskEvent[] {
+  // A task a prune may remove ends in a terminal event; a single-event chain stays active.
+  if (n < 2) return chainOpen(taskId, n);
+  const evs = chainOpen(taskId, n - 1);
+  const done = stampEvent(taskId, n, `2026-01-01T00:00:${String(n).padStart(2, '0')}.000Z`, evs[evs.length - 1]!.hash, {
+    type: 'task.completed', actor: 'x', data: { result: null },
+  });
+  return [...evs, done];
+}
+const tombstoneOf = (evs: TaskEvent[]): Tombstone => tombstoneFor(foldEvents(evs), 'c');
 async function fill(store: EventStore, id: string, n: number): Promise<TaskEvent[]> {
   const evs = chain(id, n);
   for (const e of evs) expect(await store.append(e)).toBe('appended');
@@ -79,7 +90,7 @@ const registerFiles = (dir: string, id: string): string[] =>
   readdirSync(taskDir(dir, id)).filter((n) => n.startsWith('prune-') || n === 'tombstone.json').sort();
 
 const backends: Array<[string, (max?: number) => EventStore]> = [
-  ['memory', (max) => new MemoryEventStore(max ? { maxPruneAttempts: max } : {})],
+  ['memory', (max) => createMemoryStoreWithSeams(max ? { maxPruneAttempts: max } : {})],
   ['filesystem', (max) => fsAt(newDir(), max ? { maxPruneAttempts: max } : {})],
 ];
 
@@ -167,7 +178,7 @@ describe.each(backends)('commit and abort of one attempt never coexist (criterio
     let aborts = 0;
     for (let round = 0; round < 200; round++) {
       const id = `r${round}`;
-      const evs = await fill(store, id, 1);
+      const evs = await fill(store, id, 2);
       const tomb = tombstoneOf(evs);
       await store.preparePrune!(tomb);
       const commitFirst = round % 2 === 0;

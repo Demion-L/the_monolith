@@ -20,8 +20,11 @@ import { fileURLToPath } from 'url';
 import { spawn, spawnSync, type ChildProcess } from 'child_process';
 import ts from 'typescript';
 import { FsEventStore } from './fs-store.js';
+import { createFsStoreWithSeams } from './testing.js';
 import { DurableTasks } from './runtime.js';
 import { stampEvent } from './log.js';
+import { tombstoneFor } from './prune-check.js';
+import { foldEvents } from './projection.js';
 import { GENESIS_HASH, type TaskEvent, type Tombstone } from './types.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -146,15 +149,16 @@ class Run {
     allRuns.push(this);
   }
   /** Parent-side store, used for fixtures and read-only inspection. It is never one of the competing participants. */
-  store(): FsEventStore {
-    const s = new FsEventStore({ target: { scope: 'trusted-directory', dir: this.dir }, durability: 'file' });
+  store(rawRegister = false): FsEventStore {
+    // `rawRegister`: without the F-1 precondition, to drive the register over a log that is not prunable (see FsStoreSeams).
+    const s = createFsStoreWithSeams({ target: { scope: 'trusted-directory', dir: this.dir }, durability: 'file', ...(rawRegister ? { skipPrunePrecondition: true } : {}) });
     s.initializeProtocolSync();
     return s;
   }
-  spawn(name: string, steps: object[], hooks: Hook[] = []): Proc {
+  spawn(name: string, steps: object[], hooks: Hook[] = [], rawRegister = false): Proc {
     const id = `${name}-${++procSeq}`;
     const cfgPath = join(this.ctl, `${id}.cfg.json`);
-    writeFileSync(cfgPath, JSON.stringify({ id, dir: this.dir, ctl: this.ctl, hooks, steps, barrierTimeoutMs: 40_000 }));
+    writeFileSync(cfgPath, JSON.stringify({ id, dir: this.dir, ctl: this.ctl, hooks, steps, rawRegister, barrierTimeoutMs: 40_000 }));
     const p = new Proc(this, id, cfgPath, 'worker.mjs');
     this.procs.push(p);
     return p;
@@ -186,7 +190,7 @@ const evRe = (seq: number): string => `/events/${pad9(seq)}\\.json$`;
 const ANY_EV = '/events/\\d{9}\\.json$';
 const ANY_SEG = '/segments/S\\d+-\\d+\\.jsonl$';
 
-function chain(taskId: string, n: number): TaskEvent[] {
+function chainOpen(taskId: string, n: number): TaskEvent[] {
   const out: TaskEvent[] = [];
   let prev = GENESIS_HASH;
   for (let seq = 1; seq <= n; seq++) {
@@ -203,15 +207,28 @@ function chain(taskId: string, n: number): TaskEvent[] {
   }
   return out;
 }
+
+function chain(taskId: string, n: number): TaskEvent[] {
+  // A task a prune may remove ends in a terminal event; a single-event chain stays active.
+  if (n < 2) return chainOpen(taskId, n);
+  const evs = chainOpen(taskId, n - 1);
+  const done = stampEvent(taskId, n, `2026-01-01T00:00:${String(n).padStart(2, '0')}.000Z`, evs[evs.length - 1]!.hash, {
+    type: 'task.completed', actor: 'x', data: { result: null },
+  });
+  return [...evs, done];
+}
+/** The event that would follow `chain(taskId, n)`: a late write behind a finished task, the race a prune must survive. */
+function nextOf(taskId: string, n: number): TaskEvent {
+  return stampEvent(taskId, n + 1, `2026-01-01T00:00:${String(n + 1).padStart(2, '0')}.000Z`, chain(taskId, n)[n - 1]!.hash, {
+    type: 'fact.observed', actor: 'x', data: { key: `k${n + 1}`, fingerprint: `f${n + 1}`, value: n + 1, source: null },
+  });
+}
 /** A different event for the same slot (same predecessor, other bytes). */
 const rival = (evs: TaskEvent[], seq: number): TaskEvent =>
   stampEvent(evs[0]!.taskId, seq, '2026-02-02T00:00:00.000Z', seq === 1 ? GENESIS_HASH : evs[seq - 2]!.hash, {
     type: 'fact.observed', actor: 'rival', data: { key: 'other', fingerprint: 'zz', value: 1, source: null },
   });
-const tombstoneOf = (evs: TaskEvent[]): Tombstone => ({
-  v: 1, taskId: evs[0]!.taskId, kind: 'k', finalStatus: 'completed', createdAt: 'a', closedAt: 'b', prunedAt: 'c',
-  headSeq: evs.length, headHash: evs[evs.length - 1]!.hash, outcomeDigest: 'd',
-});
+const tombstoneOf = (evs: TaskEvent[]): Tombstone => tombstoneFor(foldEvents(evs), 'c');
 async function seed(run: Run, id: string, n: number): Promise<TaskEvent[]> {
   const s = run.store();
   const evs = chain(id, n);
@@ -248,7 +265,7 @@ describe('criterion 12 — prune vs append across processes', () => {
       const run = new Run();
       const id = `pa${round}`;
       const evs = await seed(run, id, 3);
-      const e4 = chain(id, 4)[3]!;
+      const e4 = nextOf(id, 3);
       const tomb = tombstoneOf(evs);
       const A = run.spawn('pruner', [
         { op: 'prepare', tombstone: tomb },
@@ -266,7 +283,7 @@ describe('criterion 12 — prune vs append across processes', () => {
 
       if (appendOut === 'appended') {
         tally.appended++;
-        expect(decided, `round ${round}: writer confirmed, the register must say abort`).toBe('abort');
+        expect(['abort', 'ERR:LogCorruptError'], `round ${round}: writer confirmed: the register says abort, or the pruner saw the event first and refused to commit`).toContain(decided);
         expect(val(step(obs, 'pruneState', 0)).kind).toBe('live');
         expect(val(step(obs, 'readLog')).seqs, 'a confirmed event must be in the log').toEqual([1, 2, 3, 4]);
         expect(existsSync(join(taskDir(run, id), 'tombstone.json'))).toBe(false);
@@ -287,7 +304,7 @@ describe('criterion 12 — prune vs append across processes', () => {
     const run = new Run();
     const id = 'stopped-before';
     const evs = await seed(run, id, 3);
-    const e4 = chain(id, 4)[3]!;
+    const e4 = nextOf(id, 3);
     const tomb = tombstoneOf(evs);
     const B = run.spawn('writer', [{ op: 'append', event: e4 }], [{ op: 'link', match: evRe(4), phase: 'before', barrier: 'stopped' }]);
     await B.ready('stopped'); // G1 passed (LIVE), the writer stands right before its link
@@ -312,12 +329,12 @@ describe('criterion 12 — prune vs append across processes', () => {
     const run = new Run();
     const id = 'stopped-after';
     const evs = await seed(run, id, 3);
-    const e4 = chain(id, 4)[3]!;
+    const e4 = nextOf(id, 3);
     const tomb = tombstoneOf(evs);
     const B = run.spawn('writer', [{ op: 'append', event: e4 }], [{ op: 'link', match: evRe(4), phase: 'after', barrier: 'published' }]);
     await B.ready('published');
     expect(looseSeqs(run, id)).toContain(4); // the file really is there while the writer is stopped
-    const A = run.spawn('pruner', [{ op: 'prepare', tombstone: tomb }, { op: 'decide', outcome: 'commit', tombstone: tomb }, { op: 'prune', tombstone: tomb, requireCommit: true }]);
+    const A = run.spawn('pruner', [{ op: 'prepare', tombstone: tomb }, { op: 'decide', outcome: 'commit', tombstone: tomb }, { op: 'prune', tombstone: tomb, requireCommit: true }], [], true);
     await A.finish();
     B.release('published');
     const b = await B.finish();
@@ -331,11 +348,11 @@ describe('criterion 12 — prune vs append across processes', () => {
     const run = new Run();
     const id = 'prepare-only';
     const evs = await seed(run, id, 3);
-    const e4 = chain(id, 4)[3]!;
+    const e4 = nextOf(id, 3);
     const tomb = tombstoneOf(evs);
     const B = run.spawn('writer', [{ op: 'append', event: e4 }], [{ op: 'link', match: evRe(4), phase: 'after', barrier: 'published' }]);
     await B.ready('published');
-    const A = run.spawn('pruner', [{ op: 'prepare', tombstone: tomb }, { op: 'barrier', name: 'prepared' }, { op: 'decide', outcome: 'commit', tombstone: tomb }]);
+    const A = run.spawn('pruner', [{ op: 'prepare', tombstone: tomb }, { op: 'barrier', name: 'prepared' }, { op: 'decide', outcome: 'commit', tombstone: tomb }], [], true);
     await A.ready('prepared'); // PREPARING is visible, the writer is still stopped
     B.release('published');
     const b = await B.finish();
@@ -447,7 +464,7 @@ describe('criterion 65 (AC-CC-5, test 43ж) — SIGKILL during compaction', () =
         { op: 'compact', taskId: id, throughSeq: 4, events: evs.slice(0, 4) },
         { op: 'sweep', taskId: id },
         { op: 'readLog', taskId: id },
-        { op: 'append', event: chain(id, 7)[6] },
+        { op: 'append', event: nextOf(id, 6) },
         { op: 'pruneState', taskId: id },
       ]);
       const r = await fresh.finish();
@@ -473,8 +490,8 @@ describe('tests 39/41/42, AC-ADO-3 (S2) — stale writers, compaction races, SIG
     const run = new Run();
     const id = `s2-${label}`;
     const evs = await seed(run, id, 3);
-    const x = chain(id, 4)[3]!;
-    const cand = candidate(chain(id, 4));
+    const x = nextOf(id, 3);
+    const cand = candidate([...chain(id, 3), nextOf(id, 3)]);
     const hooks: Hook[] = [{ op: 'link', match: evRe(4), phase: 'before', barrier: 'w2' }];
     if (killAfterLink) hooks.push({ op: 'link', match: evRe(4), phase: 'after', barrier: 'w2post' });
     const W2 = run.spawn('stale', [{ op: 'append', event: cand }], hooks);
@@ -519,7 +536,7 @@ describe('tests 39/41/42, AC-ADO-3 (S2) — stale writers, compaction races, SIG
           const run = new Run();
           const id = 'i41';
           const evs = await seed(run, id, 3);
-          const x = chain(id, 4)[3]!;
+          const x = nextOf(id, 3);
           const W = run.spawn('w', [{ op: 'append', event: x }], [{ op: 'link', match: evRe(4), phase: 'after', barrier: 'w' }]);
           await W.ready('w'); // x@4 is published; the writer is stopped before CEI
           const C = run.spawn('c', [{ op: 'compact', taskId: id, throughSeq: 4, events: [...evs, x] }], [{ ...pt.hook, barrier: 'c' }]);
@@ -548,7 +565,7 @@ describe('tests 39/41/42, AC-ADO-3 (S2) — stale writers, compaction races, SIG
       const run = new Run();
       const id = `k42-${where}`;
       await seed(run, id, 3);
-      const x = chain(id, 4)[3]!;
+      const x = nextOf(id, 3);
       const W =
         where === 'after-link'
           ? run.spawn('w', [{ op: 'append', event: x }], [{ op: 'link', match: evRe(4), phase: 'after', barrier: 'k' }])
@@ -608,9 +625,9 @@ describe('FIX-004F A — test 41: writer stopped INSIDE append x compactor in ev
         const id = 'f41';
         const evs = await seed(run, id, 3);
         mkSegDir(run, id);
-        const x = chain(id, 4)[3]!;
+        const x = nextOf(id, 3);
         if (w.publisher === 'earlier') expect(await run.store().append(x)).toBe('appended');
-        const cand = w.cand === 'x' ? x : rival(chain(id, 4), 4);
+        const cand = w.cand === 'x' ? x : rival(chain(id, 3), 4);
         const W = run.spawn('w', [{ op: 'append', event: cand }], [{ ...w.hook, barrier: 'w' }]);
         await W.ready('w'); // W stands at the point, the compactor has not touched anything yet
         let C: Proc | null = null;
@@ -660,7 +677,7 @@ describe('FIX-004F A — test 42: SIGKILL INSIDE append, then a fresh process re
       const id = 'f42';
       const evs = await seed(run, id, 3);
       mkSegDir(run, id);
-      const x = chain(id, 4)[3]!;
+      const x = nextOf(id, 3);
       if (pt.pre === 'covered') {
         expect(await run.store().append(x)).toBe('appended');
         const cr = await run.spawn('c', [{ op: 'compact', taskId: id, throughSeq: 4, events: [...evs, x] }]).finish();
@@ -743,7 +760,7 @@ describe('FIX-004F B — criterion 26: unlink spy over every G2 outcome', () => 
     const run = new Run();
     const id = `c26-${label}`;
     const evs = await seed(run, id, 3);
-    const x = chain(id, 4)[3]!;
+    const x = nextOf(id, 3);
     const W = run.spawn('w', [{ op: 'append', event: x, tolerate: true }], [{ op: 'link', match: evRe(4), phase: 'after', barrier: 'g2' }]);
     await W.ready('g2'); // x@4 is published, G2 has not run
     await prepare(run, id, evs);
@@ -757,7 +774,7 @@ describe('FIX-004F B — criterion 26: unlink spy over every G2 outcome', () => 
   };
 
   it('PREPARING: G2 closes the attempt with abort; the writer unlinks nothing but its staging; the event survives', async () => {
-    const { run, id, W, outcome, x } = await writerAtG2('prep', async (r, id, evs) => void (await r.store().preparePrune(tombstoneOf(evs))));
+    const { run, id, W, outcome, x } = await writerAtG2('prep', async (r, id, evs) => void (await r.store(true).preparePrune(tombstoneOf(evs))));
     expect(outcome).toBe('appended');
     onlyStaging(run, W);
     expect(looseSeqs(run, id)).toContain(4);
@@ -767,7 +784,7 @@ describe('FIX-004F B — criterion 26: unlink spy over every G2 outcome', () => 
 
   it('COMMITTED: the writer is told PRUNED and does not roll back or clean up; only staging may be unlinked', async () => {
     const { run, id, W, outcome } = await writerAtG2('comm', async (r, id, evs) => {
-      const s = r.store();
+      const s = r.store(true);
       const t = tombstoneOf(evs);
       const p = await s.preparePrune(t);
       await s.decidePrune(id, p.attempt, 'commit', t, 'pruner');
@@ -779,7 +796,7 @@ describe('FIX-004F B — criterion 26: unlink spy over every G2 outcome', () => 
 
   it('CORRUPT register: the writer reports corruption, unlinks only staging, the event stays', async () => {
     const { run, id, W, outcome } = await writerAtG2('corr', async (r, id, evs) => {
-      await r.store().preparePrune(tombstoneOf(evs));
+      await r.store(true).preparePrune(tombstoneOf(evs));
       writeFileSync(join(taskDir(r, id), 'prune-1.decision.json'), '{ not json');
     });
     expect(outcome).toBe('ERR:PruneDecisionCorruptError');
@@ -832,7 +849,7 @@ describe('Amendment-004G S1 — lost response', () => {
   it('store level: publication succeeded, the process died before it could answer; a new process retries -> adopted', async () => {
     const run = new Run();
     await seed(run, 's1', 3);
-    const e4 = chain('s1', 4)[3]!;
+    const e4 = nextOf('s1', 3)!;
     const A = run.spawn('a', [{ op: 'append', event: e4 }], [{ op: 'link', match: evRe(4), phase: 'after', barrier: 'lost' }]);
     await A.ready('lost');
     await A.kill();
@@ -958,10 +975,10 @@ describe('crash recovery — prune decision publication and cleanup (SIGKILL)', 
     await A.kill();
     const r = await run.spawn('fresh', [
       { op: 'pruneState', taskId: id },
-      { op: 'append', event: chain(id, 4)[3] },
+      { op: 'append', event: nextOf(id, 3) },
       { op: 'pruneState', taskId: id },
       { op: 'prepare', tombstone: tomb },
-    ]).finish();
+    ], [], true).finish();
     expect(val(r[0])).toMatchObject({ kind: 'preparing', attempt: 1 });
     expect(val(r[1])).toBe('appended');
     expect(val(r[2]).kind).toBe('live');
@@ -980,7 +997,7 @@ describe('crash recovery — prune decision publication and cleanup (SIGKILL)', 
     expect(looseSeqs(run, id), 'nothing was deleted yet').toEqual([1, 2, 3]);
     const r = await run.spawn('fresh', [
       { op: 'pruneState', taskId: id },
-      { op: 'append', event: chain(id, 4)[3], tolerate: true },
+      { op: 'append', event: nextOf(id, 3), tolerate: true },
       { op: 'prune', tombstone: tomb, requireCommit: true },
       { op: 'prune', tombstone: tomb, requireCommit: true },
       { op: 'pruneState', taskId: id },

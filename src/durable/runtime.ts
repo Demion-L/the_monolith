@@ -57,6 +57,8 @@ import { planRetention, type RetentionDecision, type RetentionPolicy } from './r
 import {
   GENESIS_HASH,
   TERMINAL_EVENT_TYPES,
+  adoptedIsSuccess,
+  type AppendOutcome,
   type AssumptionState,
   type Criticality,
   type EffectState,
@@ -382,14 +384,17 @@ export class DurableTasks {
       const event = stampEvent(taskId, state.headSeq + 1, this.now().toISOString(), state.headHash, p.draft);
       const next = this.precheck(state, event);
 
-      let outcome: 'appended' | 'conflict';
+      let outcome: AppendOutcome;
       try {
         outcome = await this.store.append(event);
       } catch (err) {
         if (!(err instanceof AppendOutcomeUnknownError)) throw err;
         outcome = await this.resolveUnknown(event);
       }
-      if (outcome === 'appended') {
+      // Only 'appended' proves this call won the slot. 'adopted' is success solely for the closed list of state-only
+      // events; for every other type (the rights-bearing ones and any unknown type) it is a lost race: re-read, re-plan,
+      // and never act on the strength of the matching event (Amendment-004G, 2.11).
+      if (outcome === 'appended' || (outcome === 'adopted' && adoptedIsSuccess(event.type))) {
         this.remember(taskId, next);
         return p.result(event, next);
       }
@@ -424,11 +429,15 @@ export class DurableTasks {
     }
   }
 
-  /** After an unknown publication outcome: is *our* event (same hash) the one in the slot? */
-  private async resolveUnknown(event: TaskEvent): Promise<'appended' | 'conflict'> {
+  /**
+   * After an unknown publication outcome: is *our* event (same hash) the one in the slot? Matching bytes cannot prove
+   * that this call created the slot, so the answer is 'adopted', never 'appended' (Amendment-004G, F-G-3). A failing
+   * read propagates: the outcome stays unknown and no right is granted.
+   */
+  private async resolveUnknown(event: TaskEvent): Promise<'adopted' | 'conflict'> {
     const log = await this.store.readLog(event.taskId, { afterSeq: event.seq - 1 });
     const there = log.events[0];
-    return there !== undefined && there.seq === event.seq && there.hash === event.hash ? 'appended' : 'conflict';
+    return there !== undefined && there.seq === event.seq && there.hash === event.hash ? 'adopted' : 'conflict';
   }
 
   // =========================================================================
@@ -468,7 +477,7 @@ export class DurableTasks {
     }
 
     const event = stampEvent(taskId, 1, this.now().toISOString(), GENESIS_HASH, draft('task.created', null, data));
-    let outcome: 'appended' | 'conflict';
+    let outcome: AppendOutcome;
     try {
       outcome = await this.store.append(event);
     } catch (err) {

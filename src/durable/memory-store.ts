@@ -20,6 +20,7 @@ import {
 import { serializeEvent } from './log.js';
 import { MAX_PRUNE_ATTEMPTS } from './register.js';
 import type {
+  AppendOutcome,
   CompactionResult,
   DecisionBy,
   EventStore,
@@ -158,7 +159,14 @@ export class MemoryEventStore implements EventStore {
       if (opts.requireCommit) throw new RetentionRefusedError(taskId, 'no prune decision has been committed for it');
       if (st.kind === 'live' && (st.attempt ?? 0) > 0) throw new RetentionRefusedError(taskId, 'its last prune attempt was aborted by a task that needs it');
       if (st.kind === 'preparing' && (st.tombstone as Tombstone).headHash !== tombstone.headHash) throw new LogCorruptError(taskId, null, 'a different tombstone already exists');
-      const { attempt } = await this.preparePrune(tombstone);
+      // `st` was read before `preparePrune` re-derives: only the attempt seen here (or the first) may be committed.
+      const expected = st.kind === 'preparing' ? (st.attempt as number) : 1;
+      const opened = await this.preparePrune(tombstone);
+      const attempt = opened.attempt;
+      if (attempt !== expected) {
+        if (opened.created) await this.decidePrune(taskId, attempt, 'abort', undefined, 'pruner');
+        throw new RetentionRefusedError(taskId, 'its prune attempt was aborted by a task that needs it');
+      }
       const entry = this.tasks.get(taskId) as Entry;
       const tomb = (entry.attempts[attempt - 1] as Attempt).tombstone;
       if (tomb.headHash !== tombstone.headHash) throw new LogCorruptError(taskId, null, 'a different tombstone already exists');
@@ -213,7 +221,7 @@ export class MemoryEventStore implements EventStore {
     };
   }
 
-  async append(event: TaskEvent): Promise<'appended' | 'conflict'> {
+  async append(event: TaskEvent): Promise<AppendOutcome> {
     let entry = this.tasks.get(event.taskId);
     // AV: a task is created by its first event only; a later event never creates one (Design A, section 31.1).
     if (!entry && event.seq > 1) throw new PruneDecisionCorruptError(event.taskId, 'task-dir-missing');
@@ -226,14 +234,16 @@ export class MemoryEventStore implements EventStore {
       entry = { events: [], attempts: [], tombstone: null, refs: new Map() };
       this.tasks.set(event.taskId, entry);
     }
+    let created = false;
     if (event.seq <= entry.events.length) {
       // The slot is taken: the same event again is adopted, a different one is a conflict (canonical identity).
       if (serializeEvent(entry.events[event.seq - 1] as TaskEvent) !== serializeEvent(event)) return 'conflict';
     } else {
       entry.events.push(structuredClone(event));
+      created = true;
     }
     const g2 = await this.settle(event.taskId, 'append');
-    if (g2 === 'CONFIRMED') return 'appended';
+    if (g2 === 'CONFIRMED') return created ? 'appended' : 'adopted';
     if (g2 === 'PRUNED') throw new TaskPrunedError(event.taskId);
     if (g2 === 'UNKNOWN') throw new StoreIoError(`the prune state of task "${event.taskId}" could not be settled after the append.`);
     throw this.refusal(event.taskId, g2);
@@ -249,13 +259,20 @@ export class MemoryEventStore implements EventStore {
    */
   async compact(taskId: string, throughSeq: number, events: TaskEvent[]): Promise<CompactionResult> {
     const entry = this.tasks.get(taskId);
+    // The same order as the filesystem store: K0 (pruned), nothing to pack, the shape of the input, the task must exist
+    // (compaction never creates one), then every slot against the canonical event (K2).
+    if (entry && this.derive(taskId).kind === 'committed') throw new TaskPrunedError(taskId);
+    if (events.length === 0) return { segment: null, packedEvents: 0, removedFiles: 0 };
+    const first = events[0] as TaskEvent;
+    const last = events[events.length - 1] as TaskEvent;
+    if (last.seq !== throughSeq || last.seq - first.seq + 1 !== events.length || events.some((e, i) => e.seq !== first.seq + i)) {
+      throw new LogCorruptError(taskId, first.seq, 'compaction input is not a contiguous range ending at throughSeq');
+    }
     if (!entry) throw new PruneDecisionCorruptError(taskId, 'task-dir-missing');
-    const st = this.derive(taskId);
-    if (st.kind === 'committed') throw new TaskPrunedError(taskId);
     for (const e of events) {
       const stored = entry.events[e.seq - 1];
       if (!stored) throw new LogCorruptError(taskId, e.seq, 'compaction input slot has no canonical event');
-      if (e.seq > throughSeq || serializeEvent(stored) !== serializeEvent(e)) throw new LogCorruptError(taskId, e.seq, 'compaction input is not the canonical log');
+      if (serializeEvent(stored) !== serializeEvent(e)) throw new LogCorruptError(taskId, e.seq, 'compaction input is not the canonical log');
     }
     const g2 = await this.settle(taskId, 'compact');
     if (g2 === 'PRUNED') throw new TaskPrunedError(taskId);

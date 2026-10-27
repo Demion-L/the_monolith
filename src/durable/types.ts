@@ -111,6 +111,39 @@ export const EVENT_TYPES: readonly EventType[] = [
   'task.cancelled',
 ];
 
+/**
+ * Events whose `'adopted'` append result counts as success (Amendment-004G, section 2.11 / 8.2). A closed list: none of
+ * these confers the right to an irreversible action, that right comes from another event won through the CAS.
+ * Everything not named here (the rights-bearing `task.created`, `run.claimed`, `effect.intended`, `await.resolved`,
+ * and any type added later) is deny-by-default: `'adopted'` is treated like `'conflict'`.
+ */
+export const ADOPTED_IS_SUCCESS_EVENT_TYPES: readonly EventType[] = [
+  'effect.completed',
+  'effect.failed',
+  'task.completed',
+  'task.failed',
+  'task.cancelled',
+  'plan.declared',
+  'plan.step_done',
+  'plan.step_skipped',
+  'decision.recorded',
+  'assumption.recorded',
+  'assumption.retracted',
+  'fact.observed',
+  'run.heartbeat',
+  'run.released',
+  'await.registered',
+  'await.expired',
+  'await.delivery_rejected',
+];
+
+const ADOPTED_IS_SUCCESS = new Set<string>(ADOPTED_IS_SUCCESS_EVENT_TYPES);
+
+/** True only for a type named in the closed list; an unknown string is false (fail closed). */
+export function adoptedIsSuccess(type: string): boolean {
+  return ADOPTED_IS_SUCCESS.has(type);
+}
+
 export const TERMINAL_EVENT_TYPES: readonly EventType[] = ['task.completed', 'task.failed', 'task.cancelled'];
 
 export type EventOf<T extends EventType> = {
@@ -350,6 +383,9 @@ export interface PruneState {
   durability?: 'NOT_GUARANTEED';
 }
 
+/** Result of `EventStore.append` (Amendment-004G, CEI-6). Only `'appended'` carries the right of the slot's winner. */
+export type AppendOutcome = 'appended' | 'adopted' | 'conflict';
+
 /**
  * The persistence contract. A backend must provide ONE linearizable primitive:
  * `append` publishes an event at `event.seq` if and only if that slot is free,
@@ -363,7 +399,12 @@ export interface EventStore {
    * hiding them behind the transitional tombstone. A pruner needs the head of the log AFTER its `prepare` is visible.
    */
   readLog(taskId: string, opts?: { afterSeq?: number; rawEvents?: boolean }): Promise<LogRead>;
-  append(event: TaskEvent): Promise<'appended' | 'conflict'>;
+  /**
+   * Amendment-004G. `'appended'`: this call created the first file of the slot and the canonical content is the event
+   * (the right derived from winning the slot). `'adopted'`: the canonical content equals the event, but this call cannot
+   * prove it created the slot (EEXIST, evidence through a segment, a retry). `'conflict'`: the slot holds another event.
+   */
+  append(event: TaskEvent): Promise<AppendOutcome>;
   listTaskIds(): Promise<string[]>;
   /** Pack verified events `1..throughSeq` into immutable storage, then drop the loose copies. Idempotent. */
   compact(taskId: string, throughSeq: number, events: TaskEvent[]): Promise<CompactionResult>;

@@ -43,4 +43,5 @@ export type {
   EffectState,
   AssumptionState,
   StoreDiagnostic,
+  AppendOutcome,
 } from './types.js';

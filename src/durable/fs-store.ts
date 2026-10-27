@@ -79,7 +79,7 @@ import {
   type WriteBoundary,
   type WriteWarning,
 } from '../root/index.js';
-import type { CompactionResult, EventStore, LogRead, StoreDiagnostic, TaskEvent, Tombstone } from './types.js';
+import type { AppendOutcome, CompactionResult, EventStore, LogRead, StoreDiagnostic, TaskEvent, Tombstone } from './types.js';
 
 export type FsStoreTarget =
   | { scope: 'project'; projectRoot: string; dir: string }
@@ -675,7 +675,15 @@ export class FsEventStore implements EventStore {
           }
           // The low-level form: publish the attempt and its commit without looking for referrers. The register
           // decides, so a concurrent abort wins over this call or this call wins over it, never both.
-          const attempt = (await this.preparePrune(tombstone)).attempt;
+          // `st` was read before `preparePrune` re-derives: an abort that lands in between would make it open a NEW attempt
+          // here. Only the attempt this call saw (or the first one) may be committed; anything else is a replaced attempt.
+          const expected = st.kind === 'preparing' ? (st.attempt as number) : 1;
+          const opened = await this.preparePrune(tombstone);
+          const attempt = opened.attempt;
+          if (attempt !== expected) {
+            if (opened.created) await this.decidePrune(taskId, attempt, 'abort', undefined, 'pruner');
+            throw new RetentionRefusedError(taskId, 'its prune attempt was aborted by a task that needs it');
+          }
           const prepared = this.registerIO(taskId).prepare(attempt);
           const tomb = prepared.k === 'ok' ? prepared.v.tombstone : tombstone;
           if (tomb.headHash !== tombstone.headHash) throw new LogCorruptError(taskId, null, 'a different tombstone already exists');
@@ -859,7 +867,9 @@ export class FsEventStore implements EventStore {
         if (!e.isFile()) throw new StoreSecurityError(`event entry ${e.name} of task "${taskId}" is not a regular file.`, 'FILE_NOT_REGULAR');
         const seq = Number(m[1]);
         if (seq <= after) continue;
-        if (seq <= segEnd) {
+        // Covered by a segment of THIS listing (Cov(s) != empty, section 35.1), not "below the highest segment": a slot
+        // outside every segment is canonical even when a later segment exists (F-G-1).
+        if (segments.some((g) => g.from <= seq && seq <= g.to)) {
           diagnostics.push({ code: 'LOOSE_COPY_OF_COMPACTED_EVENT', taskId, name: e.name });
           continue;
         }
@@ -1038,7 +1048,7 @@ export class FsEventStore implements EventStore {
     return otherwise;
   }
 
-  async append(event: TaskEvent): Promise<'appended' | 'conflict'> {
+  async append(event: TaskEvent): Promise<AppendOutcome> {
     this.gate('write');
     const taskId = event.taskId;
     const seq = event.seq;
@@ -1104,7 +1114,9 @@ export class FsEventStore implements EventStore {
     if (g2.t === 'PRUNED') throw new TaskPrunedError(taskId);
     if (g2.t === 'CORRUPT') throw this.published(this.refusal(taskId, g2.state));
     if (ev.t === 'LOST' || g2.t === 'UNKNOWN') throw new AppendOutcomeUnknownError(taskId, seq, new Error(g2.t === 'UNKNOWN' ? g2.why : 'the covering segment is gone'));
-    return 'appended';
+    // CEI-6: 'appended' only for own (this call's link created the slot) AND loose evidence AND G2 LIVE; every other
+    // canonical match is 'adopted' and gives no right derived from winning the slot.
+    return mode === 'own' && ev.via === 'loose' ? 'appended' : 'adopted';
   }
 
   /** The file is already visible: say so on the corruption error. */
@@ -1133,7 +1145,9 @@ export class FsEventStore implements EventStore {
     if (events.length === 0) return { segment: null, packedEvents: 0, removedFiles: 0 };
     const first = events[0] as TaskEvent;
     const last = events[events.length - 1] as TaskEvent;
-    if (last.seq !== throughSeq || last.seq - first.seq + 1 !== events.length) {
+    // Position i must hold slot first.seq + i: matching ends and length do not exclude a duplicate or a swapped pair, and
+    // the segment written from such an input would not be contiguous (AC-CC-1: each line is the Canon of ITS slot).
+    if (last.seq !== throughSeq || last.seq - first.seq + 1 !== events.length || events.some((e, i) => e.seq !== first.seq + i)) {
       throw new LogCorruptError(taskId, first.seq, 'compaction input is not a contiguous range ending at throughSeq');
     }
     const lines = events.map((e) => serializeEvent(e));
@@ -1221,6 +1235,9 @@ export class FsEventStore implements EventStore {
     if (st.kind === 'corrupt' || st.kind === 'legacy' || st.kind === 'unreadable') throw this.refusal(taskId, st);
     const log = this.readLogImpl(taskId, { rawEvents: true }); // verified view; events up to `compactedThrough` come from the segments
     if (log.compactedThrough === 0) return { removedFiles: 0, keptFiles: 0 };
+    // Only a loose file the reader itself found covered by a segment is redundant (F-G-1: a slot outside every segment is
+    // canonical, and for it `log.events` holds the loose file, which would be compared with itself).
+    const covered = new Set(log.diagnostics.filter((d) => d.code === 'LOOSE_COPY_OF_COMPACTED_EVENT').map((d) => d.name));
     const lineBySeq = new Map<number, string>(log.events.filter((e) => e.seq <= log.compactedThrough).map((e) => [e.seq, serializeEvent(e)]));
     let removedFiles = 0;
     let keptFiles = 0;
@@ -1228,7 +1245,7 @@ export class FsEventStore implements EventStore {
       const m = EVENT_NAME.exec(e.name);
       if (!m || !e.isFile()) continue;
       const want = lineBySeq.get(Number(m[1]));
-      if (want === undefined) continue; // newer than the segments: a live event, not ours to touch
+      if (want === undefined || !covered.has(e.name)) continue; // not covered by a segment: a live event, not ours to touch
       if (this.removeLooseIfIdentical(taskId, e.name, want)) removedFiles++;
       else if (this.fileExists(join(this.eventsDir(taskId), e.name))) keptFiles++; // differs: possibly a paused writer's file or foreign data
     }

@@ -56,6 +56,12 @@
   background: rgba(150, 140, 255, 0.16);
   border-left-color: var(--accent);
 }
+:root[data-skin="cosmic-glass"] .nav a[aria-current="location"] {
+  color: var(--text);
+  background: linear-gradient(90deg, rgba(150, 140, 255, 0.26), rgba(150, 140, 255, 0.08));
+  border-left-color: #d3ccff;
+  box-shadow: none;
+}
 :root[data-skin="cosmic-glass"] .sidebar-panel .skin-switcher { border-top-color: var(--border); }
 
 /* Topbar */

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App.vue';
 import SideNav from '../components/SideNav.vue';
 import { SKIN_STORAGE_KEY } from '../skin';
+import { goTo } from './nav';
 
 const SECTION_IDS = ['overview', 'mission', 'checkpoints', 'roadmap', 'diagnostics'];
 
@@ -22,11 +23,14 @@ describe('layout shell', () => {
     expect(sidebar.find('[data-testid="skin-select"]').exists()).toBe(true);
   });
 
-  it('keeps the existing links and their anchor targets', () => {
+  it('keeps the existing links and their anchor targets', async () => {
     const w = mount(App);
     const hrefs = w.findAll('.nav a').map((a) => a.attributes('href'));
     expect(hrefs).toEqual(SECTION_IDS.map((id) => `#${id}`));
-    for (const id of SECTION_IDS) expect(w.find(`section#${id}`).exists(), id).toBe(true);
+    for (const id of SECTION_IDS) {
+      await goTo(w, id);
+      expect(w.find(`section#${id}`).exists(), id).toBe(true);
+    }
   });
 
   it('has no duplicate ids', () => {

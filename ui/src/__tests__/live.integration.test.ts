@@ -7,6 +7,7 @@ import { startDashboardServer } from '../../../src/http/server';
 import type { DashboardServer } from '../../../src/http/server';
 import { ROADMAP_REL } from '../../../src/readmodel/dashboard';
 import App from '../App.vue';
+import { goTo } from './nav';
 
 // Real MONOLITH HTTP server + real read model over real files; only the
 // browser's relative URL is mapped to the server's ephemeral loopback port
@@ -49,18 +50,26 @@ describe('LIVE mode against the real HTTP API', () => {
     await flushPromises();
     await vi.waitFor(() => expect(w.find('[data-testid="loading"]').exists()).toBe(false));
     expect(w.get('[data-testid="live-badge"]').text()).toBe('LIVE DATA');
-    expect(w.text()).toContain('Integration Project');
-    expect(w.text()).toContain('MIS-0042');
-    expect(w.text()).toContain('Integration mission');
-    expect(w.text()).toContain('Integration checkpoint');
-    expect(w.text()).toContain('Integration step');
-    expect(w.text()).toContain('Integration story.');
-    expect(w.text()).toContain('Integration roadmap');
+    const seen: string[] = [];
+    for (const id of ['overview', 'mission', 'checkpoints', 'roadmap']) {
+      await goTo(w, id);
+      seen.push(w.text());
+    }
+    const text = seen.join('|');
+    expect(text).toContain('Integration Project');
+    expect(text).toContain('MIS-0042');
+    expect(text).toContain('Integration mission');
+    expect(text).toContain('Integration checkpoint');
+    expect(text).toContain('Integration step');
+    expect(text).toContain('Integration story.');
+    expect(text).toContain('Integration roadmap');
   });
 
   it('shows an error state (no demo data) once the server is gone, and recovers on retry', async () => {
     const w = mount(App);
     await vi.waitFor(() => expect(w.find('[data-testid="live-badge"]').text()).toBe('LIVE DATA'));
+    await goTo(w, 'mission');
+    expect(w.text()).toContain('Integration mission');
     const port = server.port;
     await server.close();
     await w.get('[data-testid="refresh"]').trigger('click');

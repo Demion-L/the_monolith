@@ -12,6 +12,7 @@
  *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
  *   monolith brief       — deterministic, bounded project context summary
  *   monolith durable     — inspect/verify/maintain Durable State task logs
+ *   monolith ui          — launch Mission Control (read-only dashboard)
  */
 
 import { MONOLITH_VERSION } from '../version.js';
@@ -37,6 +38,9 @@ Commands:
               accepted ADRs) — read-only, no LLM/network/ERG involved.
   durable     Inspect and maintain Durable State (long-running task logs):
               list | show | assess | packet | verify | retention.
+  ui          Launch Mission Control, the read-only web dashboard, on
+              127.0.0.1 (default port 4173). 'ui dev' adds Vite hot reload
+              (source checkout only). See 'monolith ui --help'.
 
 Mission usage:
   monolith mission start --title "..." --system "..."
@@ -56,6 +60,10 @@ Durable usage:
   monolith durable verify [taskId]            (exit 2 if a log fails verification)
   monolith durable retention --retain-days N [--compact-after N] [--apply]
 
+UI usage:
+  monolith ui [--port N]
+  monolith ui dev [--port N]
+
 Options:
   --help, -h      Show this help
   --version, -v   Print version
@@ -64,13 +72,16 @@ Options:
 async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
+  // `ui` owns its own --help / --version-like flags (`monolith ui dev --help`).
+  const ownsHelp = args[0] === 'ui';
+
+  if (args.length === 0 || (!ownsHelp && (args.includes('--help') || args.includes('-h')))) {
     console.log(USAGE);
     process.exit(0);
     return;
   }
 
-  if (args.includes('--version') || args.includes('-v')) {
+  if (!ownsHelp && (args.includes('--version') || args.includes('-v'))) {
     console.log(MONOLITH_VERSION);
     process.exit(0);
     return;
@@ -146,6 +157,12 @@ async function main() {
     case 'durable': {
       const { runDurableCommand } = await import('../durable/cli.js');
       await runDurableCommand(args.slice(1));
+      break;
+    }
+
+    case 'ui': {
+      const { runUi } = await import('./ui.js');
+      process.exit(await runUi(args.slice(1)));
       break;
     }
 

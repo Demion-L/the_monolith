@@ -11,6 +11,9 @@
  *  - the project root is fixed when the server starts and is never taken from a
  *    request (query, body, header or cookie are not read for that purpose).
  *
+ * With `options.assets` it also serves the built UI from memory (`monolith ui`);
+ * the API route, the Host/Origin checks and the loopback bind are unchanged.
+ *
  * Security boundary (G2): bound to 127.0.0.1 only; `Host` allowlist (loopback
  * name + the real port, against DNS rebinding); `Origin` checked when present
  * and never reflected; no CORS headers at all; GET only; fixed response
@@ -33,6 +36,13 @@ export declare const LOOPBACK_HOST = "127.0.0.1";
  * it; an over-limit DTO is refused whole, never truncated.
  */
 export declare const MAX_RESPONSE_BYTES: number;
+/** One file of the built UI, held in memory (loaded by `ui-assets.ts`, which is the only place that touches the disk). */
+export interface UiAsset {
+    readonly body: Buffer;
+    readonly contentType: string;
+}
+/** Request path (`/index.html`, `/assets/x.js`) -> asset. */
+export type UiAssets = ReadonlyMap<string, UiAsset>;
 export type HttpErrorKind = 'request' | 'security' | 'dashboard' | 'internal';
 export type HttpErrorCode = 'HOST_NOT_ALLOWED' | 'ORIGIN_NOT_ALLOWED' | 'NOT_FOUND' | 'METHOD_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'INTERNAL_ERROR';
 /** Body of every non-200 response. Fixed vocabulary only: no message, path or detail. */
@@ -49,6 +59,12 @@ export interface DashboardServerOptions {
     port?: number;
     /** Overrides MAX_RESPONSE_BYTES (tests, tighter deployments). */
     maxResponseBytes?: number;
+    /**
+     * The built UI, already in memory (`loadUiAssets`). When given, `GET /` and
+     * `GET <asset path>` serve it; the match is by exact key, so no request path
+     * is ever mapped onto the filesystem. When absent, only the API exists.
+     */
+    assets?: UiAssets;
 }
 export interface DashboardServer {
     readonly host: typeof LOOPBACK_HOST;

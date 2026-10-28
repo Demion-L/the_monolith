@@ -14,7 +14,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { fork, spawnSync, type ChildProcess } from 'child_process';
 import ts from 'typescript';
-import { acquireLock } from './lock.js';
+import { acquireLock, captureIdentity, formatLockRecord } from './lock.js';
 import { LockTimeoutError, LockCreationError } from './errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -289,8 +289,8 @@ async function seedDeadOwnerLock(lockPath: string, moduleDir: string): Promise<{
   await crasher.waitFor((m) => m.type === 'acquired');
   await crasher.waitForExit();
   const raw = readFileSync(lockPath, 'utf8');
-  const [pidStr, nonce] = raw.split(':');
-  return { pid: Number(pidStr), nonce };
+  const record = JSON.parse(raw) as { pid: number; nonce: string };
+  return { pid: record.pid, nonce: record.nonce };
 }
 
 // ---------------------------------------------------------------------------
@@ -536,9 +536,7 @@ describe('TOCTOU regression — serialized recovery', () => {
 
       // C must still hold its lock, completely undisturbed by B.
       expect(existsSync(lockPath)).toBe(true);
-      const stillC = JSON.parse(
-        `{"pid": ${readFileSync(lockPath, 'utf8').split(':')[0]}}`,
-      ) as { pid: number };
+      const stillC = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid: number };
       expect(stillC.pid).toBe(cAcquired.pid);
 
       // B must have failed to acquire (the lock is legitimately held by
@@ -567,14 +565,14 @@ describe('TOCTOU regression — serialized recovery', () => {
 
       // A dead primary owner...
       const deadOwnerPid = spawnSync(process.execPath, ['-e', '']).pid as number;
-      writeFileSync(lockPath, `${deadOwnerPid}:dead-owner-nonce`, 'utf8');
+      writeFileSync(lockPath, formatLockRecord({ pid: deadOwnerPid, nonce: 'deadbeefdeadbeef', ...captureIdentity() }), 'utf8');
 
       // ...and a recovery mutex abandoned by a DIFFERENT process that
       // crashed mid-recovery for it. Per the explicit design decision
       // (ADR-008 / Section 5), this is never auto-recovered by liveness —
       // it stays held until a human removes it.
       const orphanedRecovererPid = spawnSync(process.execPath, ['-e', '']).pid as number;
-      writeFileSync(mutexPath, `${orphanedRecovererPid}:orphaned-recovery-nonce`, 'utf8');
+      writeFileSync(mutexPath, formatLockRecord({ pid: orphanedRecovererPid, nonce: 'cafecafecafecafe', ...captureIdentity() }), 'utf8');
 
       const before = readFileSync(lockPath, 'utf8');
       const mutexBefore = readFileSync(mutexPath, 'utf8');

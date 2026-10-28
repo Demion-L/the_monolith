@@ -16,7 +16,7 @@ import { execFileSync, spawnSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { readState, mutateState, stateFilePath, trustedDirectoryTarget, MAX_STATE_BYTES } from './state-keeper.js';
-import { acquireLock, MAX_LOCK_BYTES } from './lock.js';
+import { acquireLock, MAX_LOCK_BYTES, captureIdentity, formatLockRecord } from './lock.js';
 import { createInitialState } from './types.js';
 import { StateFileError, LockUnsafeError, LockTimeoutError } from './errors.js';
 import { MAX_ACTIVE_CONTEXT_BYTES } from '../brief/collect.js';
@@ -298,17 +298,18 @@ describe('lock reads', () => {
 
   it('a live owner is still protected: valid lock of this (live) pid times out and survives', async () => {
     const p = project();
-    writeFileSync(p.lock, `${process.pid}:livenonce`);
+    const live = formatLockRecord({ pid: process.pid, nonce: '0123456789abcdef', ...captureIdentity() });
+    writeFileSync(p.lock, live);
     const err = await acquireLock(p.lock, { timeoutMs: 200, retryDelayMs: 20 }).catch((e) => e);
     expect(err).toBeInstanceOf(LockTimeoutError);
     expect(err).not.toBeInstanceOf(LockUnsafeError);
-    expect(readFileSync(p.lock, 'utf8')).toBe(`${process.pid}:livenonce`);
+    expect(readFileSync(p.lock, 'utf8')).toBe(live);
   });
 
   it('a dead owner is still recovered (valid record, dead pid)', async () => {
     const p = project();
     const dead = spawnSync(process.execPath, ['-e', '0']);
-    writeFileSync(p.lock, `${dead.pid}:deadnonce`);
+    writeFileSync(p.lock, formatLockRecord({ pid: dead.pid as number, nonce: 'deadbeefdeadbeef', ...captureIdentity() }));
     const release = await acquireLock(p.lock, { timeoutMs: 2000, retryDelayMs: 20 });
     release();
     expect(existsSync(p.lock)).toBe(false);

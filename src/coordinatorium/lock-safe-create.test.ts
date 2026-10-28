@@ -115,7 +115,7 @@ describe('publication states of the publish step', () => {
     };
     const release = await acquireLock(lockPath, { timeoutMs: 1000 }, { fsOps: ops });
     expect(links).toBe(1);
-    expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`^${process.pid}:`));
+    expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`"pid":${process.pid},`));
     release();
     expect(existsSync(lockPath)).toBe(false);
     expect(staging()).toEqual([]);
@@ -146,7 +146,7 @@ describe('publication states of the publish step', () => {
     expect(err.publication).toBe('UNKNOWN');
     expect(err.cleanedUp).toBe(false);
     expect(links).toBe(1);
-    expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`^${process.pid}:`));
+    expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`"pid":${process.pid},`));
     expect(staging().length).toBe(1);
   });
 

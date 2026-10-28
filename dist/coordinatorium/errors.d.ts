@@ -39,7 +39,13 @@ export declare class LockUnsafeError extends CoordinatoriumError {
     constructor(lockPath: string, fileCode: ProjectFileErrorCode, detail: string);
 }
 export declare class LockTimeoutError extends CoordinatoriumError {
-    constructor(message: string);
+    /** The last failure that prevented acquisition (e.g. a stale-lock `unlink`
+     * error), kept so a timeout never hides why the lock could not be taken.
+     * Also set as the standard `cause`. */
+    readonly lastFailure?: unknown;
+    constructor(message: string, options?: {
+        lastFailure?: unknown;
+    });
 }
 /**
  * The phase of the create/publish protocol (`lock.ts`'s `createAndPublish`)

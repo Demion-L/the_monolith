@@ -4,7 +4,7 @@
  * Acquisition is a single `open(path, 'wx')` syscall — it either creates the
  * file or fails with EEXIST, atomically, on every platform Node supports.
  * That atomicity is what actually prevents two processes from both believing
- * they own the lock at once; the lock file's body (`pid:nonce`) exists only
+ * they own the lock at once; the lock file's body (a JSON owner record) exists only
  * to support crash recovery.
  *
  * Three invariants govern every decision in this module:
@@ -51,12 +51,12 @@
  *      uniquely-named staging file is ever touched by its own cleanup. See
  *      `createAndPublish` below and ADR-008 for the full argument.
  */
-import { writeSync, closeSync, unlinkSync, fchmodSync, fsyncSync, } from 'fs';
+import { writeSync, closeSync, unlinkSync, fchmodSync, fsyncSync, readFileSync, readlinkSync, } from 'fs';
 import { basename, dirname } from 'path';
 import { randomBytes } from 'crypto';
 import { LockTimeoutError, LockUnsafeError, LockCreationError } from './errors.js';
 import { SafeWriteError, createExclusive, disposeOwned, openParent, publishLink, readBoundedFileStable, boundaryPathOf, trustedDirectoryBoundary, } from '../root/index.js';
-/** A well-formed `pid:nonce` record is a few dozen bytes; 256 B is generous. */
+/** A well-formed record (see `LockRecord`) is under 200 bytes; 256 B is generous. */
 export const MAX_LOCK_BYTES = 256;
 const DEFAULT_OPTIONS = {
     timeoutMs: 5000,
@@ -66,54 +66,180 @@ const DEFAULT_OPTIONS = {
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
-/**
- * Ask the OS whether `pid` is a live process. Only ESRCH ("no such
- * process") is treated as proof of death. EPERM means the process exists
- * but we lack permission to signal it — it may well be alive, so capture
- * is forbidden. Any other error is NOT evidence of anything and must not
- * be treated as proof of death either (invariant 2).
- */
-function checkLiveness(pid) {
+const realProcOps = {
+    platform: process.platform,
+    get pid() {
+        return process.pid;
+    },
+    readText: (path) => readFileSync(path, 'utf8'),
+    readlink: (path) => readlinkSync(path),
+    kill: (pid, signal) => {
+        process.kill(pid, signal);
+    },
+};
+const NO_IDENTITY = { boot: null, pidns: null, start: null };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const PIDNS_RE = /^pid:\[[0-9]{1,20}\]$/;
+const START_RE = /^[0-9]{1,20}$/;
+/** State letter and start ticks from `/proc/<pid>/stat`. The command name is
+ * parenthesised and may itself contain spaces and parentheses, so parsing
+ * starts after the LAST `)`. */
+function parseProcStat(text) {
+    const close = text.lastIndexOf(')');
+    if (close < 0)
+        return null;
+    const fields = text.slice(close + 2).trim().split(' ');
+    const state = fields[0];
+    const start = fields[19]; // field 22 overall; fields[0] is field 3
+    if (!state || state.length !== 1 || start === undefined || !START_RE.test(start))
+        return null;
+    return { state, start };
+}
+/** This process's identity, or all-`null` when it cannot be established
+ * (non-Linux, or `/proc` that does not belong to our PID namespace). */
+export function captureIdentity(ops = realProcOps) {
+    if (ops.platform !== 'linux')
+        return NO_IDENTITY;
     try {
-        process.kill(pid, 0);
-        return 'alive';
+        // A /proc mounted from another PID namespace would describe other processes.
+        if (ops.readlink('/proc/self') !== String(ops.pid))
+            return NO_IDENTITY;
+        const boot = ops.readText('/proc/sys/kernel/random/boot_id').trim();
+        const pidns = ops.readlink('/proc/self/ns/pid');
+        const stat = parseProcStat(ops.readText('/proc/self/stat'));
+        return {
+            boot: UUID_RE.test(boot) ? boot : null,
+            pidns: PIDNS_RE.test(pidns) ? pidns : null,
+            start: stat ? stat.start : null,
+        };
     }
-    catch (err) {
-        const code = err.code;
-        if (code === 'ESRCH')
-            return 'dead';
-        if (code === 'EPERM')
-            return 'alive'; // exists, possibly alive — never treat as dead
-        return 'unknown'; // anything else is ambiguous, not a death signal
+    catch {
+        return NO_IDENTITY;
     }
 }
-function makeOwnRecord() {
-    return { pid: process.pid, nonce: randomBytes(8).toString('hex') };
+let cachedIdentity = null;
+function ownIdentity(ops) {
+    if (ops !== undefined && Object.keys(ops).length > 0)
+        return captureIdentity({ ...realProcOps, ...ops });
+    if (cachedIdentity === null || cachedIdentity.pid !== process.pid) {
+        cachedIdentity = { pid: process.pid, identity: captureIdentity() };
+    }
+    return cachedIdentity.identity;
+}
+const errno = (err) => err?.code;
+/**
+ * Decide whether the owner named by `record` is alive, from verifiable
+ * identity rather than from `kill(pid, 0)` alone (H1, LOCK-FIX-001).
+ *
+ * A PID is only meaningful inside the PID namespace and boot that issued it, so
+ * `ESRCH` is NOT proof of death by itself: a process in another namespace
+ * sharing the filesystem would see a live owner's PID as "no such process".
+ * `dead` therefore requires the record's boot and PID namespace to equal ours,
+ * and either a different start time for that PID (it was reused) or two
+ * independent probes agreeing it does not exist (`/proc/<pid>` absent AND
+ * `ESRCH`). Everything else is `unknown`, which — like `alive` — forbids
+ * recovery. Rules are checked top to bottom; the first match decides. The age
+ * of the lock plays no part.
+ */
+export function judgeOwner(record, ours, ops = realProcOps) {
+    if (ours.boot === null || ours.pidns === null)
+        return { verdict: 'unknown', reason: 'no-local-identity' };
+    if (record.boot === null || record.pidns === null)
+        return { verdict: 'unknown', reason: 'weak-record' };
+    if (record.boot !== ours.boot)
+        return { verdict: 'unknown', reason: 'boot-mismatch' };
+    if (record.pidns !== ours.pidns)
+        return { verdict: 'unknown', reason: 'pidns-mismatch' };
+    if (record.pid === ops.pid)
+        return { verdict: 'alive', reason: 'same-process' };
+    let killCode;
+    try {
+        ops.kill(record.pid, 0);
+        killCode = undefined;
+    }
+    catch (err) {
+        killCode = errno(err) ?? 'EUNKNOWN';
+    }
+    if (killCode === 'EPERM')
+        return { verdict: 'alive', reason: 'eperm' };
+    if (killCode !== undefined && killCode !== 'ESRCH')
+        return { verdict: 'unknown', reason: 'probe-error' };
+    let statText = null;
+    try {
+        statText = ops.readText(`/proc/${record.pid}/stat`);
+    }
+    catch (err) {
+        if (errno(err) !== 'ENOENT')
+            return { verdict: 'unknown', reason: 'probe-error' };
+    }
+    if (statText === null) {
+        // Absent from /proc: dead only if kill() agrees (ESRCH). If kill() says the
+        // process exists, the oracles disagree (e.g. hidepid) — not a death signal.
+        return killCode === 'ESRCH'
+            ? { verdict: 'dead', reason: 'absent-by-two-oracles' }
+            : { verdict: 'unknown', reason: 'oracle-disagreement' };
+    }
+    if (killCode === 'ESRCH')
+        return { verdict: 'unknown', reason: 'oracle-disagreement' };
+    const stat = parseProcStat(statText);
+    if (stat === null)
+        return { verdict: 'unknown', reason: 'probe-error' };
+    if (stat.state === 'Z')
+        return { verdict: 'unknown', reason: 'zombie' };
+    if (stat.state === 'X')
+        return { verdict: 'dead', reason: 'exited' };
+    if (record.start === null)
+        return { verdict: 'alive', reason: 'cannot-rule-out-reuse' };
+    return record.start !== stat.start
+        ? { verdict: 'dead', reason: 'pid-reused' }
+        : { verdict: 'alive', reason: 'start-match' };
+}
+const RECORD_KEYS = ['v', 'pid', 'nonce', 'boot', 'pidns', 'start'];
+function makeOwnRecord(hooks = {}) {
+    return { pid: process.pid, nonce: randomBytes(8).toString('hex'), ...ownIdentity(hooks.procOps) };
+}
+/** The exact bytes written as a lock file's body. */
+export function formatLockRecord(r) {
+    return JSON.stringify({ v: 2, pid: r.pid, nonce: r.nonce, boot: r.boot, pidns: r.pidns, start: r.start });
 }
 /** Content identity, not liveness. Used to detect whether a lock file has
  * changed (recovered by someone else, or released) between two reads. */
 function sameRecord(a, b) {
     if (a === null || b === null)
         return a === b;
-    return a.pid === b.pid && a.nonce === b.nonce;
+    return a.pid === b.pid && a.nonce === b.nonce && a.boot === b.boot && a.pidns === b.pidns && a.start === b.start;
 }
 /**
  * Parse a lock file's raw content. Returns null for anything that is not
- * unambiguously a well-formed `pid:nonce` record — including an empty
- * file, a partially written one, or garbage. A null result is NOT treated
- * as "no owner"; callers must treat it as uncertain (invariant 2).
+ * unambiguously a well-formed record — including an empty file, a partially
+ * written one, garbage, or the unsupported `pid:nonce` format. A null result is
+ * NOT treated as "no owner"; callers must treat it as uncertain (invariant 2).
  */
 function parseLockRecord(raw) {
-    const parts = raw.split(':');
-    if (parts.length !== 2)
+    let o;
+    try {
+        o = JSON.parse(raw);
+    }
+    catch {
         return null;
-    const [pidStr, nonce] = parts;
-    const pid = Number(pidStr);
-    if (!Number.isInteger(pid) || pid <= 0)
+    }
+    if (typeof o !== 'object' || o === null || Array.isArray(o))
         return null;
-    if (nonce.length === 0)
+    const keys = Object.keys(o);
+    if (keys.length !== RECORD_KEYS.length || !RECORD_KEYS.every((k) => keys.includes(k)))
         return null;
-    return { pid, nonce };
+    const r = o;
+    const optional = (v, re) => v === null ? null : typeof v === 'string' && re.test(v) ? v : undefined;
+    const boot = optional(r.boot, UUID_RE);
+    const pidns = optional(r.pidns, PIDNS_RE);
+    const start = optional(r.start, START_RE);
+    if (r.v !== 2 || !Number.isInteger(r.pid) || r.pid <= 0 || r.pid > 2 ** 31 - 1)
+        return null;
+    if (typeof r.nonce !== 'string' || !/^[0-9a-f]{16}$/.test(r.nonce))
+        return null;
+    if (boot === undefined || pidns === undefined || start === undefined)
+        return null;
+    return { pid: r.pid, nonce: r.nonce, boot, pidns, start };
 }
 function inspectLock(boundary, path) {
     // Unified safe read (SEC-001B.1-R): the lock is read under the boundary its
@@ -123,7 +249,7 @@ function inspectLock(boundary, path) {
         const record = 'content' in r ? parseLockRecord(r.content) : null;
         if (record)
             return { kind: 'valid', record };
-        return { kind: 'unsafe', class: 'content', fileCode: 'FILE_UNREADABLE', detail: 'lock content is empty or malformed' };
+        return { kind: 'unsafe', class: 'content', fileCode: 'FILE_UNREADABLE', detail: 'lock content is empty, malformed or of an unrecognised format; automatic recovery is not performed' };
     }
     // Missing, or still being released/re-acquired after the retries: not
     // observed. The exclusive create attempt that follows is the arbiter.
@@ -185,14 +311,14 @@ function stagingPath(lockPath, record) {
  *
  * If the publish step ends in a state that cannot be classified (`UNKNOWN`:
  * the link may or may not have happened), the lock is confirmed ONLY by its
- * ownership record — `lockPath` holding exactly this attempt's `pid:nonce`.
+ * ownership record — `lockPath` holding exactly this attempt's owner record.
  * Otherwise the attempt fails with `publication: 'UNKNOWN'`; nothing is
  * retried and the staging file is left in place.
  */
 async function createAndPublish(parent, lockPath, record, fsyncMetadata, testHooks) {
     const stagingName = basename(stagingPath(lockPath, record));
     const lockName = basename(lockPath);
-    const metadata = Buffer.from(`${record.pid}:${record.nonce}`, 'utf8');
+    const metadata = Buffer.from(formatLockRecord(record), 'utf8');
     const base = { lockPath, pid: record.pid, nonce: record.nonce };
     let owned;
     try {
@@ -320,13 +446,13 @@ function recoveryMutexPath(lockPath) {
 async function recoverDeadOwner(parent, lockPath, observed, fsyncMetadata, hooks) {
     await hooks.beforeRecoveryAttempt?.();
     const mutexPath = recoveryMutexPath(lockPath);
-    const mutexRecord = makeOwnRecord();
+    const mutexRecord = makeOwnRecord(hooks);
     // The recovery mutex is created through the same safe staging/publish
     // primitive as the primary lock — its semantics (never recovered by
     // liveness or age, see module doc) are unchanged; only how it is
     // physically created is shared code now.
     if ((await createAndPublish(parent, mutexPath, mutexRecord, fsyncMetadata, hooks)) === 'lost-race') {
-        return 'mutex-busy';
+        return { outcome: 'mutex-busy' };
     }
     try {
         // Re-verify from scratch now that we exclusively hold the recovery
@@ -335,30 +461,47 @@ async function recoverDeadOwner(parent, lockPath, observed, fsyncMetadata, hooks
         // delete this specific stale record from here on.
         const current = readLockRecord(boundaryPathOf(parent), lockPath);
         if (current === null || !sameRecord(current, observed)) {
-            return 'aborted'; // changed or gone while we were acquiring the mutex
+            return { outcome: 'aborted', reason: 'lock changed or vanished while acquiring the recovery mutex' };
         }
-        if (checkLiveness(current.pid) !== 'dead') {
-            return 'aborted'; // no longer safe to conclude dead — back off
+        const judged = judgeOwner(current, ownIdentity(hooks.procOps), { ...realProcOps, ...hooks.procOps });
+        if (judged.verdict !== 'dead') {
+            return { outcome: 'aborted', reason: `owner no longer provably dead (${judged.verdict}: ${judged.reason})` };
         }
         await hooks.beforeStaleUnlink?.();
         try {
-            unlinkSync(lockPath);
+            (hooks.unlinkLock ?? unlinkSync)(lockPath);
         }
-        catch {
-            // already gone — fine, the next create attempt will tell us the truth
+        catch (err) {
+            // Already gone is fine — the next create attempt tells the truth. Any
+            // other failure is NOT recovery: report it so the caller backs off
+            // within its deadline instead of pretending progress was made.
+            if (errno(err) !== 'ENOENT')
+                return { outcome: 'unlink-failed', cause: err };
         }
-        return 'recovered';
+        return { outcome: 'recovered' };
     }
     finally {
         releaseIfOwned(boundaryPathOf(parent), mutexPath, mutexRecord);
     }
 }
+/** Upper bound of the delay between attempts, as a multiple of `retryDelayMs`. */
+const BACKOFF_CAP_FACTOR = 8;
+function describeFailure(err) {
+    const code = errno(err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return code !== undefined && !msg.includes(code) ? `${code}: ${msg}` : msg;
+}
 /**
  * Acquire `lockPath` exclusively. Waits up to `timeoutMs` for the current
  * owner (if any) to release it, attempting liveness-gated, mutex-serialized
- * recovery only when the owner is confirmed dead. Returns a release
- * function. `testHooks` exists solely to let tests force specific
+ * recovery only when the owner is provably dead (`judgeOwner`). Returns a
+ * release function. `testHooks` exists solely to let tests force specific
  * interleavings deterministically — production callers must never pass it.
+ *
+ * One deadline governs the whole call and is checked at the top of EVERY
+ * iteration, so no branch (recovery progress, aborted recovery, a failing
+ * `unlink`) can loop past it. Waits between attempts use a bounded exponential
+ * backoff. On timeout the last failure is kept in the error.
  */
 export async function acquireLock(lockPath, options = {}, testHooks = {}, parent = openParent(trustedDirectoryBoundary(dirname(lockPath)), dirname(lockPath))) {
     // `parent` is the already-verified directory that holds the lock. State
@@ -367,8 +510,21 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}, parent
     // trust boundary (trusted-directory semantics, ADR-012).
     const opts = { ...DEFAULT_OPTIONS, ...options };
     const deadline = Date.now() + opts.timeoutMs;
-    const own = makeOwnRecord();
+    const own = makeOwnRecord(testHooks);
+    const ours = ownIdentity(testHooks.procOps);
+    const probeOps = { ...realProcOps, ...testHooks.procOps };
+    const maxDelay = Math.max(opts.retryDelayMs * BACKOFF_CAP_FACTOR, opts.retryDelayMs);
+    let attempts = 0;
+    let delay = opts.retryDelayMs;
+    let observation = 'lock is held';
+    let lastFailure;
+    let lastFailureText = '';
     for (;;) {
+        if (attempts > 0 && Date.now() >= deadline) {
+            const failure = lastFailureText ? `; last failure: ${lastFailureText}` : '';
+            throw new LockTimeoutError(`Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}" (${observation}${failure})`, { lastFailure });
+        }
+        attempts++;
         if ((await createAndPublish(parent, lockPath, own, opts.fsyncMetadata, testHooks)) === 'published') {
             return () => releaseIfOwned(boundaryPathOf(parent), lockPath, own);
         }
@@ -382,28 +538,34 @@ export async function acquireLock(lockPath, options = {}, testHooks = {}, parent
             // file is left exactly as found and the lock is not acquired.
             throw new LockUnsafeError(lockPath, inspection.fileCode, inspection.detail);
         }
-        const observed = inspection.kind === 'valid' ? inspection.record : null;
-        if (observed !== null) {
-            const verdict = checkLiveness(observed.pid);
-            if (verdict === 'dead') {
-                const outcome = await recoverDeadOwner(parent, lockPath, observed, opts.fsyncMetadata, testHooks);
-                if (outcome !== 'mutex-busy') {
-                    continue; // we (or whoever holds the mutex) made progress; re-evaluate now
+        if (inspection.kind === 'unsafe') {
+            observation = `${inspection.detail}; the file was left untouched`;
+        }
+        else if (inspection.kind === 'valid') {
+            const judged = judgeOwner(inspection.record, ours, probeOps);
+            observation = `owner pid ${inspection.record.pid} is ${judged.verdict} (${judged.reason})`;
+            if (judged.verdict === 'dead') {
+                const result = await recoverDeadOwner(parent, lockPath, inspection.record, opts.fsyncMetadata, testHooks);
+                if (result.outcome === 'recovered') {
+                    continue; // progress was made; re-evaluate now — the deadline check above still bounds this
                 }
-                // mutex-busy: someone else is already handling this exact
-                // recovery — fall through to the normal wait/retry below rather
-                // than spinning on a mutex we know is currently unavailable.
+                if (result.outcome === 'unlink-failed') {
+                    lastFailure = result.cause;
+                    lastFailureText = `could not remove the stale lock of dead owner pid ${inspection.record.pid} (${describeFailure(result.cause)})`;
+                }
+                else if (result.outcome === 'aborted') {
+                    observation += `; recovery aborted: ${result.reason}`;
+                }
+                else {
+                    observation += '; another process holds the recovery mutex';
+                }
             }
-            // 'alive' or 'unknown' (including EPERM): invariant 2 — do not recover.
+            // 'alive' or 'unknown': invariant 2 — do not recover.
         }
-        // observed === null: file vanished, is empty, or is malformed. Do not
-        // infer "free" or "stale" from that — just loop back to try creating
-        // it again (which also naturally resolves the "vanished" case) after
-        // the same waiting/backoff discipline as a confirmed-busy lock.
-        if (Date.now() >= deadline) {
-            const why = inspection.kind === 'unsafe' ? ` (${inspection.detail}; the file was left untouched)` : '';
-            throw new LockTimeoutError(`Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}"${why}`);
-        }
-        await sleep(opts.retryDelayMs);
+        // inspection absent: the file vanished — try creating it again after the
+        // same waiting/backoff discipline as a confirmed-busy lock.
+        const remaining = deadline - Date.now();
+        await sleep(Math.max(0, Math.min(delay, remaining)));
+        delay = Math.min(delay * 2, maxDelay);
     }
 }

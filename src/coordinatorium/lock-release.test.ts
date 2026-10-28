@@ -117,7 +117,7 @@ describe('L-1 — release is fail-closed (lock is left untouched)', () => {
     // (no path-based recovery; FS-CLEAN-001).
     expect(existsSync(lockPath)).toBe(true);
     expect(staging()).toHaveLength(1);
-    expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`^${process.pid}:`));
+    expect(readFileSync(lockPath, 'utf8')).toMatch(new RegExp(`"pid":${process.pid},`));
   });
 
   it('FILE_CHANGED / other owner: a lock now holding someone else\'s record is never removed', async () => {

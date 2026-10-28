@@ -55,9 +55,17 @@ export class LockUnsafeError extends CoordinatoriumError {
     }
 }
 export class LockTimeoutError extends CoordinatoriumError {
-    constructor(message) {
+    /** The last failure that prevented acquisition (e.g. a stale-lock `unlink`
+     * error), kept so a timeout never hides why the lock could not be taken.
+     * Also set as the standard `cause`. */
+    lastFailure;
+    constructor(message, options = {}) {
         super('LOCK_TIMEOUT', message);
         this.name = 'LockTimeoutError';
+        if (options.lastFailure !== undefined) {
+            this.lastFailure = options.lastFailure;
+            this.cause = options.lastFailure;
+        }
     }
 }
 /**

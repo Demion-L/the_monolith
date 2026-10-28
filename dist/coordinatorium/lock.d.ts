@@ -103,6 +103,12 @@ export interface LockTestHooks {
      * while creating, publishing and removing staging files — fault injection
      * for publication states. Never supplied by production code. */
     fsOps?: Partial<FsOps>;
+    /** Replaces the monotonic clock (milliseconds) that drives the deadline. */
+    now?: () => number;
+    /** Replaces the jitter source: a value in `[0, 1)`. */
+    random?: () => number;
+    /** Replaces the wait between attempts; receives the requested milliseconds. */
+    sleep?: (ms: number) => Promise<void>;
 }
 export type LivenessVerdict = 'alive' | 'dead' | 'unknown';
 /** What identifies a process beyond its PID. A PID is only meaningful inside
@@ -165,10 +171,17 @@ export declare function formatLockRecord(r: LockRecord): string;
  * release function. `testHooks` exists solely to let tests force specific
  * interleavings deterministically — production callers must never pass it.
  *
- * One deadline governs the whole call and is checked at the top of EVERY
- * iteration, so no branch (recovery progress, aborted recovery, a failing
- * `unlink`) can loop past it. Waits between attempts use a bounded exponential
- * backoff. On timeout the last failure is kept in the error.
+ * One monotonic deadline governs the whole call and is checked at the top of
+ * EVERY iteration, and the only `continue` sits at the tail after all
+ * bookkeeping, so no branch (recovery progress, aborted recovery, a failing
+ * `unlink`) can skip the check or the wait. Waits are a bounded exponential backoff with jitter in `[d/2, d]`,
+ * never longer than the time remaining. After a recovery the lock path is
+ * observed again rather than assumed free; at most
+ * `MAX_PROGRESS_WITHOUT_SLEEP` iterations in a row may run without waiting.
+ *
+ * The deadline bounds the waiting loop and the number of retries. It does not
+ * bound a single synchronous filesystem call that hangs inside the kernel
+ * (e.g. a stuck mount): no timer can run while it blocks.
  */
 export declare function acquireLock(lockPath: string, options?: LockOptions, testHooks?: LockTestHooks, parent?: ParentRef): Promise<() => void>;
 //# sourceMappingURL=lock.d.ts.map

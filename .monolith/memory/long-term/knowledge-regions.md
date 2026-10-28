@@ -31,9 +31,9 @@ The maturity axis measures **quantity and stability** of accumulated knowledge.
 
 ## Epistemic Level — Proposed Second Axis
 
-**Status: proposed — not yet adopted. Do not apply to region entries until validation criteria in H8 are met.**
+**Status: proposed — not yet adopted. Do not apply to region entries until validation criteria in webway:HYP-008 are met.**
 
-H8 (Predictive Power as a Measure of Knowledge) identifies that maturity alone does not capture what a Knowledge Region can *do*. A second axis is proposed to track epistemic capability independently of accumulation:
+webway:HYP-008 (Predictive Power as a Measure of Knowledge) identifies that maturity alone does not capture what a Knowledge Region can *do*. A second axis is proposed to track epistemic capability independently of accumulation:
 
 | Epistemic Level | Meaning |
 | --------------- | ------- |
@@ -46,7 +46,7 @@ These axes are **orthogonal**, not sequential:
 - A large `mature` region may still be only `descriptive` if its concept graph lacks the density and typed relationships needed for inference.
 - The label `predictive` requires a demonstrated prediction task with measured accuracy on holdout data — it cannot be assigned based on region size.
 
-This proposal will remain marked as proposed until at least one region satisfies the validation criteria defined in H8.
+This proposal will remain marked as proposed until at least one region satisfies the validation criteria defined in webway:HYP-008.
 
 ---
 
@@ -97,7 +97,7 @@ The theoretical and practical study of how knowledge is formed, organized, repre
 | `informs` | Agent Systems | Agents depend on knowledge representations to reason and plan |
 | `informs` | Organizational Memory | Organizational memory is applied knowledge systems at institutional scale |
 | `implements-via` | WEBWAY | WEBWAY is the operational implementation of knowledge formation theory |
-| `critiques` | Information Retrieval | Knowledge systems theory explains why retrieval alone is insufficient (H1, H2) |
+| `critiques` | Information Retrieval | Knowledge systems theory explains why retrieval alone is insufficient (webway:HYP-001, webway:HYP-002) |
 
 ---
 
@@ -124,7 +124,7 @@ Systems and mechanisms by which AI agents reason, plan, use tools, remember cont
 | ------------ | ------------- | ----------- |
 | `governed-by` | MONOLITH | MONOLITH provides the memory governance kernel for agent operation |
 | `enriched-by` | WEBWAY | WEBWAY provides semantic enrichment for agent memory artifacts |
-| `mirrors` | Organizational Memory | Agent session transfer and org knowledge transfer are the same structural problem (H5) |
+| `mirrors` | Organizational Memory | Agent session transfer and org knowledge transfer are the same structural problem (monolith:HYP-005) |
 | `depends-on` | Knowledge Systems | Effective agent reasoning requires structured knowledge, not raw retrieval |
 
 ---
@@ -134,7 +134,7 @@ Systems and mechanisms by which AI agents reason, plan, use tools, remember cont
 **Maturity:** `mature`
 
 **Purpose:**  
-How human organizations capture, preserve, and transfer accumulated knowledge and experience across time and personnel transitions. This region is mature in research literature but underexplored in AI systems — hypothesis H5 bets that agent memory and organizational memory are the same problem, making this region directly applicable to MONOLITH.
+How human organizations capture, preserve, and transfer accumulated knowledge and experience across time and personnel transitions. This region is mature in research literature but underexplored in AI systems — hypothesis monolith:HYP-005 bets that agent memory and organizational memory are the same problem, making this region directly applicable to MONOLITH.
 
 **Core Concepts:**
 
@@ -150,7 +150,7 @@ How human organizations capture, preserve, and transfer accumulated knowledge an
 
 | Relationship | Target Region | Description |
 | ------------ | ------------- | ----------- |
-| `mirrors` | Agent Systems | Structurally identical transfer problem at different scale (H5) |
+| `mirrors` | Agent Systems | Structurally identical transfer problem at different scale (monolith:HYP-005) |
 | `grounds` | Knowledge Systems | Organizational memory is the applied instantiation of knowledge systems theory |
 | `implemented-by` | MONOLITH | MONOLITH's memory governance layer mirrors organizational knowledge management patterns |
 
@@ -167,7 +167,7 @@ Mechanisms for accessing relevant information from large corpora given a query o
 
 | Concept | Description |
 | ------- | ----------- |
-| RAG | Retrieval-Augmented Generation: chunk documents, embed chunks, retrieve by similarity, inject into context. Fast to build; brittle on synthesis and relational queries (H1). |
+| RAG | Retrieval-Augmented Generation: chunk documents, embed chunks, retrieve by similarity, inject into context. Fast to build; brittle on synthesis and relational queries (webway:HYP-001). |
 | Vector Search | Similarity search over dense embedding vectors. Captures semantic proximity but not semantic structure — finds "related" not "how related." |
 | Knowledge Graphs | Structured graph representation of entities and relationships. The closest existing approach to WEBWAY's model; typically requires manual construction or supervised extraction. |
 | Semantic Search | Meaning-based retrieval, overcoming exact keyword matching. Addresses surface-level failure of keyword search but does not build knowledge structure. |
@@ -178,8 +178,8 @@ Mechanisms for accessing relevant information from large corpora given a query o
 | Relationship | Target Region | Description |
 | ------------ | ------------- | ----------- |
 | `used-by` | Agent Systems | Agents use IR to access external knowledge at query time |
-| `insufficient-for` | Knowledge Systems | IR accesses knowledge but does not form it — the core critique in H1 |
-| `transcended-by` | WEBWAY | WEBWAY builds structure that IR cannot produce from chunks alone (H1, H3) |
+| `insufficient-for` | Knowledge Systems | IR accesses knowledge but does not form it — the core critique in webway:HYP-001 |
+| `transcended-by` | WEBWAY | WEBWAY builds structure that IR cannot produce from chunks alone (webway:HYP-001, webway:HYP-003) |
 
 ---
 
@@ -206,8 +206,8 @@ The cognitive operating system kernel governing AI agent behavior, memory, and l
 | ------------ | ------------- | ----------- |
 | `governs` | Agent Systems | MONOLITH is the memory and behavior governance kernel for AI agents |
 | `mirrors` | Organizational Memory | MONOLITH's governance patterns directly parallel knowledge management in organizations |
-| `hosts` | WEBWAY | WEBWAY is MONOLITH's first cognitive capability module (H6) |
-| `evolves-via` | WEBWAY | WEBWAY upgrades MONOLITH from memory governance to knowledge formation (H6) |
+| `hosts` | WEBWAY | WEBWAY is MONOLITH's first cognitive capability module (webway:HYP-006) |
+| `evolves-via` | WEBWAY | WEBWAY upgrades MONOLITH from memory governance to knowledge formation (webway:HYP-006) |
 
 ---
 
@@ -225,7 +225,7 @@ The semantic connection layer of MONOLITH. Transforms raw Artifacts into structu
 | Concepts | Named semantic units extracted from Artifacts, each with a normalized weight. The atomic unit of WEBWAY's knowledge representation. |
 | Semantic Links | Directed, typed relationships between Concepts (e.g., `relates-to`, `extends`, `depends-on`). Carry more information than proximity or co-occurrence. |
 | Pattern Discovery | Recognizing recurring structures across Concepts and Regions that were not explicitly encoded. The emergent behavior WEBWAY is designed to enable at maturity. |
-| Knowledge Regions | Domain clusters that organize related Concepts. Currently 4 predefined static regions (v0); will be dynamically inferred from corpus (H4, v3). |
+| Knowledge Regions | Domain clusters that organize related Concepts. Currently 4 predefined static regions (v0); will be dynamically inferred from corpus (webway:HYP-004, v3). |
 | Mental Models | Higher-order pattern abstractions over a Knowledge Region. The output that enables reasoning without re-reading source artifacts. |
 
 **Relationships to other regions:**
@@ -234,10 +234,10 @@ The semantic connection layer of MONOLITH. Transforms raw Artifacts into structu
 | ------------ | ------------- | ----------- |
 | `implements` | Knowledge Systems | WEBWAY operationalizes knowledge formation theory |
 | `enriches` | Agent Systems | WEBWAY adds semantic structure to agent memory artifacts |
-| `extends` | MONOLITH | WEBWAY is the first cognitive module extending MONOLITH's capabilities (H6) |
-| `transcends` | Information Retrieval | WEBWAY builds structure that IR cannot produce from chunks (H1, H3) |
-| `resolves` | Organizational Memory | WEBWAY provides the semantic layer for knowledge transfer across agent sessions (H5) |
-| `exposes-gaps-to` | Cognitive Processes | WEBWAY's output (isolated concepts, low-confidence models) surfaces gap signals for Question Loops (H7) |
+| `extends` | MONOLITH | WEBWAY is the first cognitive module extending MONOLITH's capabilities (webway:HYP-006) |
+| `transcends` | Information Retrieval | WEBWAY builds structure that IR cannot produce from chunks (webway:HYP-001, webway:HYP-003) |
+| `resolves` | Organizational Memory | WEBWAY provides the semantic layer for knowledge transfer across agent sessions (monolith:HYP-005) |
+| `exposes-gaps-to` | Cognitive Processes | WEBWAY's output (isolated concepts, low-confidence models) surfaces gap signals for Question Loops (webway:HYP-007) |
 
 ---
 
@@ -252,7 +252,7 @@ The internal operations by which a cognitive system monitors its own knowledge s
 
 | Concept | Description |
 | ------- | ----------- |
-| Question Loop | The continuous cycle of detecting a knowledge gap, generating a question to resolve it, acquiring new information, and updating the world model. The mechanism for self-directed learning (H7). |
+| Question Loop | The continuous cycle of detecting a knowledge gap, generating a question to resolve it, acquiring new information, and updating the world model. The mechanism for self-directed learning (webway:HYP-007). |
 | Curiosity | The drive to resolve detected gaps. In cognitive systems, curiosity is the prioritization signal that determines which gaps to pursue — modeled by Loewenstein's information-gap theory. |
 | Gap Detection | The operation of identifying absent, weak, or contradictory connections in the current knowledge structure. In WEBWAY terms: isolated concepts, missing links, low-confidence mental models, sparse regions. |
 | Learning | The update of the world model in response to resolved gaps. Distinguished from mere information storage — learning changes structure, not just content. |
@@ -263,7 +263,7 @@ The internal operations by which a cognitive system monitors its own knowledge s
 
 | Relationship | Target Region | Description |
 | ------------ | ------------- | ----------- |
-| `feeds-on` | WEBWAY | WEBWAY's concept graph and mental models are the substrate on which gap detection operates (H7) |
+| `feeds-on` | WEBWAY | WEBWAY's concept graph and mental models are the substrate on which gap detection operates (webway:HYP-007) |
 | `drives` | WEBWAY | Question Loops direct what new artifacts WEBWAY should analyze next |
 | `grounds-in` | Knowledge Systems | Curiosity and gap detection are studied phenomena in knowledge formation theory |
 | `informs` | Knowledge Systems | Self-reflection produces meta-knowledge about the knowledge system itself |

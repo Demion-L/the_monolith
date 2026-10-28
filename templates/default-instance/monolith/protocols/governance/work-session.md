@@ -25,7 +25,7 @@ Rules for managing work sessions.
 
 1. One story at a time — do not context-switch without explicit user request
 2. Update `context/boot/HANDOFF.md` when pausing mid-story
-3. Log significant decisions to `memory/long-term/decisions.md`
+3. Record architectural decisions as ADRs (index: `docs/adr/README.md`); log other significant decisions to `memory/long-term/decisions.md`
 4. Create error records in `memory/errors/` when mistakes occur
 
 ---

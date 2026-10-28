@@ -73,7 +73,7 @@ The raw, unprocessed input. The starting material before any transformation. Inf
 - A paragraph from a research paper on knowledge graphs
 - A story capsule written during `finalize-story`
 - A code comment explaining a design decision
-- A `decisions.md` entry after an architectural review
+- An ADR (`docs/adr/`) after an architectural review
 - This document itself
 
 ---
@@ -160,7 +160,7 @@ A recurring structural relationship between Concepts observed across multiple ar
 **Examples:**
 - `"knowledge → structure → memory"` appearing consistently across cognitive architecture articles
 - `"function → test → module"` appearing in software engineering story capsules
-- `"gap → question → learning"` appearing in learning-focused artifacts *(H7 pattern)*
+- `"gap → question → learning"` appearing in learning-focused artifacts *(webway:HYP-007 pattern)*
 - `"artifact → concept → region"` — the WEBWAY pipeline itself, if analyzed as a corpus
 
 **v0 note:** In v0, `analyzeArtifact()` generates a single-artifact approximation of a pattern inside the `MentalModel` output field. This is a placeholder, not a true cross-artifact pattern. Real patterns require corpus-level analysis (v2+).
@@ -193,8 +193,8 @@ A named abstraction over a Pattern. A Mental Model is interpretable — it has a
 **Purpose:**  
 A stable, named domain cluster that organizes multiple related Concepts, Patterns, and Mental Models into a coherent semantic territory. A Knowledge Region is the highest-resolution epistemic unit in WEBWAY. It defines an area of the knowledge graph that the system can reason over as a unit and that future modules (Terra, Corpus) can query as a boundary.
 
-**Note on mature knowledge capability (see H8):**  
-Maturity in the current model measures quantity and stability — how many concepts exist and how settled their relationships are. This is necessary but not sufficient. A mature Knowledge Region is not only accumulated and stable; it is capable of supporting inference, explanation, and prediction over unseen information. A region that can name its concepts but cannot generate accurate inferences about absent facts is still primarily descriptive. The progression from descriptive → explanatory → predictive is a proposed second axis, separate from the seed → growing → mature axis. These axes are orthogonal: a small but tightly structured region may already be explanatory, while a large region may remain descriptive. This axis is proposed; do not replace the existing maturity levels until validation criteria are met (see H8 — Analysis section).
+**Note on mature knowledge capability (see webway:HYP-008):**  
+Maturity in the current model measures quantity and stability — how many concepts exist and how settled their relationships are. This is necessary but not sufficient. A mature Knowledge Region is not only accumulated and stable; it is capable of supporting inference, explanation, and prediction over unseen information. A region that can name its concepts but cannot generate accurate inferences about absent facts is still primarily descriptive. The progression from descriptive → explanatory → predictive is a proposed second axis, separate from the seed → growing → mature axis. These axes are orthogonal: a small but tightly structured region may already be explanatory, while a large region may remain descriptive. This axis is proposed; do not replace the existing maturity levels until validation criteria are met (see webway:HYP-008 — Analysis section).
 
 **Entry criteria** *(v3+)*:
 - ≥ N Mental Models with consistent `regionId` assignment across diverse artifacts

@@ -7,11 +7,11 @@ related_protocols:
   - memory-governance
 ---
 
-# Architectural Decisions
+# Decisions
 
-Accumulated architectural decisions for this project.
+Project decisions that are **not** ADRs (`DEC-…` records). Architecture Decision Records are not listed or summarised here: if this project keeps ADRs, their only index is `docs/adr/README.md`.
 
-Updated by the finalize-story skill when a story introduces a significant design decision.
+Updated by the finalize-story skill when a story records a decision that is not an ADR.
 
 ---
 

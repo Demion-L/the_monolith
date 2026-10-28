@@ -20,7 +20,7 @@ Triggered by: "global overview", "project status", "big picture", "explain the p
 
 1. Read `memory/working/active.md`
 2. Read `context/maps/roadmap-index.md`
-3. Read `memory/long-term/decisions.md`
+3. Read `docs/adr/README.md` (ADR Index, if the project keeps ADRs) and `memory/long-term/decisions.md` (non-ADR decisions)
 4. Read `memory/long-term/architecture-principles.md`
 5. Report:
    - Project description (from AGENTS.md)
@@ -49,7 +49,7 @@ Triggered by: "global overview", "project status", "big picture", "explain the p
 - Phase 3 — Name: PLANNED
 
 **Key Decisions:**
-- Decision summary (link to decisions.md)
+- Decision summary (link to the ADR Index and/or decisions.md)
 
 **Current Focus:**
 Active story objective and what's being built now.

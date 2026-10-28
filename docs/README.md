@@ -11,7 +11,7 @@ Navigation index for MONOLITH's own architecture documentation.
 This directory is the project's long-term knowledge base.
 It is separate from the operational template (`templates/`), which is what instances deploy.
 
-**2026-10-21:** The `research/` and `vision/` layers below, and ADR-004/005/006,
+**2026-10-21:** The `research/` and `vision/` layers below, and `webway:ADR-004`, `webway:ADR-005`, `webway:ADR-006`,
 described Webway's cognitive-architecture research program rather than
 MONOLITH's own toolkit, and were physically moved to
 [the Webway repository](https://github.com/Demion-L/webway). See
@@ -32,7 +32,7 @@ docs/
 ├── webway-v0.md                     — historical pointer to Webway (extracted)
 │
 ├── adr/                             — architectural decision records
-│   ├── README.md
+│   ├── README.md                    — the ADR index (canonical)
 │   ├── ADR-007-explicit-identity-resolution.md
 │   ├── ADR-008-coordinatorium-tactical-mission-lifecycle.md
 │   ├── ADR-009-monolith-root-containment.md — accepted (SEC-001A)
@@ -61,12 +61,12 @@ docs/
 
 | Looking for                | Go to                                                                                   |
 | -------------------------- | --------------------------------------------------------------------------------------- |
-| Hypotheses                 | [`hypotheses.md`](../.monolith/memory/long-term/hypotheses.md)                          |
-| Architectural decisions    | [`adr/README.md`](adr/README.md) (index of records)                                     |
+| Hypotheses (MONOLITH)      | [`hypotheses.md`](../.monolith/memory/long-term/hypotheses.md)                          |
+| Architectural decisions    | [`adr/README.md`](adr/README.md) (the only ADR index)                                     |
 | Technical debt             | [`tech-debt.md`](../.monolith/memory/long-term/tech-debt.md)                            |
 | Errors and lessons         | [`memory/errors/`](../.monolith/memory/errors/README.md), [`learning/`](../.monolith/learning/INDEX.md) |
 | Working state              | [`active.md`](../.monolith/memory/working/active.md), [`story-index.md`](../.monolith/memory/working/story-index.md) |
-| Webway research            | [Webway repository](https://github.com/Demion-L/webway) — not stored in MONOLITH       |
+| Webway hypotheses, research | [Webway repository](https://github.com/Demion-L/webway) (`docs/hypotheses.md`, `docs/research/`) — not stored in MONOLITH |
 | Map of authoritative sources | [`semantic-map.md`](../.monolith/context/maps/semantic-map.md)                        |
 
 Where a new piece of knowledge is saved: [`routing-map.md`](../.monolith/context/maps/routing-map.md), Table 8.

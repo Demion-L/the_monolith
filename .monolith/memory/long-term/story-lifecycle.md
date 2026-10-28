@@ -112,7 +112,7 @@ Every archived Story adds to MONOLITH's corpus:
 
 Over time, the corpus of archived Stories is the primary evidence base for WEBWAY's cross-artifact analysis. Stories are not overhead — they are the mechanism by which the system's own reasoning becomes processable knowledge.
 
-This is the link between Story Lifecycle and H6 (WEBWAY bridges memory governance and knowledge formation): the artifacts that WEBWAY will eventually reason over are produced by Stories.
+This is the link between Story Lifecycle and webway:HYP-006 (WEBWAY bridges memory governance and knowledge formation): the artifacts that WEBWAY will eventually reason over are produced by Stories.
 
 ---
 
@@ -134,8 +134,8 @@ This is the link between Story Lifecycle and H6 (WEBWAY bridges memory governanc
 | -------- | ------------ |
 | `protocols/governance/work-session.md` | Operational rules for managing work sessions within a Story |
 | `skills/finalize-story/SKILL.md` | Procedure for closing a Story — writes the capsule and updates memory |
-| `memory/long-term/decisions.md` | Index of Decisions produced by completed Stories |
-| `adr/*.md` | Full records of Decisions (the terminal artifacts of Architecture Stories) |
+| `docs/adr/README.md` | Index of ADRs produced by completed Stories (repo-relative) |
+| `docs/adr/ADR-*.md`, `adr/*.md` | Full records of Decisions (the terminal artifacts of Architecture Stories) |
 | `memory/long-term/knowledge-lifecycle.md` | The parallel lifecycle — how artifacts become knowledge |
 | `memory/long-term/cognitive-core.md` | The future layer that will generate new Stories from detected gaps |
 | `memory/working/story-index.md` | Navigation index of all completed Stories |

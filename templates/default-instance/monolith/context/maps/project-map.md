@@ -17,7 +17,7 @@ Navigation guide for the cognitive architecture of this project.
 | --------------------------------------------------------------- | ----------------------- |
 | `{{MONOLITH_ROOT}}/memory/working/active.md`                    | Active phase and story  |
 | `{{MONOLITH_ROOT}}/memory/working/story-index.md`               | Implementation history  |
-| `{{MONOLITH_ROOT}}/memory/long-term/decisions.md`               | Architectural decisions |
+| `{{MONOLITH_ROOT}}/memory/long-term/decisions.md`               | Non-ADR decisions (`DEC-…`) |
 | `{{MONOLITH_ROOT}}/memory/long-term/architecture-principles.md` | Core principles         |
 | `{{MONOLITH_ROOT}}/memory/long-term/tech-debt.md`               | Tech debt registry      |
 | `{{MONOLITH_ROOT}}/memory/long-term/execution-history.md`       | Finalization log        |
@@ -66,6 +66,7 @@ Navigation guide for the cognitive architecture of this project.
 | `docs/README.md`                      | Knowledge base navigation index                      |
 | `docs/DOCUMENTATION_PRINCIPLES.md`   | Documentation rules and layer hierarchy              |
 | `docs/adr/`                           | Architecture Decision Records                        |
+| `docs/adr/README.md`                  | The only ADR index (created with the first ADR)      |
 | `docs/architecture/`                  | Current system description                           |
 
 Add `docs/research/` and `docs/vision/` layers if this project's own

@@ -6,11 +6,11 @@ authority: authoritative
 
 # Architecture Decision Records
 
-Catalog of architectural decisions made in the MONOLITH project.
+Catalog of architectural decisions made in the MONOLITH project. **This file is the only index of MONOLITH's ADRs.** The records are in this directory; ADR-001 … 003 predate it and stay in `.monolith/adr/`.
 
 ADRs answer one question: why was this architectural decision made?
 They do not describe how the system works today — that is `docs/architecture/`.
-They do not describe what was researched — that is `docs/research/`.
+MONOLITH has no research layer; research of Webway's program is owned by Webway.
 
 ---
 
@@ -21,9 +21,6 @@ They do not describe what was researched — that is `docs/research/`.
 | ADR-001 | Cognitive Loop Architecture (`.monolith/adr/`) | accepted | — | 2026-06-24 |
 | ADR-002 | Cognitive Core Foundation (`.monolith/adr/`) | accepted | — | 2026-06-26 |
 | ADR-003 | Engineering Gate Foundation (`.monolith/adr/`) | accepted | — | 2026-06-26 |
-| ADR-004 | Terra vs Graph Memex — **moved to [Webway](https://github.com/Demion-L/webway)** | accepted | R-0001, R-0002 | 2026-06-28 |
-| ADR-005 | Lexicon Mechanicus — **moved to [Webway](https://github.com/Demion-L/webway)** | accepted | R-0001, R-0003 | 2026-06-28 |
-| ADR-006 | Terra Persistence Strategy — **moved to [Webway](https://github.com/Demion-L/webway)** | proposed | R-0001, R-0002 | 2026-06-28 |
 | ADR-007 | Explicit-Only Identity Resolution | accepted | —            | 2026-06-28 |
 | ADR-008 | Coordinatorium — Tactical Mission Lifecycle | accepted | — | 2026-10-21 |
 | ADR-009 | monolithRoot Containment (SEC-001A) | accepted | — | 2026-10-22 |
@@ -40,13 +37,10 @@ They do not describe what was researched — that is `docs/research/`.
 
 **ADR-015 / ADR-016:** `proposed` ADRs on the lock foundation and bounded state. Neither is accepted; ADR-016 implementation is gated on ADR-015 (G-LOCK), which is not passed.
 
-**ADR-004/005/006 (2026-10-21):** these decisions concern Webway's
-cognitive-architecture research program (Terra persistence, the Lexicon
-Mechanicus, Terra's design), not MONOLITH's own toolkit. The documents were
-physically moved to the Webway repository — see `docs/MIGRATION_REPORT.md`
-for the earlier (2026-06-28) reorganization that created this index, and
-the Webway repository's `docs/MIGRATION_NOTE.md` for this move. The IDs
-`ADR-004`–`ADR-006` are retired, not reused, per the numbering rule below.
+**ADR-004 … 006:** these numbers are not used in MONOLITH. The decisions belong to
+Webway's cognitive-architecture research program and are owned there as
+`webway:ADR-004`, `webway:ADR-005`, `webway:ADR-006`. The numbers are retired,
+not reused, per the numbering rule below.
 
 ---
 

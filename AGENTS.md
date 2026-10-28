@@ -102,7 +102,8 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | Lessons             | `.monolith/learning/INDEX.md`                            |
 | Governance rules    | `.monolith/governance/`                                  |
 | Architecture principles | `.monolith/memory/long-term/architecture-principles.md` |
-| Architectural decisions | `.monolith/memory/long-term/decisions.md`           |
+| ADR index               | `docs/adr/README.md`                                    |
+| Non-ADR decisions       | `.monolith/memory/long-term/decisions.md`               |
 
 ---
 

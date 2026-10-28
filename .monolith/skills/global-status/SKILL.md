@@ -20,7 +20,7 @@ Triggered by: "global overview", "project status", "big picture", "explain the p
 
 1. Read `memory/working/active.md`
 2. Read `context/maps/roadmap-index.md`
-3. Read `memory/long-term/decisions.md`
+3. Read `docs/adr/README.md` (ADR Index)
 4. Read `README.md` (project description and stack)
 5. Read `MANIFESTO.md` (engineering principles)
 6. Report using the output format below

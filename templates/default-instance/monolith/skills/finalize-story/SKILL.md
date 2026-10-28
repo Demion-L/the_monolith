@@ -66,7 +66,8 @@ Add story entry to `memory/working/story-index.md`.
 ### Step 6 — Update long-term memory
 
 - Append entry to `memory/long-term/execution-history.md`
-- Update `memory/long-term/decisions.md` if story introduced new decisions
+- If the story introduced an ADR: add or update its row in the ADR Index, `docs/adr/README.md` — the only index of ADRs; add no pointer or summary to `decisions.md`
+- If the story recorded a decision that is not an ADR: add a `DEC-` record to `memory/long-term/decisions.md`
 
 ### Step 7 — Update HANDOFF.md
 

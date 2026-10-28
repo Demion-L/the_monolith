@@ -24,7 +24,7 @@ Tracks dependencies between stories, skills, protocols, and memory.
 | ---------------- | ------------------------------------------------------------ |
 | finalize-story   | memory-governance, integrity-verification                    |
 | current-status   | memory/working/active.md                                     |
-| global-status    | memory/long-term/decisions.md, context/maps/roadmap-index.md |
+| global-status    | docs/adr/README.md, memory/long-term/decisions.md, context/maps/roadmap-index.md |
 | self-improvement | memory/errors/, learning/taxonomy.md                         |
 
 ---

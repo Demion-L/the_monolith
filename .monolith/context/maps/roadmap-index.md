@@ -82,7 +82,7 @@ An independent security review runs in a separate worktree
 - MEM-001 — Memory Lifecycle — **PROPOSED / BACKLOG, registration only**; first step is an inventory of existing memory mechanisms (AUDIT ONLY). See `tech-debt.md` (MEM-001 detail); STATE-001 may become one of its foundations, the two are not merged
 - Mission Control UI (read-only local web UI, stages UI-000…UI-005) — **architecture accepted (ADR-010), not implemented, unscheduled, no priority implied**; does not block or reorder any item above. See ADR-010 (`accepted`) and `.monolith/context/templates/plan-ui-mission-control.md`
 
-Terra persistence (ADR-006) and Webway v1 improvements (frontmatter
+Terra persistence (`webway:ADR-006`) and Webway v1 improvements (frontmatter
 stripping, semantic linking) are no longer MONOLITH candidate directions —
 both belong to Webway's cognitive-architecture research program, developed
 independently: https://github.com/Demion-L/webway

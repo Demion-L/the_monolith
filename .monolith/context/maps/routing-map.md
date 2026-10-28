@@ -16,6 +16,7 @@ Declarative activation map. Given a task type, resolves:
 - which memory regions to load
 - which learning categories to inject
 - what model tier to use
+- where a new piece of long-term knowledge is stored (Table 8)
 
 ---
 
@@ -145,3 +146,35 @@ Privacy rules: `.monolith/context/models/privacy-classification.md`
 | Multiple task types applicable | Use the most restrictive cognitive mode.      |
 | No matching skill              | Execute task inline without a skill template. |
 | Sensitive data in context      | Override to local model tier.                 |
+| Knowledge intent unclear       | Table 8 applies: ask, write nothing.          |
+
+---
+
+## Table 8 — Knowledge Intent → Canonical Destination
+
+Declarative contract for saving long-term knowledge. It points at existing
+stores only; it creates no directory, template or registry. Where truth lives
+is defined by `semantic-map.md` — this table does not replace it.
+
+| Knowledge Intent         | Canonical Destination                                                                                                         | Required Context                                                                                          | Index                                                                                             | Owner repo |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------- |
+| `CREATE_HYPOTHESIS`      | `.monolith/memory/long-term/hypotheses.md` — new `## H<n>` section, next free number, Status Legend of that file               | `hypotheses.md` (existing H-numbers, Status Legend); memory-governance rule 3; **KQ-1**                    | none (the `## H<n>` headings of the file)                                                         | MONOLITH   |
+| `CREATE_ADR`             | `docs/adr/ADR-NNN-<slug>.md` (ADR-007 … ADR-019 live there; ADR-001 … 003 stay in `.monolith/adr/`)                             | `docs/adr/README.md` (template, statuses, numbering — retired IDs are not reused); **KQ-2**               | `docs/adr/README.md` — ADR Index table. Pointer in `memory/long-term/decisions.md` per finalize-story Step 5 | MONOLITH; an ADR about Webway's research program belongs to Webway (ADR-004…006 moved there) |
+| `RECORD_TECH_DEBT`       | `.monolith/memory/long-term/tech-debt.md` — a row in "Open Debt" (Accepted/Resolved sections for later states)                  | `tech-debt.md` (existing IDs, to avoid a collision)                                                       | none (the registry is the list)                                                                   | MONOLITH   |
+| `RECORD_ERROR`           | `.monolith/memory/errors/ERR-YYYY-XXXX.md` per `SCHEMA.md`. A lesson extracted from it is a separate step: `.monolith/learning/mistakes/<category>/LESSON-*.md` via the `self-improvement` skill | `memory/errors/SCHEMA.md`, `TAXONOMY.md`; `.monolith/skills/self-improvement/SKILL.md`                    | none per record (`memory/errors/README.md` and `learning/INDEX.md` describe structure only)       | MONOLITH   |
+| `UPDATE_WORKING_STATE`   | `.monolith/memory/working/active.md`; session transfer: `.monolith/context/boot/HANDOFF.md`                                     | `active.md`; memory-governance rule 5 (reference the active story ID). Story completion is `FINALIZE_STORY`, not this intent | `memory/working/story-index.md` lists finalized stories only — not written by this intent | MONOLITH   |
+| `FINALIZE_STORY`         | Defined by the skill: story capsule, `active.md`, `story-index.md`, `execution-history.md` (append-only), `decisions.md` pointer, `HANDOFF.md` | `.monolith/skills/finalize-story/SKILL.md`; memory-governance; integrity-verification                     | `memory/working/story-index.md`                                                                   | MONOLITH   |
+| `RECORD_RESEARCH_RESULT` | **Not stored in MONOLITH.** Research Layer moved to Webway (2026-10-21); do not write Webway research here                      | `docs/README.md` and `docs/adr/README.md` (notes on the move); **KQ-3**                                    | Webway's own                                                                                      | Webway — https://github.com/Demion-L/webway |
+
+**Rules**
+
+1. An intent not listed here, or one that fits two rows, has no route: ask the owner, write nothing, create no directory.
+2. Save only into the destination named above. If it does not exist or is not writable, ask — do not create a substitute.
+3. Before writing, confirm the authoritative source for the domain in `semantic-map.md`. On a conflict, do not choose; ask (see KQ-2).
+4. Destinations in this table are repo-relative to the MONOLITH repository unless the owner column says Webway.
+
+**Open routing questions** (not resolved here; no arbitrary choice made)
+
+- **KQ-1 — Webway-subject hypotheses.** `hypotheses.md` is titled "WEBWAY" and holds H1–H8 about Webway, although Webway's research program moved to its own repository. Until decided: a hypothesis about MONOLITH goes to `hypotheses.md`; a hypothesis about Webway's research is not routed — ask.
+- **KQ-2 — ADR index.** `semantic-map.md` names `memory/long-term/decisions.md` as the ADR index and `adr/ADR-*.md` (under `.monolith/`) as the records. In fact ADR-007 … ADR-019 are in `docs/adr/`, indexed completely by `docs/adr/README.md`, while `decisions.md` has pointers for ADR-001–003, 007, 008, 012–014 only. This table uses `docs/adr/README.md`; whether the `decisions.md` pointer stays mandatory is undecided.
+- **KQ-3 — Path inside Webway.** This repository does not define where in the Webway repository a research result is stored. Also undefined: any place for research about MONOLITH's own toolkit (`docs/` has no research layer).

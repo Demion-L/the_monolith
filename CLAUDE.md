@@ -19,6 +19,20 @@ Before starting any task, read in order:
 
 ---
 
+## Saving Long-Term Knowledge
+
+When creating or saving long-term knowledge (a hypothesis, ADR, tech-debt item, error record, working state, research result), the agent must:
+
+1. Determine the Knowledge Intent.
+2. Read `Table 8 — Knowledge Intent → Canonical Destination` in `.monolith/context/maps/routing-map.md`.
+3. Check the authoritative source for that domain in `.monolith/context/maps/semantic-map.md`.
+4. Confirm the owner repository is the right one (Webway research is not saved in MONOLITH).
+5. Save only into the existing canonical destination.
+
+If the route is missing or ambiguous, ask the owner. Do not create a new directory, template or registry.
+
+---
+
 ## Skill Activation
 
 When the user's request matches a trigger phrase, **read the skill file before taking any action**.

@@ -57,6 +57,22 @@ docs/
 
 ---
 
+## Где хранятся знания / Knowledge Navigation
+
+| Looking for                | Go to                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| Hypotheses                 | [`hypotheses.md`](../.monolith/memory/long-term/hypotheses.md)                          |
+| Architectural decisions    | [`adr/README.md`](adr/README.md) (index of records)                                     |
+| Technical debt             | [`tech-debt.md`](../.monolith/memory/long-term/tech-debt.md)                            |
+| Errors and lessons         | [`memory/errors/`](../.monolith/memory/errors/README.md), [`learning/`](../.monolith/learning/INDEX.md) |
+| Working state              | [`active.md`](../.monolith/memory/working/active.md), [`story-index.md`](../.monolith/memory/working/story-index.md) |
+| Webway research            | [Webway repository](https://github.com/Demion-L/webway) — not stored in MONOLITH       |
+| Map of authoritative sources | [`semantic-map.md`](../.monolith/context/maps/semantic-map.md)                        |
+
+Where a new piece of knowledge is saved: [`routing-map.md`](../.monolith/context/maps/routing-map.md), Table 8.
+
+---
+
 ## Knowledge Flow
 
 ADRs decide → Architecture reflects.

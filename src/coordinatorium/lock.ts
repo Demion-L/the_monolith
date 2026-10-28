@@ -55,6 +55,7 @@
 import {
   writeSync,
   closeSync,
+  lstatSync,
   unlinkSync,
   fchmodSync,
   fsyncSync,
@@ -63,6 +64,7 @@ import {
 } from 'fs';
 import { basename, dirname } from 'path';
 import { randomBytes } from 'crypto';
+import { performance } from 'perf_hooks';
 import { LockTimeoutError, LockUnsafeError, LockCreationError, type LockCreationPhase } from './errors.js';
 import {
   SafeWriteError,
@@ -131,6 +133,12 @@ export interface LockTestHooks {
    * while creating, publishing and removing staging files — fault injection
    * for publication states. Never supplied by production code. */
   fsOps?: Partial<FsOps>;
+  /** Replaces the monotonic clock (milliseconds) that drives the deadline. */
+  now?: () => number;
+  /** Replaces the jitter source: a value in `[0, 1)`. */
+  random?: () => number;
+  /** Replaces the wait between attempts; receives the requested milliseconds. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 const DEFAULT_OPTIONS: Required<LockOptions> = {
@@ -142,6 +150,10 @@ const DEFAULT_OPTIONS: Required<LockOptions> = {
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+/** Monotonic milliseconds. The deadline never reads the wall clock, so a clock
+ * step (NTP, manual change, VM resume) can neither extend nor cut the wait. */
+const monotonicNow = (): number => performance.now();
 
 export type LivenessVerdict = 'alive' | 'dead' | 'unknown';
 
@@ -343,7 +355,12 @@ function parseLockRecord(raw: string): LockRecord | null {
   if (r.v !== 2 || !Number.isInteger(r.pid) || (r.pid as number) <= 0 || (r.pid as number) > 2 ** 31 - 1) return null;
   if (typeof r.nonce !== 'string' || !/^[0-9a-f]{16}$/.test(r.nonce)) return null;
   if (boot === undefined || pidns === undefined || start === undefined) return null;
-  return { pid: r.pid as number, nonce: r.nonce, boot, pidns, start };
+  const parsed: LockRecord = { pid: r.pid as number, nonce: r.nonce, boot, pidns, start };
+  // Canonical form only: `JSON.parse` silently accepts duplicate keys (last one
+  // wins), whitespace, reordered keys and a trailing newline. A record is
+  // exactly what `formatLockRecord` writes, byte for byte, or it is not a record.
+  if (formatLockRecord(parsed) !== raw) return null;
+  return parsed;
 }
 
 /**
@@ -564,8 +581,20 @@ type RecoveryResult =
   | { outcome: 'mutex-busy' }
   /** The lock changed or its owner is no longer provably dead: nothing was touched. */
   | { outcome: 'aborted'; reason: string }
-  /** The owner is dead but its lock could not be removed (EACCES/EROFS/EIO, …). */
+  /** The owner is dead but its lock could not be removed (EACCES/EROFS/EIO, …),
+   * or `unlink` reported success and the same file is still there. */
   | { outcome: 'unlink-failed'; cause: unknown };
+
+/** `dev:ino` of what is at `path`, `null` if nothing is, `undefined` if that
+ * cannot be told (an error other than ENOENT). */
+function fileIdentity(path: string): string | null | undefined {
+  try {
+    const st = lstatSync(path, { bigint: true });
+    return `${st.dev}:${st.ino}`;
+  } catch (err) {
+    return errno(err) === 'ENOENT' ? null : undefined;
+  }
+}
 
 /**
  * Attempt to recover a lock whose recorded owner was just confirmed dead.
@@ -627,15 +656,26 @@ async function recoverDeadOwner(
       return { outcome: 'aborted', reason: `owner no longer provably dead (${judged.verdict}: ${judged.reason})` };
     }
 
+    const before = fileIdentity(lockPath);
+
     await hooks.beforeStaleUnlink?.();
 
     try {
       (hooks.unlinkLock ?? unlinkSync)(lockPath);
     } catch (err) {
-      // Already gone is fine — the next create attempt tells the truth. Any
-      // other failure is NOT recovery: report it so the caller backs off
-      // within its deadline instead of pretending progress was made.
+      // Already gone is fine. Any other failure is NOT recovery: report it so
+      // the caller backs off within its deadline instead of pretending progress.
       if (errno(err) !== 'ENOENT') return { outcome: 'unlink-failed', cause: err };
+    }
+    // A successful syscall is not proof that the lock is gone (some filesystems
+    // and fault layers report success without effect). Recovery is declared only
+    // from observation: the path is absent, or it now holds a different file.
+    const after = fileIdentity(lockPath);
+    if (after === undefined) {
+      return { outcome: 'unlink-failed', cause: new Error('could not observe the lock path after unlink') };
+    }
+    if (after !== null && after === before) {
+      return { outcome: 'unlink-failed', cause: new Error('unlink reported success but the same lock file is still present') };
     }
     return { outcome: 'recovered' };
   } finally {
@@ -645,6 +685,11 @@ async function recoverDeadOwner(
 
 /** Upper bound of the delay between attempts, as a multiple of `retryDelayMs`. */
 const BACKOFF_CAP_FACTOR = 8;
+
+/** Consecutive iterations that may skip the wait after a verified recovery or a
+ * changed observation. Beyond this a pause is mandatory, so a filesystem that
+ * keeps "recovering" the same lock cannot turn the loop into a busy spin. */
+const MAX_PROGRESS_WITHOUT_SLEEP = 3;
 
 function describeFailure(err: unknown): string {
   const code = errno(err);
@@ -659,10 +704,17 @@ function describeFailure(err: unknown): string {
  * release function. `testHooks` exists solely to let tests force specific
  * interleavings deterministically — production callers must never pass it.
  *
- * One deadline governs the whole call and is checked at the top of EVERY
- * iteration, so no branch (recovery progress, aborted recovery, a failing
- * `unlink`) can loop past it. Waits between attempts use a bounded exponential
- * backoff. On timeout the last failure is kept in the error.
+ * One monotonic deadline governs the whole call and is checked at the top of
+ * EVERY iteration, and the only `continue` sits at the tail after all
+ * bookkeeping, so no branch (recovery progress, aborted recovery, a failing
+ * `unlink`) can skip the check or the wait. Waits are a bounded exponential backoff with jitter in `[d/2, d]`,
+ * never longer than the time remaining. After a recovery the lock path is
+ * observed again rather than assumed free; at most
+ * `MAX_PROGRESS_WITHOUT_SLEEP` iterations in a row may run without waiting.
+ *
+ * The deadline bounds the waiting loop and the number of retries. It does not
+ * bound a single synchronous filesystem call that hangs inside the kernel
+ * (e.g. a stuck mount): no timer can run while it blocks.
  */
 export async function acquireLock(
   lockPath: string,
@@ -675,23 +727,30 @@ export async function acquireLock(
   // is omitted (internal/test callers) the lock's directory itself is the
   // trust boundary (trusted-directory semantics, ADR-012).
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const deadline = Date.now() + opts.timeoutMs;
+  const now = testHooks.now ?? monotonicNow;
+  const random = testHooks.random ?? Math.random;
+  const wait = testHooks.sleep ?? sleep;
+  const started = now();
+  const deadline = started + opts.timeoutMs;
   const own = makeOwnRecord(testHooks);
   const ours = ownIdentity(testHooks.procOps);
   const probeOps: ProcOps = { ...realProcOps, ...testHooks.procOps };
-  const maxDelay = Math.max(opts.retryDelayMs * BACKOFF_CAP_FACTOR, opts.retryDelayMs);
+  const baseDelay = Math.max(1, opts.retryDelayMs);
+  const maxDelay = baseDelay * BACKOFF_CAP_FACTOR;
 
   let attempts = 0;
-  let delay = opts.retryDelayMs;
+  let delay = baseDelay;
+  let freeRuns = 0;
+  let lastKey = '';
   let observation = 'lock is held';
   let lastFailure: unknown;
   let lastFailureText = '';
 
   for (;;) {
-    if (attempts > 0 && Date.now() >= deadline) {
+    if (attempts > 0 && now() >= deadline) {
       const failure = lastFailureText ? `; last failure: ${lastFailureText}` : '';
       throw new LockTimeoutError(
-        `Timed out after ${opts.timeoutMs}ms waiting for lock at "${lockPath}" (${observation}${failure})`,
+        `Timed out after ${opts.timeoutMs}ms (${attempts} attempts) waiting for lock at "${lockPath}" (${observation}${failure})`,
         { lastFailure },
       );
     }
@@ -700,9 +759,7 @@ export async function acquireLock(
     if ((await createAndPublish(parent, lockPath, own, opts.fsyncMetadata, testHooks)) === 'published') {
       return () => releaseIfOwned(boundaryPathOf(parent), lockPath, own);
     }
-    // 'lost-race': the canonical lock already exists — fall through to the
-    // normal observe/wait/recover logic below, exactly as a plain EEXIST
-    // did before.
+    // 'lost-race': the canonical lock already exists — observe it below.
 
     const inspection = inspectLock(boundaryPathOf(parent), lockPath);
     if (inspection.kind === 'unsafe' && inspection.class === 'structural') {
@@ -711,17 +768,26 @@ export async function acquireLock(
       // file is left exactly as found and the lock is not acquired.
       throw new LockUnsafeError(lockPath, inspection.fileCode, inspection.detail);
     }
+
+    // True only when this iteration verifiably changed the situation (a dead
+    // owner's lock was removed and observed gone); only then may the next
+    // iteration start without waiting.
+    let progressed = false;
+    // What we are waiting on, so the backoff restarts when it changes.
+    let key: string = inspection.kind;
     if (inspection.kind === 'unsafe') {
       observation = `${inspection.detail}; the file was left untouched`;
     } else if (inspection.kind === 'valid') {
+      key = `${inspection.record.pid}:${inspection.record.nonce}`;
       const judged = judgeOwner(inspection.record, ours, probeOps);
       observation = `owner pid ${inspection.record.pid} is ${judged.verdict} (${judged.reason})`;
       if (judged.verdict === 'dead') {
         const result = await recoverDeadOwner(parent, lockPath, inspection.record, opts.fsyncMetadata, testHooks);
         if (result.outcome === 'recovered') {
-          continue; // progress was made; re-evaluate now — the deadline check above still bounds this
-        }
-        if (result.outcome === 'unlink-failed') {
+          progressed = true;
+          lastFailure = undefined;
+          lastFailureText = '';
+        } else if (result.outcome === 'unlink-failed') {
           lastFailure = result.cause;
           lastFailureText = `could not remove the stale lock of dead owner pid ${inspection.record.pid} (${describeFailure(result.cause)})`;
         } else if (result.outcome === 'aborted') {
@@ -735,8 +801,19 @@ export async function acquireLock(
     // inspection absent: the file vanished — try creating it again after the
     // same waiting/backoff discipline as a confirmed-busy lock.
 
-    const remaining = deadline - Date.now();
-    await sleep(Math.max(0, Math.min(delay, remaining)));
+    if (key !== lastKey) {
+      delay = baseDelay;
+      lastKey = key;
+    }
+    if (progressed && freeRuns < MAX_PROGRESS_WITHOUT_SLEEP) {
+      freeRuns++;
+      continue; // the deadline check at the top still runs
+    }
+    freeRuns = 0;
+
+    const remaining = Math.max(0, deadline - now());
+    const jittered = delay / 2 + random() * (delay / 2);
+    await wait(Math.min(jittered, remaining));
     delay = Math.min(delay * 2, maxDelay);
   }
 }

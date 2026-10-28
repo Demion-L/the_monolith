@@ -1,68 +1,96 @@
 ---
 type: adr
 id: ADR-002
-title: Introduce Cognitive Core Foundation
+title: Cognitive Core Foundation — Cognitive Infrastructure (execution and integration)
 date: 2026-06-26
 status: accepted
+related_decisions:
+  - webway:ADR-001
+  - webway:ADR-002
+  - ADR-003
 related_hypotheses:
   - webway:HYP-007
   - webway:HYP-008
-related_regions:
-  - KR-6
-  - KR-7
-related_decisions:
-  - ADR-001
 ---
 
-# ADR-002 — Introduce Cognitive Core Foundation
+# ADR-002 — Cognitive Core Foundation — Cognitive Infrastructure (execution and integration)
 
 ## Status
 
-**Accepted** — 2026-06-26
+**Accepted** — 2026-06-26. **Scope narrowed 2026-10-28** (KNOWLEDGE-003, see "Split of responsibility").
 
-**Implementation status (2026-10-20):** Not implemented. "No runtime
-implementation; conceptual layer only" per this ADR's own Decision above —
-still accurate. No code in `src/` corresponds to the Cognitive Core.
+**Implementation status (2026-10-28):** Not implemented. This ADR is a
+decision-level record; no code in `src/` corresponds to a Cognitive Core.
+Nothing here authorizes building one.
+
+---
+
+## Split of responsibility
+
+The original ADR-002 introduced one concept, the **Cognitive Core**, which holds
+two responsibilities. By the owner's decision of 2026-10-28:
+
+| Responsibility | Owner | Record |
+| -------------- | ----- | ------ |
+| **Semantic Knowledge** — the central question "What remains unknown?", its three sub-questions, the HYP-008 epistemic criterion for gap prioritization, the closing of the Cognitive Loop in knowledge terms | Webway | `webway:ADR-002` (Webway repository, `docs/adr/ADR-002-cognitive-core-foundation.md`) |
+| **Cognitive Infrastructure** — how such a capability would be executed, governed and integrated into a MONOLITH instance | MONOLITH | this ADR |
+
+"Cognitive Infrastructure" here names that responsibility only. It is **not** the
+Webway vision document `docs/architecture/cognitive-infrastructure.md`, which
+describes the Cognitive Kernel research program.
+
+The cognitive loop itself (`webway:ADR-001`) is Webway's, and was moved there whole.
+The original text of this ADR (as accepted on 2026-06-26) is in git history of
+`.monolith/adr/`; the semantic text was moved to Webway, not rewritten.
+
+Below are only the passages of the original ADR-002 and of the concept document
+`cognitive-core.md` that concern execution and integration (items 1–3), plus the
+Gap → Story link stated in `knowledge-lifecycle.md` and `story-lifecycle.md`
+("questions become new Stories"). Item 3's wording that the capability opens no
+Story by itself is the application of item 2, not a new rule.
 
 ---
 
 ## Context
 
-ADR-001 introduced the Cognitive Loop Architecture and established Cognitive Processes (KR-7) as a first-class knowledge region. That decision formalized the gap detection and question generation loop as the long-term direction for WEBWAY.
-
-However, ADR-001 did not name the architectural layer responsible for executing that loop. The concepts lived in webway:HYP-007 and KR-7, but the layer itself — the thing that holds the central question "What remains unknown?" and drives the loop — was not defined as a first-class architectural concept.
-
-Separately, webway:HYP-008 (Predictive Power as a Measure of Knowledge) proposed that knowledge maturity should be measured not only by quantity and stability, but by the ability to generate accurate inferences about unseen information. webway:HYP-008 implies that gap detection must be guided by an epistemic criterion: not all absent links are gaps worth pursuing; gaps that would increase a region's predictive capability are prioritized.
-
-Without a named concept for the layer that holds both the central question and the webway:HYP-008 epistemic criterion, the architecture remained incomplete. The Cognitive Loop Architecture described the loop but not the agent that runs it.
+A capability that detects knowledge gaps and generates questions needs a host that
+runs it, bounds what it may do and connects its output to the work a project
+actually does. MONOLITH is that host: it governs how AI agents work in a project
+(memory, stories, protocols). It does not decide what the capability concludes —
+that is the semantic responsibility of Webway.
 
 ---
 
 ## Decision
 
-Introduce **Cognitive Core** as the conceptual name for the future self-directed learning layer of MONOLITH.
+MONOLITH is responsible for the **execution and integration** of a Cognitive Core,
+and for nothing in its semantics.
 
-The Cognitive Core:
+1. **Conceptual only.** The Cognitive Core is a conceptual architecture layer, not a
+   runtime module. No source code is introduced. Implementation of its semantic side
+   is gated by Webway (`webway:ADR-002`: HYP-008 validation and a formal gap
+   representation). MONOLITH adds its own gate below.
 
-1. **Holds the central question: "What remains unknown?"** — supported by three operational sub-questions:
-   - What contradiction has not been resolved?
-   - What missing link would make this region more predictive?
-   - What question should be asked next?
+2. **Suggest-only, inside governance.** When implemented, the Cognitive Core will
+   suggest gaps and candidate questions. It will not autonomously acquire artifacts,
+   modify protocols, or act outside the governance constraints of the instance.
+   Autonomy requires explicit capability expansion through the governance layer
+   (core invariants: no autonomous capability expansion).
 
-2. **Closes the Cognitive Loop** defined in ADR-001 by connecting WEBWAY's linear output (Mental Models) back to Information acquisition (Stage 1 of the Knowledge Lifecycle):
+3. **Integration points are decided later, by story.** Two are named and both are
+   open:
+   - *Placement.* Where the capability runs in MONOLITH — post-processing step,
+     on-demand module, boot-sequence integration — requires capability-registry
+     design (open Unknown of `webway:HYP-006`).
+   - *Gap → Story.* A detected gap becomes a question; a question that is worth
+     pursuing becomes a Story. Creating that Story stays under story discipline
+     (`story-lifecycle.md`, `finalize-story`); the capability does not open Stories
+     by itself.
 
-   ```
-   Mental Models
-     → Cognitive Core: What remains unknown?
-       → Gap Detection
-         → Question Generation
-           → Learning (new artifact acquisition)
-             → Information (Stage 1 — loop re-enters)
-   ```
-
-3. **Applies webway:HYP-008 as its epistemic criterion** for gap prioritization. The Cognitive Core does not detect all absent links; it detects gaps whose resolution would increase a Knowledge Region's capacity for inference over unseen information.
-
-4. **Is a conceptual architecture layer, not a runtime module.** No source code is introduced. Implementation is deferred until: (a) webway:HYP-008 validation criteria are met on at least one Knowledge Region, and (b) gap representation is formally defined.
+4. **MONOLITH does not own the semantics.** The central question, the supporting
+   questions, the epistemic criterion, gap prioritization, the Knowledge Lifecycle
+   and Knowledge Regions belong to Webway. MONOLITH documents do not restate them;
+   they link to Webway.
 
 ---
 
@@ -70,23 +98,23 @@ The Cognitive Core:
 
 ### Positive
 
-- **Names the missing layer** in the ADR-001 cognitive loop. The loop now has a named driver, not just named phases.
-- **Links webway:HYP-007 and webway:HYP-008 into a single architectural concept.** The Cognitive Core is the layer where webway:HYP-007 (gap detection and question generation) and webway:HYP-008 (epistemic criterion for gap prioritization) converge.
-- **Extends the Knowledge Lifecycle from linear to circular.** Stage 7 (Knowledge Region) is no longer a terminal stage — it is the input to the Cognitive Core, which generates Stage 1 targets.
-- **Establishes non-goals explicitly.** The Cognitive Core concept document (cognitive-core.md) formally excludes claims of consciousness, autonomous agency, and premature runtime implementation. This prevents scope creep and mystical framing.
-- **Provides a named anchor for future implementation stories.** `detectGaps()`, `generateQuestions()`, and predictive region evaluation now have a clear conceptual home.
+- One owner per responsibility; no document restates the other repository's content.
+- The governance boundary (suggest-only) is recorded in the repository that enforces
+  governance, not in a research document.
 
 ### Negative
 
-- **Increases conceptual scope before implementation.** Adding a named architectural layer that does not yet exist in code creates a gap between the documented architecture and the actual system. Future agents must distinguish between what is implemented and what is conceptual.
-- **webway:HYP-008 is a dependency.** The Cognitive Core's epistemic criterion (predictive gap prioritization) cannot be applied until webway:HYP-008 is validated. Until then, gap prioritization must remain undefined or use a simpler heuristic.
+- The decision is thin by construction: execution and integration have no
+  implementation, interface or capability registry yet. It records a boundary, not a
+  design.
+- A reader needs two repositories to see the whole concept.
 
 ### Deferred
 
-- Implementation of `detectGaps()` — requires formal gap representation design
-- Implementation of `generateQuestions()` — requires gap detection first
-- Predictive region evaluation — blocked on webway:HYP-008 validation (holdout task with measured accuracy)
-- Integration into MONOLITH boot sequence — requires capability registry design (webway:HYP-006 Unknown)
+- Capability-registry design and the placement decision (open Unknown of `webway:HYP-006`).
+- The interface between the Cognitive Core and the Engineering Gate, and the feedback
+  loop from execution back to the Core (see ADR-003, "Deferred").
+- Any implementation of `detectGaps()` / `generateQuestions()` — gated by Webway first.
 
 ---
 
@@ -94,9 +122,9 @@ The Cognitive Core:
 
 | Artifact | Role |
 | -------- | ---- |
-| `memory/long-term/cognitive-core.md` | Full definition of the Cognitive Core layer |
-| webway:HYP-007 | Continuous Question Loop — the loop the Cognitive Core drives |
-| webway:HYP-008 | Predictive Power — the epistemic criterion the Cognitive Core applies |
-| `memory/long-term/knowledge-lifecycle.md` | Knowledge Lifecycle — made circular by the Cognitive Core |
-| `memory/long-term/knowledge-regions.md` | Epistemic level axis (proposed) — the second axis the Cognitive Core uses for gap prioritization |
-| `adr/ADR-001-cognitive-loop-architecture.md` | Cognitive Loop Architecture — the loop this decision names the driver of |
+| `webway:ADR-002` | Semantic Knowledge half of the original ADR-002 (Webway) |
+| `webway:ADR-001` | Cognitive Loop Architecture (Webway) |
+| Webway `docs/architecture/cognitive-core.md` | Definition of the Cognitive Core's semantic side |
+| `webway:HYP-006` | Origin of the capability-registry / placement Unknown |
+| ADR-003 | Engineering Gate — the layer between a selected question and the executor |
+| `.monolith/memory/long-term/story-lifecycle.md` | Story discipline that governs what becomes a Story |

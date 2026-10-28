@@ -3,9 +3,9 @@ type: architecture
 id: toolkit-pipeline
 authority: authoritative
 stability: stable
-last_updated: 2026-10-21
+last_updated: 2026-10-28
 related_adrs:
-  - ADR-007
+  - ADR-020
   - ADR-008
 ---
 
@@ -31,13 +31,13 @@ Markdown artifact (frontmatter + headings + links)
      │
      ↓
   Scriptorium — compileMarkdownArtifact()
-     │   structural extraction: documentId/title, concept candidates,
-     │   relationship candidates (from frontmatter fields)
+     │   structural extraction: object declarations (documentId, {#ID} sections),
+     │   concept candidates, relationship candidates (from frontmatter fields)
      ↓
   Explicit Relationship Graph — buildGraph()
-     │   Pass 1: one GraphNode per compiled document
-     │   Pass 2: resolve relationship candidates to real edges (explicit-only)
-     │   Pass 2.5: register id:/title: aliases
+     │   Pass 1: declarations (document id:, section {#ID}) → KnowledgeObjects, ref = namespace:localId
+     │   Pass 2: a ref declared more than once is an identity conflict, not a node
+     │   Pass 3: relationship candidates → edges, only when the target RESOLVES
      ↓
   Working memory (.monolith/memory/working/) — read and updated during a story
      │
@@ -81,15 +81,23 @@ modification of the source document. Determinism is the design goal —
 ## Stage 2 — Explicit Relationship Graph (ERG)
 
 **What it does:** `buildGraph()` turns compiled documents into a typed
-graph: one node per document, edges from resolved relationship candidates,
-and an alias map (frontmatter `id:`/`title:` → documentId/documentTitle) so
-short-form references (`ADR-007`) and full titles resolve to the same node.
+graph. A node is a `KnowledgeObject` with identity `namespace:localId`: a
+document (frontmatter `id:`) or a section (heading marker `{#ID}`). The
+namespace is supplied by the caller. An edge exists only when a relationship's
+target resolves to exactly one object; everything else is kept as an
+unresolved reference (`MISSING`, `AMBIGUOUS`, `EXTERNAL_UNAVAILABLE`,
+`INVALID_REF`) and a duplicate declaration is reported as an identity
+conflict (`src/graph/identity.ts`, `resolver.ts`, `builder.ts`).
 
-**Explicit-only identity resolution (ADR-007):** no fuzzy matching, no
-inferred aliases — every alias has a traceable origin in frontmatter.
+**Explicit-only identity (ADR-020, which supersedes ADR-007):** no fuzzy
+matching, no aliases, no synthetic nodes, no first-wins — every node and
+every edge traces to a declaration in the source.
 
-**Current state:** 481 real nodes, 0 synthesized nodes, 32 explicit edges
-on this repository's own corpus (`src/graph/builder.ts`).
+**Corpus statistics:** not recorded in this document. `pnpm dogfood-graph`
+prints them for any directory and namespace; it is read-only and writes no
+file. Resolving this repository's own corpus (namespace configuration,
+unresolved references, mirrored-corpus conflicts, the YAML parser, missing
+`{#ID}` markers) is separate technical work.
 
 ---
 
@@ -136,4 +144,4 @@ execution history — the artifacts that survive story finalization.
 2. **Inspectability** — every artifact at every stage is a human-readable file.
 3. **Single Source of Truth** — each fact has exactly one authoritative location (`context/maps/semantic-map.md`).
 4. **Append-Only History** — `execution-history.md` grows; it is never rewritten.
-5. **Explicit-only identity** — graph edges and aliases come only from declared frontmatter (ADR-007).
+5. **Explicit-only identity** — graph nodes and edges come only from declared identities and references; unresolved stays unresolved (ADR-020).

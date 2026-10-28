@@ -7,7 +7,7 @@ related_protocols:
   - memory-governance
   - work-session
 related_decisions:
-  - ADR-001
+  - webway:ADR-001
   - ADR-002
 related_skills:
   - finalize-story
@@ -90,7 +90,7 @@ Both are required. The forward artifact makes the Decision actionable. The backw
 
 ## Story and Knowledge Formation
 
-The Story Lifecycle and the Knowledge Lifecycle (knowledge-lifecycle.md) are orthogonal processes that converge at the same output: long-term memory artifacts.
+The Story Lifecycle and the Knowledge Lifecycle (Webway, `docs/architecture/knowledge-lifecycle.md`) are orthogonal processes that converge at the same output: long-term memory artifacts.
 
 | Lifecycle | Unit | Transforms | Into |
 | --------- | ---- | ---------- | ---- |
@@ -135,7 +135,7 @@ This is the link between Story Lifecycle and webway:HYP-006 (WEBWAY bridges memo
 | `protocols/governance/work-session.md` | Operational rules for managing work sessions within a Story |
 | `skills/finalize-story/SKILL.md` | Procedure for closing a Story — writes the capsule and updates memory |
 | `docs/adr/README.md` | Index of ADRs produced by completed Stories (repo-relative) |
-| `docs/adr/ADR-*.md`, `adr/*.md` | Full records of Decisions (the terminal artifacts of Architecture Stories) |
-| `memory/long-term/knowledge-lifecycle.md` | The parallel lifecycle — how artifacts become knowledge |
-| `memory/long-term/cognitive-core.md` | The future layer that will generate new Stories from detected gaps |
+| `docs/adr/ADR-*.md` | Full records of Decisions (the terminal artifacts of Architecture Stories) |
+| Webway: `docs/architecture/knowledge-lifecycle.md` | The parallel lifecycle — how artifacts become knowledge (owned by Webway) |
+| `docs/adr/ADR-002-cognitive-core-foundation.md` (`monolith:ADR-002`); Webway: `docs/architecture/cognitive-core.md` | The future layer that will generate new Stories from detected gaps — MONOLITH owns execution and integration, Webway the semantics |
 | `memory/working/story-index.md` | Navigation index of all completed Stories |

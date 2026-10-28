@@ -5,8 +5,9 @@ title: Introduce Engineering Gate Foundation
 date: 2026-06-26
 status: accepted
 related_decisions:
-  - ADR-001
-  - ADR-002
+  - webway:ADR-001
+  - monolith:ADR-002
+  - webway:ADR-002
 ---
 
 # ADR-003 — Introduce Engineering Gate Foundation
@@ -23,7 +24,7 @@ runtime exists in `src/` — see `AGENTS.md` → Out of Scope and
 
 ## Context
 
-MONOLITH currently governs memory and lifecycle for AI agents. WEBWAY transforms information into structured knowledge. ADR-001 and ADR-002 introduced the Cognitive Loop and Cognitive Core — the layers responsible for identifying what remains unknown and generating learning pressure.
+MONOLITH currently governs memory and lifecycle for AI agents. WEBWAY transforms information into structured knowledge. webway:ADR-001 and ADR-002 (`webway:ADR-002` for the semantic half, `monolith:ADR-002` for execution and integration) introduced the Cognitive Loop and Cognitive Core — the layers responsible for identifying what remains unknown and generating learning pressure.
 
 However, none of these layers address the preparation of ambiguous engineering work for execution. The Cognitive Core can identify a gap. It can generate a question. What transforms that question — or any ambiguous engineering task — into something an executor agent can act on without further clarification?
 
@@ -107,6 +108,6 @@ The Engineering Gate:
 | Artifact | Role |
 | -------- | ---- |
 | `memory/long-term/engineering-gate.md` | Full definition of the Engineering Gate layer |
-| `memory/long-term/cognitive-core.md` | Cognitive Core — the layer that may originate tasks for the gate |
-| `adr/ADR-001-cognitive-loop-architecture.md` | Cognitive Loop — establishes the loop the gate supports |
-| `adr/ADR-002-cognitive-core-foundation.md` | Cognitive Core Foundation — the preceding layer decision |
+| Webway repository, `docs/architecture/cognitive-core.md` | Cognitive Core — the layer that may originate tasks for the gate |
+| `webway:ADR-001` (Webway repository, `docs/adr/ADR-001-cognitive-loop-architecture.md`) | Cognitive Loop — establishes the loop the gate supports |
+| `ADR-002-cognitive-core-foundation.md` (`monolith:ADR-002`); `webway:ADR-002` | Cognitive Core Foundation — the preceding layer decision (infrastructure half / semantic half) |

@@ -16,7 +16,7 @@ Tracks intentional technical debt to prevent accidental "fixing" of accepted tra
 | ID | Description | Story | Rationale for deferral |
 |---|---|---|---|
 | TD-001 | Sparse graph: 32 edges / 481 nodes (6.6%) | 1.3 | Corpus has few explicit `[[links]]`; structural edges require richer content |
-| TD-002 | Alias brittleness: renaming `id:` in any document silently breaks all edges pointing to that alias | 1.3 | Accepted per ADR-007 (explicit-only); fix requires stable URI scheme (Terra layer) |
+| TD-002 | Alias brittleness: renaming `id:` in any document silently breaks all edges pointing to that alias | 1.3 | **Superseded by ADR-020 (2026-10-28):** aliases no longer exist; a renamed `id:` leaves the reference `MISSING`, reported and never silent. Original entry: accepted per ADR-007 (explicit-only); fix required a stable URI scheme (Terra layer) |
 | TD-003 | `dist/` committed to git | 1.1 | Simplifies deployment; becomes real debt once CI/CD or publishing is introduced |
 | TD-004 | Webway concept extraction is frequency-based (not semantic) | 1.1 | Intentional v0 deterministic prototype; v1 replaces with embeddings |
 | TD-005 | No Engineering Gate runtime (ADR-003 formalized, not implemented) | — | Governance formalized but no runtime enforcement; tests pass because they're in vitest, not the gate |

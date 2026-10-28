@@ -14,7 +14,7 @@ User requests: "Review the architecture" or "Is this design correct?"
 
 1. AI classifies as `architecture-review`
 2. Cognitive mode: `review`
-3. AI reads architecture-principles.md, decisions.md
+3. AI reads architecture-principles.md, the ADR Index (`docs/adr/README.md`, if present), decisions.md
 4. AI proposes changes (does NOT apply them)
 5. AI references core-invariants when evaluating
 6. AI reports findings with severity (concern / suggestion / critical)

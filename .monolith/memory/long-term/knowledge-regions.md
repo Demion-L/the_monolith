@@ -97,7 +97,7 @@ The theoretical and practical study of how knowledge is formed, organized, repre
 | `informs` | Agent Systems | Agents depend on knowledge representations to reason and plan |
 | `informs` | Organizational Memory | Organizational memory is applied knowledge systems at institutional scale |
 | `implements-via` | WEBWAY | WEBWAY is the operational implementation of knowledge formation theory |
-| `critiques` | Information Retrieval | Knowledge systems theory explains why retrieval alone is insufficient (webway:HYP-001, H2) |
+| `critiques` | Information Retrieval | Knowledge systems theory explains why retrieval alone is insufficient (webway:HYP-001, webway:HYP-002) |
 
 ---
 
@@ -124,7 +124,7 @@ Systems and mechanisms by which AI agents reason, plan, use tools, remember cont
 | ------------ | ------------- | ----------- |
 | `governed-by` | MONOLITH | MONOLITH provides the memory governance kernel for agent operation |
 | `enriched-by` | WEBWAY | WEBWAY provides semantic enrichment for agent memory artifacts |
-| `mirrors` | Organizational Memory | Agent session transfer and org knowledge transfer are the same structural problem (H5) |
+| `mirrors` | Organizational Memory | Agent session transfer and org knowledge transfer are the same structural problem (monolith:HYP-005) |
 | `depends-on` | Knowledge Systems | Effective agent reasoning requires structured knowledge, not raw retrieval |
 
 ---
@@ -134,7 +134,7 @@ Systems and mechanisms by which AI agents reason, plan, use tools, remember cont
 **Maturity:** `mature`
 
 **Purpose:**  
-How human organizations capture, preserve, and transfer accumulated knowledge and experience across time and personnel transitions. This region is mature in research literature but underexplored in AI systems — hypothesis H5 bets that agent memory and organizational memory are the same problem, making this region directly applicable to MONOLITH.
+How human organizations capture, preserve, and transfer accumulated knowledge and experience across time and personnel transitions. This region is mature in research literature but underexplored in AI systems — hypothesis monolith:HYP-005 bets that agent memory and organizational memory are the same problem, making this region directly applicable to MONOLITH.
 
 **Core Concepts:**
 
@@ -150,7 +150,7 @@ How human organizations capture, preserve, and transfer accumulated knowledge an
 
 | Relationship | Target Region | Description |
 | ------------ | ------------- | ----------- |
-| `mirrors` | Agent Systems | Structurally identical transfer problem at different scale (H5) |
+| `mirrors` | Agent Systems | Structurally identical transfer problem at different scale (monolith:HYP-005) |
 | `grounds` | Knowledge Systems | Organizational memory is the applied instantiation of knowledge systems theory |
 | `implemented-by` | MONOLITH | MONOLITH's memory governance layer mirrors organizational knowledge management patterns |
 
@@ -206,8 +206,8 @@ The cognitive operating system kernel governing AI agent behavior, memory, and l
 | ------------ | ------------- | ----------- |
 | `governs` | Agent Systems | MONOLITH is the memory and behavior governance kernel for AI agents |
 | `mirrors` | Organizational Memory | MONOLITH's governance patterns directly parallel knowledge management in organizations |
-| `hosts` | WEBWAY | WEBWAY is MONOLITH's first cognitive capability module (H6) |
-| `evolves-via` | WEBWAY | WEBWAY upgrades MONOLITH from memory governance to knowledge formation (H6) |
+| `hosts` | WEBWAY | WEBWAY is MONOLITH's first cognitive capability module (webway:HYP-006) |
+| `evolves-via` | WEBWAY | WEBWAY upgrades MONOLITH from memory governance to knowledge formation (webway:HYP-006) |
 
 ---
 
@@ -234,9 +234,9 @@ The semantic connection layer of MONOLITH. Transforms raw Artifacts into structu
 | ------------ | ------------- | ----------- |
 | `implements` | Knowledge Systems | WEBWAY operationalizes knowledge formation theory |
 | `enriches` | Agent Systems | WEBWAY adds semantic structure to agent memory artifacts |
-| `extends` | MONOLITH | WEBWAY is the first cognitive module extending MONOLITH's capabilities (H6) |
+| `extends` | MONOLITH | WEBWAY is the first cognitive module extending MONOLITH's capabilities (webway:HYP-006) |
 | `transcends` | Information Retrieval | WEBWAY builds structure that IR cannot produce from chunks (webway:HYP-001, webway:HYP-003) |
-| `resolves` | Organizational Memory | WEBWAY provides the semantic layer for knowledge transfer across agent sessions (H5) |
+| `resolves` | Organizational Memory | WEBWAY provides the semantic layer for knowledge transfer across agent sessions (monolith:HYP-005) |
 | `exposes-gaps-to` | Cognitive Processes | WEBWAY's output (isolated concepts, low-confidence models) surfaces gap signals for Question Loops (webway:HYP-007) |
 
 ---

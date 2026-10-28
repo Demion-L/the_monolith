@@ -86,7 +86,7 @@ The Cognitive Core:
 - Implementation of `detectGaps()` — requires formal gap representation design
 - Implementation of `generateQuestions()` — requires gap detection first
 - Predictive region evaluation — blocked on webway:HYP-008 validation (holdout task with measured accuracy)
-- Integration into MONOLITH boot sequence — requires capability registry design (H6 Unknown)
+- Integration into MONOLITH boot sequence — requires capability registry design (webway:HYP-006 Unknown)
 
 ---
 

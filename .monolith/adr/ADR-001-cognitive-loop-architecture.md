@@ -85,7 +85,7 @@ This decision establishes:
 
 3. **Gap Detection is a future module boundary**, not a feature of `analyzeArtifact()`. The loop's closed structure implies a future `detectGaps(result: WebwayAnalysisResult): Gap[]` surface, but this is deferred. This ADR establishes the architecture; implementation stories will follow.
 
-4. **The loop is the long-term product direction** of WEBWAY. The hypotheses recorded when this ADR was written (webway:HYP-001–webway:HYP-007; now `webway:HYP-001`, `webway:HYP-003`, `webway:HYP-004`, `webway:HYP-007`, and H2, H5, H6 in `hypotheses.md`) are all coherent with this architecture. webway:HYP-007 is the first hypothesis that directly targets the loop's feedback mechanism.
+4. **The loop is the long-term product direction** of WEBWAY. The hypotheses recorded when this ADR was written (webway:HYP-001–webway:HYP-007; now `webway:HYP-001`, `webway:HYP-002`, `webway:HYP-003`, `webway:HYP-004`, `monolith:HYP-005`, `webway:HYP-006`, `webway:HYP-007`) are all coherent with this architecture. webway:HYP-007 is the first hypothesis that directly targets the loop's feedback mechanism.
 
 ---
 
@@ -109,7 +109,7 @@ This decision establishes:
 
 - Implementation of `detectGaps()` — requires a future story
 - Implementation of `generateQuestions()` — requires gap detection first
-- Integration of the loop into the MONOLITH boot sequence — requires capability registry design (H6 Unknown)
+- Integration of the loop into the MONOLITH boot sequence — requires capability registry design (webway:HYP-006 Unknown)
 
 ---
 

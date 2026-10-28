@@ -10,7 +10,9 @@ related_protocols:
 
 # Product & Research Hypotheses
 
-Structured, testable hypotheses whose subject is MONOLITH, or whose owning project is not yet decided (routing-map, KQ-1).
+Structured, testable hypotheses whose subject is MONOLITH. Hypotheses about Webway's research program live in the Webway repository (`docs/hypotheses.md`).
+
+Each hypothesis is a section with a stable marker in its heading, `## <Title> {#HYP-NNN}`. The marker is the identity of the hypothesis (`monolith:HYP-NNN`); it does not depend on the title or on this file's path. `HYP-005` keeps the number of the original H5. The numbers 001…008 belong to the original sequence and are not issued again: a new hypothesis takes the next number after the highest one used in this file, never lower than 009.
 
 Each hypothesis is a bet. Record evidence and unknowns as work proceeds.  
 Update status when evidence changes: `active → validated | rejected | deferred`.
@@ -28,33 +30,7 @@ Update status when evidence changes: `active → validated | rejected | deferred
 
 ---
 
-## H2 — Knowledge Emerges from Structure, Not Data
-
-**Status:** `active`
-
-**Statement:**  
-Knowledge is not information at rest. It emerges from identifying concepts, forming typed relationships between them, recognizing patterns, and building mental models. Raw text cannot be reliably queried for knowledge without this transformation layer.
-
-**Why it matters:**  
-Defines the transformation contract WEBWAY must perform. If information alone were sufficient, WEBWAY would be unnecessary. The pipeline `Artifact → Concepts → Links → Regions → Mental Models → Insights` only makes sense if each step adds epistemic value.
-
-**Current evidence:**
-- Human cognition research (Minsky's frames, schema theory, Novak's concept maps) consistently demonstrates that comprehension requires structure — not just storage.
-- Expert performance in any domain correlates with richer concept maps, not larger information stores.
-- v0 `analyzeArtifact()` demonstrates that even frequency-based structure extraction produces semantically coherent region assignments, suggesting the structural signal is present in text and extractable.
-- **Story 1.3 (2026-06-28):** Scriptorium structural extraction applied to MONOLITH's own 481 documents: explicit `id:` / `title:` fields in frontmatter are sufficient to establish deterministic node identity. The absence of structural identity (documents without `id:` frontmatter) produced 0 usable graph nodes — confirming that structure (frontmatter schema) is required before meaning can emerge. Raw text alone produced no identity, no edges.
-
-**Unknowns:**
-- Whether machine-generated concept maps can meaningfully approximate human knowledge structures in precision and recall.
-- What minimum structural depth is required before knowledge queries become reliable.
-- Whether typed relationship labels add measurable value over untyped or unlabeled concept graphs.
-
-**How to validate:**  
-Measure whether `WebwayAnalysisResult` structures improve downstream answer quality compared to raw artifact text on a set of multi-hop reasoning tasks. Design tasks that require concept relationship traversal to answer correctly.
-
----
-
-## H5 — Organizational Memory and Agent Memory Are the Same Problem
+## Organizational Memory and Agent Memory Are the Same Problem {#HYP-005}
 
 **Status:** `active`
 
@@ -76,30 +52,3 @@ If true, WEBWAY is not merely a RAG improvement — it is infrastructure for ins
 
 **How to validate:**  
 Apply WEBWAY analysis to MONOLITH's own `.monolith/memory/` artifacts (decisions.md, story capsules, architecture-principles.md). Measure whether the generated knowledge graph accurately represents governance relationships that a human analyst would recognize. Compare against a baseline of manual tagging.
-
----
-
-## H6 — Webway Is the Bridge from Memory Governance to Knowledge Formation
-
-**Status:** `active`
-
-**Statement:**  
-MONOLITH currently governs AI memory: what to write, where to write it, when to read it. WEBWAY is the capability that evolves MONOLITH from memory governance — managing information at rest — into knowledge formation — actively building meaning from accumulated information. Without WEBWAY, MONOLITH is a well-organized document system. With WEBWAY, it can reason over its own memory and discover structure it did not explicitly create.
-
-**Why it matters:**  
-Defines the long-term product relationship between MONOLITH (the kernel) and WEBWAY (the first cognitive module). Establishes WEBWAY not as a standalone utility but as the semantic engine that enables MONOLITH to upgrade its own capabilities over time.
-
-**Current evidence:**
-- v0 `analyzeArtifact()` can already be applied to any MONOLITH memory artifact (active.md, decisions.md, story capsules) and extract concepts, region assignments, and semantic links — without any changes to the kernel.
-- The `WebwayAnalysisResult` output shape is structurally compatible with future cross-document graph construction: concepts carry IDs and source references, links carry typed relationship labels.
-- The MONOLITH boot sequence already reads memory artifacts in a fixed order — WEBWAY analysis could be inserted as an enrichment step without breaking the existing protocol.
-- **Story 1.3 (2026-06-28):** Scriptorium + ERG now process MONOLITH's own documentation corpus deterministically. The complete pipeline from raw `.md` files to a typed graph of real nodes and explicit edges is operational — MONOLITH can now ingest itself. This is the prerequisite infrastructure H6 predicted would be needed. The next step (applying Webway analysis to the resulting graph for semantic enrichment) is now technically unblocked.
-
-**Unknowns:**
-- At which point in the MONOLITH boot sequence should WEBWAY analysis be applied (pre-load enrichment vs on-demand query-time analysis).
-- Whether semantic analysis of governance artifacts is useful in practice or primarily theoretically interesting.
-- Whether the MONOLITH kernel needs a formal interface for cognitive modules (capability registry) or whether direct import is sufficient.
-
-**How to validate:**  
-Apply WEBWAY analysis to 10 MONOLITH memory artifacts from a live project. Verify that the extracted knowledge graph reflects governance relationships recognizable to a human analyst. Measure whether concept-region assignments are stable across artifact types (protocol files, memory files, context files).
-

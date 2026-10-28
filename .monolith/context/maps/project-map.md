@@ -132,7 +132,7 @@ Add new design documents here when introducing new capabilities. One file per mo
 | `.monolith/memory/working/story-index.md` | Implementation history |
 | `.monolith/memory/long-term/decisions.md` | Decisions that are not ADRs (`DEC-…`) |
 | `.monolith/memory/long-term/architecture-principles.md` | Core principles |
-| `.monolith/memory/long-term/hypotheses.md` | Hypotheses owned by MONOLITH, or with an undecided owner |
+| `.monolith/memory/long-term/hypotheses.md` | Hypotheses owned by MONOLITH (`monolith:HYP-NNN`) |
 | `.monolith/memory/long-term/knowledge-regions.md` | Canonical knowledge regions conceptual map |
 | `.monolith/memory/long-term/knowledge-lifecycle.md` | Knowledge Lifecycle v0 — Information → Knowledge Region |
 | `.monolith/memory/long-term/story-lifecycle.md` | Story Lifecycle — Story as unit of engineering evolution; Decision as terminal state |

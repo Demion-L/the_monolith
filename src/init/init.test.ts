@@ -125,3 +125,22 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     expect(exitSpy.code).toBe(0);
   });
 });
+
+describe('scaffoldInstance — ADR index routing', () => {
+  const read = (dir: string, rel: string): string => readFileSync(join(dir, '.monolith', rel), 'utf8');
+
+  it('names docs/adr/README.md as the only ADR index and keeps decisions.md for DEC- records', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+
+    expect(read(dir, 'context/maps/semantic-map.md')).toMatch(/\| ADR index\s+\| `docs\/adr\/README\.md`/);
+    expect(read(dir, 'context/maps/semantic-map.md')).not.toMatch(/Architecture decisions/);
+    expect(read(dir, 'context/maps/project-map.md')).toMatch(/decisions\.md`\s+\| Non-ADR decisions/);
+    expect(read(dir, 'context/maps/dependency-map.md')).toMatch(/global-status\s+\| docs\/adr\/README\.md/);
+    expect(read(dir, 'skills/finalize-story/SKILL.md')).toContain('add no pointer or summary to `decisions.md`');
+
+    const decisions = read(dir, 'memory/long-term/decisions.md');
+    expect(decisions).toContain('DEC-YYYY-XXXX');
+    expect(decisions).not.toMatch(/^# Architectural Decisions/m);
+  });
+});

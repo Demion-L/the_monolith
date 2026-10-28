@@ -400,6 +400,51 @@ boolean (`checkLiveness()` in `lock.ts`):
 - throws anything else → **unknown** → never recover (an unrecognized
   error is not proof of death).
 
+> **Superseded in part by LOCK-FIX-002 (2026-10-28; LOCK-FIX-001 H1/M1).**
+> The list above, "`ESRCH` → dead", is no longer the rule: a PID is only
+> meaningful inside the PID namespace and boot that issued it, so `ESRCH`
+> alone could take the lock of a live owner in another container. Current
+> behaviour (`judgeOwner()` in `lock.ts`; `alive | dead | unknown` kept):
+>
+> - **Record.** The lock body is one line of strict JSON, `v:2`:
+>   `{"v":2,"pid","nonce","boot","pidns","start"}` — `boot` is
+>   `/proc/sys/kernel/random/boot_id`, `pidns` is `readlink /proc/self/ns/pid`,
+>   `start` is field 22 of `/proc/<pid>/stat`; each of the three is `null` when
+>   the platform cannot supply it. A body is a record only if it equals
+>   `formatLockRecord()` byte for byte (no whitespace, trailing newline,
+>   duplicate or reordered keys). Limit 256 B (worst case ≈ 190 B).
+> - **`dead` requires all of:** our own identity is known (Linux, `/proc`
+>   belongs to our PID namespace); the record's `boot` and `pidns` are known and
+>   equal ours; and either `start` differs from the live process now holding
+>   that PID (reuse) or two independent probes agree the PID does not exist
+>   (`/proc/<pid>` absent **and** `kill` → `ESRCH`).
+> - **`alive`:** same process; `EPERM`; `start` equal; `start` unrecorded
+>   (reuse cannot be ruled out).
+> - **`unknown` (no recovery, wait):** other platform; `/proc` of another
+>   namespace; record without identity; different boot or namespace;
+>   `ESRCH` with a live `/proc` entry or the reverse (e.g. `hidepid`);
+>   zombie; any other probe error.
+> - **Old `pid:nonce` locks and any other unrecognised body are `unknown`**:
+>   waited on until the deadline, then `LockTimeoutError`; never deleted
+>   automatically. They are cleaned by hand after a human has checked.
+> - **Platforms.** Automatic crash recovery needs Linux. Elsewhere mutual
+>   exclusion is unchanged but every owner is `unknown`.
+> - **Waiting.** One monotonic deadline (`performance.now()`, not
+>   `Date.now()`), checked on every iteration; backoff `base → ×2 → cap 8×base`
+>   with jitter in `[d/2, d]`, never longer than the time left; the backoff
+>   restarts when the observed owner changes. Recovery counts as done only
+>   after the lock path is observed gone (or replaced by another file): an
+>   `unlink` that returns success while the same file remains is a failure.
+>   After a verified recovery at most 3 iterations in a row may skip the wait.
+>   A failing stale `unlink` ends in `LockTimeoutError` carrying the cause.
+>   The deadline bounds the loop and the retry count; it cannot interrupt a
+>   synchronous filesystem call that hangs in the kernel.
+>
+> Not changed and still open: H2 (crash between `link()` and staging
+> disposal leaves `nlink=2`), M2 (transient `nlink=2` read as
+> `LockUnsafeError`), LOCK-RELEASE-001 (silent release failure), and the
+> orphaned recovery mutex. ADR-015 remains `proposed`.
+
 #### Recovery is serialized by a dedicated mutex (corrected 2026-10-21, same day)
 
 The first version of this hardening pass claimed that "re-read immediately

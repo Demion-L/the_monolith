@@ -11,6 +11,9 @@
  *  - the project root is fixed when the server starts and is never taken from a
  *    request (query, body, header or cookie are not read for that purpose).
  *
+ * With `options.assets` it also serves the built UI from memory (`monolith ui`);
+ * the API route, the Host/Origin checks and the loopback bind are unchanged.
+ *
  * Security boundary (G2): bound to 127.0.0.1 only; `Host` allowlist (loopback
  * name + the real port, against DNS rebinding); `Origin` checked when present
  * and never reflected; no CORS headers at all; GET only; fixed response
@@ -40,6 +43,15 @@ export const LOOPBACK_HOST = '127.0.0.1';
  */
 export const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
+/** One file of the built UI, held in memory (loaded by `ui-assets.ts`, which is the only place that touches the disk). */
+export interface UiAsset {
+  readonly body: Buffer;
+  readonly contentType: string;
+}
+
+/** Request path (`/index.html`, `/assets/x.js`) -> asset. */
+export type UiAssets = ReadonlyMap<string, UiAsset>;
+
 export type HttpErrorKind = 'request' | 'security' | 'dashboard' | 'internal';
 export type HttpErrorCode =
   | 'HOST_NOT_ALLOWED'
@@ -61,6 +73,12 @@ export interface DashboardServerOptions {
   port?: number;
   /** Overrides MAX_RESPONSE_BYTES (tests, tighter deployments). */
   maxResponseBytes?: number;
+  /**
+   * The built UI, already in memory (`loadUiAssets`). When given, `GET /` and
+   * `GET <asset path>` serve it; the match is by exact key, so no request path
+   * is ever mapped onto the filesystem. When absent, only the API exists.
+   */
+  assets?: UiAssets;
 }
 
 export interface DashboardServer {
@@ -99,6 +117,24 @@ function send(res: ServerResponse, status: number, body: string, extra: Record<s
     ...extra,
   });
   res.end(buf);
+}
+
+/** CSP of the UI document and its assets: self-hosted code only, no framing, no form posts. */
+const UI_CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+  "font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+function sendAsset(res: ServerResponse, body: Buffer, contentType: string): void {
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Content-Length': String(body.length),
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': UI_CSP,
+    'Referrer-Policy': 'no-referrer',
+    'Cross-Origin-Resource-Policy': 'same-origin',
+  });
+  res.end(body);
 }
 
 function sendError(res: ServerResponse, code: HttpErrorCode): void {
@@ -152,7 +188,13 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
     }
 
     // 2. Route and method. Exact match only: no trailing slash, no decoding.
-    if (pathOf(req.url) !== DASHBOARD_PATH) return sendError(res, 'NOT_FOUND');
+    const path = pathOf(req.url);
+    if (path !== DASHBOARD_PATH) {
+      const asset = options.assets?.get(path === '/' ? '/index.html' : path);
+      if (asset === undefined) return sendError(res, 'NOT_FOUND');
+      if (req.method !== 'GET') return sendError(res, 'METHOD_NOT_ALLOWED');
+      return sendAsset(res, asset.body, asset.contentType);
+    }
     if (req.method !== 'GET') return sendError(res, 'METHOD_NOT_ALLOWED');
 
     // 3. The DTO, whole or not at all.

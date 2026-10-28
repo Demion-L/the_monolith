@@ -11,6 +11,9 @@
  *  - the project root is fixed when the server starts and is never taken from a
  *    request (query, body, header or cookie are not read for that purpose).
  *
+ * With `options.assets` it also serves the built UI from memory (`monolith ui`);
+ * the API route, the Host/Origin checks and the loopback bind are unchanged.
+ *
  * Security boundary (G2): bound to 127.0.0.1 only; `Host` allowlist (loopback
  * name + the real port, against DNS rebinding); `Origin` checked when present
  * and never reflected; no CORS headers at all; GET only; fixed response
@@ -64,6 +67,21 @@ function send(res, status, body, extra = {}) {
     });
     res.end(buf);
 }
+/** CSP of the UI document and its assets: self-hosted code only, no framing, no form posts. */
+const UI_CSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+    "font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+function sendAsset(res, body, contentType) {
+    res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': String(body.length),
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store',
+        'Content-Security-Policy': UI_CSP,
+        'Referrer-Policy': 'no-referrer',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+    });
+    res.end(body);
+}
 function sendError(res, code) {
     const body = { error: { kind: ERROR_KIND[code], code } };
     // An unread request body must not keep the connection busy.
@@ -113,8 +131,15 @@ export async function startDashboardServer(options) {
             return sendError(res, 'ORIGIN_NOT_ALLOWED');
         }
         // 2. Route and method. Exact match only: no trailing slash, no decoding.
-        if (pathOf(req.url) !== DASHBOARD_PATH)
-            return sendError(res, 'NOT_FOUND');
+        const path = pathOf(req.url);
+        if (path !== DASHBOARD_PATH) {
+            const asset = options.assets?.get(path === '/' ? '/index.html' : path);
+            if (asset === undefined)
+                return sendError(res, 'NOT_FOUND');
+            if (req.method !== 'GET')
+                return sendError(res, 'METHOD_NOT_ALLOWED');
+            return sendAsset(res, asset.body, asset.contentType);
+        }
         if (req.method !== 'GET')
             return sendError(res, 'METHOD_NOT_ALLOWED');
         // 3. The DTO, whole or not at all.

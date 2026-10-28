@@ -5,4 +5,8 @@ export type {
   HttpErrorBody,
   HttpErrorCode,
   HttpErrorKind,
+  UiAsset,
+  UiAssets,
 } from './server.js';
+export { loadUiAssets, UiAssetsError } from './ui-assets.js';
+export type { UiAssetsErrorCode } from './ui-assets.js';

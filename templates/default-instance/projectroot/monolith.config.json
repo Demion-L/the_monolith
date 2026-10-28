@@ -6,6 +6,9 @@
     "aiTool": "{{AI_TOOL}}"
   },
   "monolithRoot": "{{MONOLITH_ROOT}}",
+  "contextGateway": {
+    "adrDirs": ["docs/adr"]
+  },
   "finalizationProtocol": "{{FINALIZATION_PROTOCOL}}",
   "gates": {
     "enabled": [

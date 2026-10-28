@@ -65,7 +65,7 @@ import {
 import { basename, dirname } from 'path';
 import { randomBytes } from 'crypto';
 import { performance } from 'perf_hooks';
-import { LockTimeoutError, LockUnsafeError, LockCreationError, type LockCreationPhase } from './errors.js';
+import { LockTimeoutError, LockUnsafeError, LockCreationError, ValidationError, type LockCreationPhase } from './errors.js';
 import {
   SafeWriteError,
   createExclusive,
@@ -146,6 +146,27 @@ const DEFAULT_OPTIONS: Required<LockOptions> = {
   retryDelayMs: 25,
   fsyncMetadata: false,
 };
+
+/**
+ * Merge caller options over the defaults. A missing or explicitly `undefined`
+ * value takes the default (a plain spread would let `undefined` overwrite it);
+ * a present value must be a finite, non-negative number. `NaN` would make the
+ * deadline `NaN` — every comparison against it is false, so the wait would
+ * never end — and `Infinity` would make it unbounded by construction.
+ */
+function resolveOptions(options: LockOptions): Required<LockOptions> {
+  const out = { ...DEFAULT_OPTIONS };
+  for (const key of ['timeoutMs', 'retryDelayMs'] as const) {
+    const v: unknown = options[key];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
+      throw new ValidationError(`"${key}" must be a finite, non-negative number of milliseconds (got ${String(v)})`);
+    }
+    out[key] = v;
+  }
+  if (options.fsyncMetadata !== undefined) out.fsyncMetadata = options.fsyncMetadata;
+  return out;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -726,7 +747,7 @@ export async function acquireLock(
   // keeper passes the one it opened under the caller's write scope. When it
   // is omitted (internal/test callers) the lock's directory itself is the
   // trust boundary (trusted-directory semantics, ADR-012).
-  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const opts = resolveOptions(options);
   const now = testHooks.now ?? monotonicNow;
   const random = testHooks.random ?? Math.random;
   const wait = testHooks.sleep ?? sleep;

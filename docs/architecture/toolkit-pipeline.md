@@ -44,7 +44,7 @@ Markdown artifact (frontmatter + headings + links)
      ↓  on story finalization
   finalize-story skill (manual, skill-driven)
      │
-     ├──→  Long-term memory (.monolith/memory/long-term/decisions.md, execution-history.md)
+     ├──→  Long-term memory (.monolith/memory/long-term/execution-history.md)
      └──→  Session handoff (.monolith/context/boot/HANDOFF.md)
 ```
 
@@ -110,13 +110,12 @@ given question).
 skill — manual, not automated.
 
 **What it does:** writes a story capsule, updates the active story pointer,
-appends to `execution-history.md`, records significant decisions in
-`decisions.md`, updates `story-index.md`, and writes the session handoff.
+appends to `execution-history.md`, records ADRs in the ADR Index (`docs/adr/README.md`), updates `story-index.md`, and writes the session handoff.
 
 **What it does NOT do:** no automated promotion by access count or
 staleness, no automated pruning, no background consolidation pass. A
 formal sleep-pipeline / Terra-style consolidation was researched and
-proposed (ADR-006) but is not part of this toolkit — that research now
+proposed (`webway:ADR-006`) but is not part of this toolkit — that research now
 continues under Webway.
 
 ---

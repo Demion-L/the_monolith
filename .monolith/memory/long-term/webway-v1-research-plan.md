@@ -8,7 +8,7 @@ related_protocols:
 related_decisions:
   - ADR-001
 related_hypotheses:
-  - H3
+  - webway:HYP-003
 ---
 
 # Webway v1 Research Plan
@@ -266,7 +266,7 @@ The following are explicitly out of scope for v1. Do not implement without a sep
 
 - **Cross-artifact concept linking.** v1 analyzes one artifact at a time. `analyzeCorpus()` is v2.
 - **Dynamic knowledge region inference.** Regions remain predefined in v1. Corpus-inferred regions are v3.
-- **Autonomous question generation.** Gap Detection and Question Loops are v3+. (ADR-001, H7)
+- **Autonomous question generation.** Gap Detection and Question Loops are v3+. (ADR-001, webway:HYP-007)
 - **Persistent storage of concepts or links.** All output remains in-memory. Terra module is future.
 - **Fine-tuning models on MONOLITH-specific vocabulary.** Use pre-trained models only.
 - **Changing the `analyzeArtifact()` function signature.** The public interface is frozen. v1 changes the internals only.

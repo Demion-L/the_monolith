@@ -5,8 +5,8 @@ title: Explicit-Only Identity Resolution in the Explicit Relationship Graph
 status: accepted
 date: 2026-06-28
 related_adrs:
-  - ADR-004
-  - ADR-005
+  - webway:ADR-004
+  - webway:ADR-005
 ---
 
 # ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph
@@ -105,7 +105,7 @@ A collision (two documents claiming the same alias) is a documentation error, no
 
 **Mitigated by:**
 - Scriptorium emits diagnostics for all synthesized nodes, making missing aliases visible in the dogfood report.
-- ADR-005 (Lexicon Mechanicus) establishes naming conventions that reduce ID drift.
+- webway:ADR-005 (Lexicon Mechanicus) establishes naming conventions that reduce ID drift.
 
 ---
 
@@ -126,8 +126,8 @@ Report: `.monolith/reports/graph-dogfood-v1-2.md`
 
 ## References
 
-- ADR-004 — Terra vs Graph Memex (ERG as complementary layer, explicit-provenance model) — moved to [Webway](https://github.com/Demion-L/webway), 2026-10-21
-- ADR-005 — Lexicon Mechanicus (canonical terminology, ID conventions) — moved to [Webway](https://github.com/Demion-L/webway), 2026-10-21
+- webway:ADR-004 — Terra vs Graph Memex (ERG as complementary layer, explicit-provenance model) — moved to [Webway](https://github.com/Demion-L/webway), 2026-10-21
+- webway:ADR-005 — Lexicon Mechanicus (canonical terminology, ID conventions) — moved to [Webway](https://github.com/Demion-L/webway), 2026-10-21
 - `src/graph/builder.ts` — Pass 2.5 implementation
 - `src/scriptorium/compile.ts` — `documentId` / `documentTitle` extraction
 - `src/scriptorium/types.ts` — `ScriptoriumResult.documentId`, `ScriptoriumResult.documentTitle`

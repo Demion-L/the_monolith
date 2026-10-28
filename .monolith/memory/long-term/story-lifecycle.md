@@ -134,8 +134,8 @@ This is the link between Story Lifecycle and H6 (WEBWAY bridges memory governanc
 | -------- | ------------ |
 | `protocols/governance/work-session.md` | Operational rules for managing work sessions within a Story |
 | `skills/finalize-story/SKILL.md` | Procedure for closing a Story — writes the capsule and updates memory |
-| `memory/long-term/decisions.md` | Index of Decisions produced by completed Stories |
-| `adr/*.md` | Full records of Decisions (the terminal artifacts of Architecture Stories) |
+| `docs/adr/README.md` | Index of ADRs produced by completed Stories (repo-relative) |
+| `docs/adr/ADR-*.md`, `adr/*.md` | Full records of Decisions (the terminal artifacts of Architecture Stories) |
 | `memory/long-term/knowledge-lifecycle.md` | The parallel lifecycle — how artifacts become knowledge |
 | `memory/long-term/cognitive-core.md` | The future layer that will generate new Stories from detected gaps |
 | `memory/working/story-index.md` | Navigation index of all completed Stories |

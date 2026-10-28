@@ -118,9 +118,9 @@ Add new design documents here when introducing new capabilities. One file per mo
 
 | Location | Purpose |
 | -------- | ------- |
-| `.monolith/adr/ADR-001-cognitive-loop-architecture.md` | Cognitive Loop Architecture — accepted 2026-06-24 |
-| `.monolith/adr/ADR-002-cognitive-core-foundation.md` | Cognitive Core Foundation — accepted 2026-06-26 |
-| `.monolith/adr/ADR-003-engineering-gate-foundation.md` | Engineering Gate Foundation — accepted 2026-06-26 |
+| `docs/adr/README.md` | The ADR index — the only index of MONOLITH's ADRs |
+| `docs/adr/ADR-*.md` | ADR records (ADR-007 …) |
+| `.monolith/adr/ADR-*.md` | ADR-001 … 003 records (listed in the index) |
 
 ---
 
@@ -130,9 +130,9 @@ Add new design documents here when introducing new capabilities. One file per mo
 | -------- | ------- |
 | `.monolith/memory/working/active.md` | Active phase and story |
 | `.monolith/memory/working/story-index.md` | Implementation history |
-| `.monolith/memory/long-term/decisions.md` | Architectural decisions |
+| `.monolith/memory/long-term/decisions.md` | Decisions that are not ADRs (`DEC-…`) |
 | `.monolith/memory/long-term/architecture-principles.md` | Core principles |
-| `.monolith/memory/long-term/hypotheses.md` | Product & research hypotheses |
+| `.monolith/memory/long-term/hypotheses.md` | Hypotheses owned by MONOLITH, or with an undecided owner |
 | `.monolith/memory/long-term/knowledge-regions.md` | Canonical knowledge regions conceptual map |
 | `.monolith/memory/long-term/knowledge-lifecycle.md` | Knowledge Lifecycle v0 — Information → Knowledge Region |
 | `.monolith/memory/long-term/story-lifecycle.md` | Story Lifecycle — Story as unit of engineering evolution; Decision as terminal state |

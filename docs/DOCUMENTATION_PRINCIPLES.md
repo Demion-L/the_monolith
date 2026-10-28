@@ -36,7 +36,7 @@ Arrows show the direction of reference: lower layers may reference higher layers
 Implementation. Both described Webway's cognitive-architecture research
 program, not MONOLITH's own toolkit, and moved to
 [the Webway repository](https://github.com/Demion-L/webway) along with
-ADR-004/005/006. Re-add these layers here if MONOLITH's own toolkit ever
+`webway:ADR-004`, `webway:ADR-005`, `webway:ADR-006`. Re-add these layers here if MONOLITH's own toolkit ever
 needs them — see `docs/MIGRATION_REPORT.md`.
 
 ---
@@ -73,7 +73,7 @@ needs them — see `docs/MIGRATION_REPORT.md`.
 - ADRs reference the architecture documents they inform.
 - Architecture documents reference the ADRs that justify them.
 - Terminology follows plain usage — see `AGENTS.md` → Glossary. The
-  "Lexicon Mechanicus" (ADR-005) is Webway's own formal vocabulary system,
+  "Lexicon Mechanicus" (`webway:ADR-005`) is Webway's own formal vocabulary system,
   not MONOLITH's.
 
 ---

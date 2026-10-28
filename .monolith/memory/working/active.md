@@ -61,4 +61,4 @@ Not implemented — do not represent as done: Strategic Coordinatorium, `monolit
 
 Next (not started, not a decision): **CONTEXT-001B** — `monolith context <topic>`; see HANDOFF.md.
 
-Other candidate directions (not decisions): SEC-001 (root trust boundary), corpus relationship density improvement, Engineering Gate runtime (ADR-003, no runtime yet), TD-007b. (Terra persistence / ADR-006 is no longer a MONOLITH candidate direction — it moved to Webway's research program on 2026-10-21.)
+Other candidate directions (not decisions): SEC-001 (root trust boundary), corpus relationship density improvement, Engineering Gate runtime (ADR-003, no runtime yet), TD-007b. (Terra persistence / `webway:ADR-006` is no longer a MONOLITH candidate direction — it moved to Webway's research program on 2026-10-21.)

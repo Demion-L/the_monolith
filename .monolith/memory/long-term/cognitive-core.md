@@ -9,8 +9,8 @@ related_decisions:
   - ADR-001
   - ADR-002
 related_hypotheses:
-  - H7
-  - H8
+  - webway:HYP-007
+  - webway:HYP-008
 ---
 
 # Cognitive Core — Conceptual Foundation
@@ -55,22 +55,22 @@ These questions are not yet implemented. They define the behavioral contract of 
 
 ## Relationships
 
-### Relationship to H7 — Continuous Question Loop
+### Relationship to webway:HYP-007 — Continuous Question Loop
 
-H7 proposes that a cognitive system becomes capable of self-directed learning when it can continuously identify gaps and generate questions to resolve them. The Cognitive Core is the architectural concept that would house this capability.
+webway:HYP-007 proposes that a cognitive system becomes capable of self-directed learning when it can continuously identify gaps and generate questions to resolve them. The Cognitive Core is the architectural concept that would house this capability.
 
-H7 describes the *what*: a loop of gap detection, question generation, learning, and model update.  
+webway:HYP-007 describes the *what*: a loop of gap detection, question generation, learning, and model update.  
 The Cognitive Core names the *where*: the layer of MONOLITH responsible for executing that loop.
 
-The supporting questions above (contradiction detection, missing link identification, next question generation) are the operationalized form of H7's gap detection and question generation phases.
+The supporting questions above (contradiction detection, missing link identification, next question generation) are the operationalized form of webway:HYP-007's gap detection and question generation phases.
 
-### Relationship to H8 — Predictive Power
+### Relationship to webway:HYP-008 — Predictive Power
 
-H8 proposes that the maturity of a Knowledge Region should be measured by its ability to generate accurate inferences about unseen information, not only by the quantity and stability of its accumulated concepts.
+webway:HYP-008 proposes that the maturity of a Knowledge Region should be measured by its ability to generate accurate inferences about unseen information, not only by the quantity and stability of its accumulated concepts.
 
-The Cognitive Core depends on H8: the question "What missing link would make this region more predictive?" presupposes that predictive capability is a meaningful and measurable property of a region. Without H8, there is no criterion for distinguishing a gap that matters from one that does not.
+The Cognitive Core depends on webway:HYP-008: the question "What missing link would make this region more predictive?" presupposes that predictive capability is a meaningful and measurable property of a region. Without webway:HYP-008, there is no criterion for distinguishing a gap that matters from one that does not.
 
-H8 is the epistemic standard the Cognitive Core would apply when prioritizing which gaps to pursue.
+webway:HYP-008 is the epistemic standard the Cognitive Core would apply when prioritizing which gaps to pursue.
 
 ### Relationship to WEBWAY
 
@@ -107,7 +107,7 @@ The following are explicitly out of scope for this conceptual layer:
 
 - **Do not implement autonomous agency yet.** The Cognitive Core, when implemented, will suggest gaps and candidate questions. It will not autonomously acquire artifacts, modify its own protocols, or act outside the current governance constraints. Autonomy requires explicit capability expansion via the governance layer.
 
-- **Do not create runtime loops yet.** No source code changes accompany this document. The Cognitive Core exists as an architectural concept pending implementation stories. Premature implementation risks building the wrong interface before the epistemic model (H8) is validated.
+- **Do not create runtime loops yet.** No source code changes accompany this document. The Cognitive Core exists as an architectural concept pending implementation stories. Premature implementation risks building the wrong interface before the epistemic model (webway:HYP-008) is validated.
 
 ---
 
@@ -116,13 +116,13 @@ The following are explicitly out of scope for this conceptual layer:
 | Component | Status |
 | --------- | ------ |
 | Core question defined | Yes — this document |
-| H7 (gap detection, question loop) | Hypothesis — active |
-| H8 (predictive power as maturity signal) | Hypothesis — active |
+| webway:HYP-007 (gap detection, question loop) | Hypothesis — active |
+| webway:HYP-008 (predictive power as maturity signal) | Hypothesis — active |
 | ADR-001 (Cognitive Loop Architecture) | Accepted — 2026-06-24 |
 | ADR-002 (Cognitive Core Foundation) | Proposed — 2026-06-26 |
 | `detectGaps()` implementation | Deferred |
 | `generateQuestions()` implementation | Deferred |
-| Predictive region evaluation | Blocked on H8 validation |
+| Predictive region evaluation | Blocked on webway:HYP-008 validation |
 
 ---
 

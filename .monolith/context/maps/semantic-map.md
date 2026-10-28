@@ -17,8 +17,10 @@ Where authoritative truth lives for each semantic domain.
 | ---------------------- | --------------------------------------- |
 | Active story           | `memory/working/active.md`              |
 | Story history          | `memory/working/story-index.md`         |
-| Architecture decisions | `memory/long-term/decisions.md`         |
-| Product hypotheses     | `memory/long-term/hypotheses.md`        |
+| ADR index              | `docs/adr/README.md` (repo-relative, outside `.monolith/`) |
+| Non-ADR decisions (`DEC-…`) | `memory/long-term/decisions.md`    |
+| MONOLITH hypotheses    | `memory/long-term/hypotheses.md`        |
+| Webway hypotheses and research | Not stored here — Webway repository (`docs/hypotheses.md`, `docs/research/`) |
 | Knowledge regions map  | `memory/long-term/knowledge-regions.md` |
 | Knowledge lifecycle    | `memory/long-term/knowledge-lifecycle.md` |
 | Story lifecycle        | `memory/long-term/story-lifecycle.md`     |
@@ -75,8 +77,8 @@ Where authoritative truth lives for each semantic domain.
 
 | What                         | Authoritative Source                   |
 | ---------------------------- | -------------------------------------- |
-| ADR index (summary pointers) | `memory/long-term/decisions.md`        |
-| Full ADR records             | `adr/ADR-*.md`                         |
+| ADR index                    | `docs/adr/README.md` (repo-relative, outside `.monolith/`) |
+| Full ADR records             | `docs/adr/ADR-*.md`; ADR-001 … 003: `adr/ADR-*.md` |
 
 ---
 

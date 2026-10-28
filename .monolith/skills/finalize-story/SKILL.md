@@ -142,17 +142,9 @@ Format:
 **Capsule:** `.monolith/memory/working/phases/<phase>/stories/<capsule-file>.md`
 ```
 
-**If story introduced an ADR:** Add pointer to `memory/long-term/decisions.md`:
+**If story introduced an ADR:** add or update its row in the ADR Index of `docs/adr/README.md` — the only index of ADRs. Do not add a pointer or summary to `decisions.md`.
 
-```markdown
-### ADR-XXX — <title>
-
-**Date:** YYYY-MM-DD
-**Status:** Accepted
-**Full record:** `docs/adr/ADR-XXX-<slug>.md`
-
-**Decision:** <one-sentence summary>
-```
+**If story recorded a decision that is not an ADR:** add a `DEC-` record to `memory/long-term/decisions.md` using the template in that file.
 
 ---
 
@@ -219,7 +211,7 @@ Do NOT push automatically. Ask the user if they want to push.
 - [ ] `active.md` updated
 - [ ] `story-index.md` updated
 - [ ] `execution-history.md` appended
-- [ ] `decisions.md` updated (if ADR was written)
+- [ ] ADR Index (`docs/adr/README.md`) updated (if ADR was written); `decisions.md` updated (only for a non-ADR decision)
 - [ ] Documentation Synchronization complete (Step 5.5) — no known contradiction between docs and implementation left unresolved
 - [ ] `HANDOFF.md` current
 - [ ] Commit created

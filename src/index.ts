@@ -34,6 +34,8 @@ export type {
   ConceptSource,
   EvidenceSource,
   HeadingLevel,
+  ObjectDeclaration,
+  DeclaredObjectKind,
 } from './scriptorium/index.js';
 export { compileMarkdownArtifact, isStructuralHeadingNoise } from './scriptorium/index.js';
 
@@ -43,8 +45,15 @@ export type {
   GraphEdge,
   GraphDiagnostic,
   ExplicitRelationshipGraph,
+  UnresolvedReference,
+  IdentityConflict,
+  KnowledgeObject,
+  KnowledgeObjectKind,
+  Resolution,
+  UnresolvedResolution,
+  ObjectIndex,
 } from './graph/index.js';
-export { buildGraph, normalizeLabel, selectCanonicalLabel } from './graph/index.js';
+export { buildGraph, buildObjectIndex, resolveRef, makeRef, parseRef, isValidIdentifier } from './graph/index.js';
 
 // Coordinatorium — deterministic project state + mission lifecycle (Tactical v0.1, ADR-008)
 export type {

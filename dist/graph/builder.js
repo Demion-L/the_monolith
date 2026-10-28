@@ -1,165 +1,153 @@
-import { normalizeLabel, selectCanonicalLabel } from './normalize.js';
+import { compareObjects, isValidIdentifier, makeRef } from './identity.js';
+import { buildObjectIndex, resolveRef } from './resolver.js';
+/**
+ * Builds the explicit relationship graph.
+ *
+ * Nodes are KnowledgeObjects declared by Scriptorium (document `id:` and `{#ID}` sections).
+ * Concepts are not nodes. An edge exists only when its target resolves (RESOLVED) from a
+ * source that itself has a unique canonical identity. Output is independent of input order.
+ */
 export function buildGraph(results) {
-    const diagnostics = [];
     if (results.length === 0) {
         return {
             nodes: [],
             edges: [],
+            unresolved: [],
+            conflicts: [],
             diagnostics: [{ severity: 'info', message: 'No ScriptoriumResult inputs provided — graph is empty.' }],
         };
     }
-    // --- Pass 1: accumulate concept labels grouped by normalized ID ---
-    const nodeAccum = new Map();
-    for (const result of results) {
-        for (const concept of result.concepts) {
-            const id = normalizeLabel(concept.label);
-            if (!id)
-                continue;
-            let acc = nodeAccum.get(id);
-            if (!acc) {
-                acc = { labels: [], evidenceIds: [], sourceArtifacts: [] };
-                nodeAccum.set(id, acc);
-            }
-            if (!acc.labels.includes(concept.label))
-                acc.labels.push(concept.label);
-            acc.evidenceIds.push(concept.id);
-            if (!acc.sourceArtifacts.includes(result.artifactId))
-                acc.sourceArtifacts.push(result.artifactId);
-        }
-    }
-    // --- Pass 2: build node map from accumulators ---
-    const nodeMap = new Map();
-    for (const [id, acc] of nodeAccum) {
-        const canonical = selectCanonicalLabel(acc.labels);
-        const aliases = acc.labels.filter(l => l !== canonical);
-        if (acc.labels.length > 1) {
-            diagnostics.push({
-                severity: 'info',
-                message: `Merged ${acc.labels.length} label variants into node "${id}": ${acc.labels.map(l => `"${l}"`).join(', ')}`,
-            });
-        }
-        nodeMap.set(id, {
-            id,
-            canonicalLabel: canonical,
-            aliases,
-            evidenceIds: acc.evidenceIds,
-            sourceArtifacts: acc.sourceArtifacts,
-            synthesized: false,
-        });
-    }
-    // --- Pass 2.5: build alias map from document metadata ---
-    // Maps normalizeLabel(documentId|documentTitle) → primaryNodeId for alias lookup in Pass 3.
-    // Aliases originate only from explicit frontmatter metadata (id:, title:). No fuzzy matching.
-    const aliasMap = new Map();
-    for (const result of results) {
-        // Find the primary node for this document: prefer the first H1 heading concept.
-        const h1Concept = result.concepts.find(c => c.source === 'heading' && c.headingLevel === 1);
-        const fallbackConcept = result.concepts[0];
-        const primaryLabel = h1Concept?.label ?? fallbackConcept?.label;
-        if (!primaryLabel)
-            continue;
-        const primaryNodeId = normalizeLabel(primaryLabel);
-        if (!primaryNodeId || !nodeMap.has(primaryNodeId))
-            continue;
-        const candidates = [];
-        if (result.documentId) {
-            candidates.push({ label: result.documentId, origin: `documentId "${result.documentId}"` });
-        }
-        if (result.documentTitle) {
-            candidates.push({ label: result.documentTitle, origin: `documentTitle "${result.documentTitle}"` });
-        }
-        for (const { label, origin } of candidates) {
-            const aliasId = normalizeLabel(label);
-            if (!aliasId || aliasId === primaryNodeId)
-                continue; // same slug — no alias needed
-            if (nodeMap.has(aliasId))
-                continue; // a real concept node already has this ID
-            if (aliasMap.has(aliasId)) { // collision: two docs claim the same alias
+    const diagnostics = [];
+    const ordered = [...results].sort((a, b) => cmp(a.artifactId, b.artifactId) || cmp(a.sourcePath ?? '', b.sourcePath ?? ''));
+    // --- Pass 1: validate declarations into KnowledgeObjects ---
+    const declared = [];
+    const documentOf = new Map(); // result → document ref
+    const loadedNamespaces = new Set();
+    for (const result of ordered) {
+        const { artifactId } = result;
+        const namespace = result.namespace;
+        if (namespace === undefined || !isValidIdentifier(namespace)) {
+            if (result.declarations.length > 0 || result.relationships.length > 0) {
                 diagnostics.push({
-                    severity: 'info',
-                    message: `Alias collision: "${aliasId}" (from ${origin}) already mapped; first document wins`,
-                    artifactId: result.artifactId,
+                    severity: 'error',
+                    message: namespace === undefined
+                        ? 'Artifact has no namespace; its declarations and relationships cannot be given a canonical identity'
+                        : `Invalid namespace "${namespace}"; its declarations and relationships cannot be given a canonical identity`,
+                    artifactId,
+                });
+            }
+            continue;
+        }
+        loadedNamespaces.add(namespace);
+        for (const decl of result.declarations) {
+            if (!isValidIdentifier(decl.localId)) {
+                diagnostics.push({
+                    severity: 'error',
+                    message: `Invalid local id "${decl.localId}" in ${decl.kind} declaration; object ignored`,
+                    artifactId,
                 });
                 continue;
             }
-            aliasMap.set(aliasId, primaryNodeId);
-            const node = nodeMap.get(primaryNodeId);
-            if (!node.aliases.includes(label))
-                node.aliases.push(label);
+            const obj = {
+                ref: makeRef(namespace, decl.localId),
+                namespace,
+                localId: decl.localId,
+                kind: decl.kind,
+                ...(decl.title !== undefined ? { title: decl.title } : {}),
+                ...(decl.status !== undefined ? { status: decl.status } : {}),
+                location: {
+                    artifactId,
+                    path: result.sourcePath ?? artifactId,
+                    ...(decl.sourceLine !== undefined ? { line: decl.sourceLine } : {}),
+                },
+            };
+            declared.push(obj);
+            if (decl.kind === 'document' && !documentOf.has(result))
+                documentOf.set(result, obj.ref);
+        }
+    }
+    // --- Pass 2: uniqueness. A ref held by more than one object is a conflict, never a node. ---
+    const index = buildObjectIndex(declared, loadedNamespaces);
+    const nodes = [];
+    const conflicts = [];
+    for (const [ref, list] of index.byRef) {
+        if (list.length === 1) {
+            nodes.push(list[0]);
+        }
+        else {
+            conflicts.push({ ref, candidates: [...list] });
             diagnostics.push({
-                severity: 'info',
-                message: `Registered alias "${aliasId}" → "${primaryNodeId}" from ${origin}`,
-                artifactId: result.artifactId,
+                severity: 'error',
+                message: `Identity conflict: ${list.length} objects declare "${ref}" (${list
+                    .map(o => `${o.location.artifactId}${o.location.line !== undefined ? `:${o.location.line}` : ''}`)
+                    .join(', ')}); none is resolvable`,
             });
         }
     }
-    // --- Pass 3: process relationships → edges ---
+    nodes.sort(compareObjects);
+    conflicts.sort((a, b) => cmp(a.ref, b.ref));
+    // --- Pass 3: relationships → edges (RESOLVED only) ---
     const edges = [];
-    // Dedup key → index in edges[] — prevents identical (from|type|to|artifact) pairs
     const edgeDedup = new Map();
-    for (const result of results) {
-        for (const rel of result.relationships) {
-            const rawFromId = normalizeLabel(rel.fromLabel);
-            const rawToId = normalizeLabel(rel.toLabel);
-            if (!rawFromId || !rawToId)
-                continue;
-            // Resolve through alias map before synthesizing
-            const fromId = aliasMap.get(rawFromId) ?? rawFromId;
-            const toId = aliasMap.get(rawToId) ?? rawToId;
-            // Synthesize fromNode when the artifact's own identity is not in its concepts
-            if (!nodeMap.has(fromId)) {
-                nodeMap.set(fromId, {
-                    id: fromId,
-                    canonicalLabel: rel.fromLabel,
-                    aliases: [],
-                    evidenceIds: [],
-                    sourceArtifacts: [result.artifactId],
-                    synthesized: true,
-                });
-                diagnostics.push({
-                    severity: 'info',
-                    message: `Synthesized node "${fromId}" from relationship fromLabel "${rel.fromLabel}"`,
-                    artifactId: result.artifactId,
-                });
-            }
-            // Synthesize toNode when target concept does not appear in any concept list or alias map
-            if (!nodeMap.has(toId)) {
-                nodeMap.set(toId, {
-                    id: toId,
-                    canonicalLabel: rel.toLabel,
-                    aliases: [],
-                    evidenceIds: [],
-                    sourceArtifacts: [result.artifactId],
-                    synthesized: true,
-                });
+    const unresolved = [];
+    for (const result of ordered) {
+        if (result.relationships.length === 0)
+            continue;
+        const fromRef = documentOf.get(result);
+        const fromOk = fromRef !== undefined && index.byRef.get(fromRef)?.length === 1;
+        if (!fromOk) {
+            if (result.namespace !== undefined && isValidIdentifier(result.namespace)) {
                 diagnostics.push({
                     severity: 'warn',
-                    message: `Synthesized placeholder node "${toId}" — referenced by "${rel.relationshipType}" from "${rel.fromLabel}" but no matching concept found in corpus`,
+                    message: fromRef === undefined
+                        ? `Artifact declares no document id; ${result.relationships.length} relationship(s) have no canonical source and create no edges`
+                        : `Document "${fromRef}" is in an identity conflict; ${result.relationships.length} relationship(s) create no edges`,
                     artifactId: result.artifactId,
                 });
             }
-            // Deduplicate same (from, type, to, artifact) within one build
-            const dedupKey = `${fromId}|${rel.relationshipType}|${toId}|${result.artifactId}`;
-            const existingIdx = edgeDedup.get(dedupKey);
-            if (existingIdx !== undefined) {
-                edges[existingIdx].evidenceIds.push(rel.id);
+            continue;
+        }
+        for (const rel of result.relationships) {
+            const resolution = resolveRef(rel.toLabel, result.namespace, index);
+            if (resolution.status !== 'RESOLVED') {
+                unresolved.push({
+                    fromRef,
+                    rawRef: rel.toLabel,
+                    relationshipType: rel.relationshipType,
+                    resolution,
+                    sourceArtifactId: result.artifactId,
+                    evidenceId: rel.id,
+                    ...(rel.sourceLine !== undefined ? { sourceLine: rel.sourceLine } : {}),
+                });
+                continue;
+            }
+            const toRef = resolution.object.ref;
+            const key = `${fromRef}|${rel.relationshipType}|${toRef}|${result.artifactId}`;
+            const existing = edgeDedup.get(key);
+            if (existing !== undefined) {
+                edges[existing].evidenceIds.push(rel.id);
             }
             else {
-                edgeDedup.set(dedupKey, edges.length);
+                edgeDedup.set(key, edges.length);
                 edges.push({
-                    id: dedupKey,
-                    fromNodeId: fromId,
-                    toNodeId: toId,
+                    id: key,
+                    fromRef,
+                    toRef,
                     relationshipType: rel.relationshipType,
                     provenance: 'explicit',
                     evidenceIds: [rel.id],
                     sourceArtifactId: result.artifactId,
+                    ...(rel.sourceLine !== undefined ? { sourceLine: rel.sourceLine } : {}),
                 });
             }
         }
     }
-    // --- Pass 4: sort deterministically by ID ---
-    const sortedNodes = [...nodeMap.values()].sort((a, b) => a.id.localeCompare(b.id));
-    const sortedEdges = [...edges].sort((a, b) => a.id.localeCompare(b.id));
-    return { nodes: sortedNodes, edges: sortedEdges, diagnostics };
+    edges.sort((a, b) => cmp(a.id, b.id));
+    unresolved.sort((a, b) => cmp(a.sourceArtifactId, b.sourceArtifactId) ||
+        cmp(a.evidenceId, b.evidenceId) ||
+        cmp(a.rawRef, b.rawRef));
+    return { nodes, edges, unresolved, conflicts, diagnostics };
+}
+function cmp(a, b) {
+    return a < b ? -1 : a > b ? 1 : 0;
 }

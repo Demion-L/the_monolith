@@ -6,6 +6,7 @@ import type {
   Evidence,
   SourceReference,
   ScriptoriumDiagnostic,
+  ObjectDeclaration,
 } from './types.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { parseMarkdownBody } from './markdown.js';
@@ -18,6 +19,7 @@ export function compileMarkdownArtifact(input: ScriptoriumInput): ScriptoriumRes
   const evidence: Evidence[] = [];
   const sourceReferences: SourceReference[] = [];
   const diagnostics: ScriptoriumDiagnostic[] = [];
+  const declarations: ObjectDeclaration[] = [];
 
   let conceptIdx = 0;
   let relIdx = 0;
@@ -32,14 +34,22 @@ export function compileMarkdownArtifact(input: ScriptoriumInput): ScriptoriumRes
 
   let docLabel = input.title ?? id;
   let documentId: string | undefined;
+  let documentIdLine: number | undefined;
+  let documentTitleDecl: string | undefined = input.title;
+  let documentStatus: string | undefined;
 
   if (fm) {
     for (const field of fm.fields) {
       if (field.key === 'title' && field.values[0]) {
         docLabel = field.values[0];
+        documentTitleDecl = field.values[0];
+      }
+      if (field.key === 'status' && field.values[0]) {
+        documentStatus = field.values[0];
       }
       if (field.key === 'id' && field.values[0]) {
         documentId = field.values[0];
+        documentIdLine = field.line;
       }
 
       if (field.isRelationship) {
@@ -51,6 +61,7 @@ export function compileMarkdownArtifact(input: ScriptoriumInput): ScriptoriumRes
             relationshipType: field.key,
             provenance: 'explicit',
             sourceField: field.key,
+            sourceLine: field.line,
           });
         }
       } else {
@@ -66,7 +77,28 @@ export function compileMarkdownArtifact(input: ScriptoriumInput): ScriptoriumRes
     }
   }
 
+  if (documentId !== undefined) {
+    declarations.push({
+      kind: 'document',
+      localId: documentId,
+      ...(documentTitleDecl !== undefined ? { title: documentTitleDecl } : {}),
+      ...(documentStatus !== undefined ? { status: documentStatus } : {}),
+      ...(documentIdLine !== undefined ? { sourceLine: documentIdLine } : {}),
+    });
+  }
+
   const parsed = parseMarkdownBody(bodyLines);
+
+  for (const heading of parsed.headings) {
+    if (heading.anchorId === undefined) continue;
+    const title = normalizeLabel(heading.text);
+    declarations.push({
+      kind: 'section',
+      localId: heading.anchorId,
+      ...(title ? { title } : {}),
+      sourceLine: heading.line + bodyStartLine,
+    });
+  }
 
   for (const heading of parsed.headings) {
     const label = normalizeLabel(heading.text);
@@ -122,6 +154,9 @@ export function compileMarkdownArtifact(input: ScriptoriumInput): ScriptoriumRes
     artifactId: id,
     documentId,
     documentTitle: docLabel,
+    namespace: input.namespace,
+    sourcePath: input.sourcePath,
+    declarations,
     concepts,
     relationships,
     evidence,

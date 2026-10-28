@@ -16,6 +16,19 @@ export interface RelationshipCandidate {
     sourceField?: string;
     sourceLine?: number;
 }
+export type DeclaredObjectKind = 'document' | 'section';
+/**
+ * A raw, unvalidated claim that an object with `localId` exists in this artifact.
+ * Scriptorium only extracts the claim; ERG decides identity, uniqueness and validity.
+ * `sourceLine` is 0-based, like ConceptCandidate.sourceLine.
+ */
+export interface ObjectDeclaration {
+    kind: DeclaredObjectKind;
+    localId: string;
+    title?: string;
+    status?: string;
+    sourceLine?: number;
+}
 export type EvidenceSource = 'frontmatter' | 'list-item' | 'code-block';
 export interface Evidence {
     id: string;
@@ -42,6 +55,12 @@ export interface ScriptoriumResult {
     documentId?: string;
     /** Resolved display title used as fromLabel in relationships (frontmatter title → H1 → artifactId). */
     documentTitle?: string;
+    /** Namespace supplied by the caller for this artifact (ScriptoriumInput.namespace); never derived from content. */
+    namespace?: string;
+    /** Path of the artifact as supplied by the caller (ScriptoriumInput.sourcePath). */
+    sourcePath?: string;
+    /** Object declarations: the document (frontmatter `id:`) and `{#ID}`-marked sections. */
+    declarations: ObjectDeclaration[];
     concepts: ConceptCandidate[];
     relationships: RelationshipCandidate[];
     evidence: Evidence[];
@@ -53,5 +72,7 @@ export interface ScriptoriumInput {
     title?: string;
     content: string;
     sourcePath?: string;
+    /** Identity namespace of the corpus this artifact belongs to. Supplied by the caller, never inferred. */
+    namespace?: string;
 }
 //# sourceMappingURL=types.d.ts.map

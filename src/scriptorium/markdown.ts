@@ -4,6 +4,8 @@ export interface ParsedHeading {
   level: HeadingLevel;
   text: string;
   line: number;
+  /** Raw id from a trailing `{#ID}` marker (not validated); the marker is removed from `text`. */
+  anchorId?: string;
 }
 
 export interface ParsedLink {
@@ -34,6 +36,7 @@ export interface MarkdownParseResult {
 const HEADING_RE = /^(#{1,6})\s+(.+?)(?:\s+#+)?$/;
 const LIST_ITEM_UNORDERED_RE = /^(\s*)[-*+]\s+(.+)$/;
 const LIST_ITEM_ORDERED_RE = /^(\s*)\d+\.\s+(.+)$/;
+const HEADING_ANCHOR_RE = /\s*\{#([^\s{}]+)\}\s*$/;
 const LINK_RE = /\[([^\]]+)\]\(([^)]+)\)/g;
 
 export function parseMarkdownBody(lines: string[]): MarkdownParseResult {
@@ -81,8 +84,14 @@ export function parseMarkdownBody(lines: string[]): MarkdownParseResult {
     const headingMatch = trimmed.match(HEADING_RE);
     if (headingMatch) {
       const level = headingMatch[1].length as HeadingLevel;
-      const text = headingMatch[2].trim();
-      headings.push({ level, text, line: i });
+      let text = headingMatch[2].trim();
+      let anchorId: string | undefined;
+      const anchor = text.match(HEADING_ANCHOR_RE);
+      if (anchor) {
+        anchorId = anchor[1];
+        text = text.slice(0, anchor.index).trim();
+      }
+      headings.push({ level, text, line: i, ...(anchorId !== undefined ? { anchorId } : {}) });
       extractLinks(text, i, links);
       continue;
     }

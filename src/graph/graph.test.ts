@@ -391,3 +391,33 @@ describe('parseRef / resolveRef', () => {
     expect(resolveRef('o:X', 'n', index).status).toBe('RESOLVED');
   });
 });
+
+describe('case sensitivity', () => {
+  const g = () =>
+    build([
+      doc('Doc-1', { path: 'upper.md' }),
+      doc('doc-1', { path: 'lower.md' }),
+      doc('SrcUpper', { fm: ['references: [Doc-1]'] }),
+      doc('SrcLower', { fm: ['references: [doc-1]'] }),
+    ]);
+
+  it('Doc-1 and doc-1 are distinct objects coexisting in one namespace without conflict', () => {
+    const graph = g();
+    expect(refs(graph)).toContain('p:Doc-1');
+    expect(refs(graph)).toContain('p:doc-1');
+    expect(graph.conflicts).toEqual([]);
+  });
+
+  it('references resolve case-sensitively to their own target', () => {
+    const graph = g();
+    const target = (from: string) => graph.edges.filter(e => e.fromRef === from).map(e => e.toRef);
+    expect(target('p:SrcUpper')).toEqual(['p:Doc-1']);
+    expect(target('p:SrcLower')).toEqual(['p:doc-1']);
+  });
+
+  it('a reference differing only by case does not resolve (no normalization)', () => {
+    const graph = build([doc('Doc-1'), doc('Src', { fm: ['references: [DOC-1]'] })]);
+    expect(graph.edges).toEqual([]);
+    expect(graph.unresolved[0].resolution).toEqual({ status: 'MISSING', ref: 'p:DOC-1' });
+  });
+});

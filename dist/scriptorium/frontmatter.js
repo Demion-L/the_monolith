@@ -42,6 +42,7 @@ export function parseFrontmatter(lines) {
             continue;
         }
         const key = keyValueMatch[1];
+        const keyLine = i + 1;
         const rawValue = keyValueMatch[2].trim();
         let values = [];
         if (rawValue === '') {
@@ -78,6 +79,7 @@ export function parseFrontmatter(lines) {
                 key,
                 values,
                 isRelationship: MONOLITH_RELATIONSHIP_FIELDS.has(key),
+                line: keyLine,
             });
         }
     }

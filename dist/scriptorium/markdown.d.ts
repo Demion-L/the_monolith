@@ -3,6 +3,8 @@ export interface ParsedHeading {
     level: HeadingLevel;
     text: string;
     line: number;
+    /** Raw id from a trailing `{#ID}` marker (not validated); the marker is removed from `text`. */
+    anchorId?: string;
 }
 export interface ParsedLink {
     label: string;

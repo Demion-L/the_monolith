@@ -644,3 +644,56 @@ describe('documentId and documentTitle (Story 1.3.3)', () => {
     expect(idEvidence!.content).toBe('ADR-004');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Object declarations (ERG-001A boundary: Scriptorium extracts, ERG decides)
+// ---------------------------------------------------------------------------
+
+describe('compileMarkdownArtifact — object declarations', () => {
+  const content = [
+    '---',
+    'id: DOC-1',
+    'title: Declared',
+    'status: accepted',
+    'references: [DOC-2]',
+    '---',
+    '# Heading',
+    '## Section {#HYP-001}',
+    '## Plain',
+  ].join('\n');
+
+  it('extracts a document declaration with title, status and source line', () => {
+    const r = compileMarkdownArtifact({ id: 'a', content, namespace: 'ns', sourcePath: 'x/a.md' });
+    expect(r.declarations[0]).toEqual({
+      kind: 'document',
+      localId: 'DOC-1',
+      title: 'Declared',
+      status: 'accepted',
+      sourceLine: 1,
+    });
+    expect(r.namespace).toBe('ns');
+    expect(r.sourcePath).toBe('x/a.md');
+  });
+
+  it('extracts section declarations from {#ID} markers and strips the marker from the concept label', () => {
+    const r = compileMarkdownArtifact({ id: 'a', content });
+    expect(r.declarations.filter(d => d.kind === 'section')).toEqual([
+      { kind: 'section', localId: 'HYP-001', title: 'Section', sourceLine: 7 },
+    ]);
+    expect(r.concepts.map(c => c.label)).toEqual(['Heading', 'Section', 'Plain']);
+  });
+
+  it('records the source line of relationship fields', () => {
+    const r = compileMarkdownArtifact({ id: 'a', content });
+    expect(r.relationships[0].sourceLine).toBe(4);
+  });
+
+  it('declares nothing without an id or marker', () => {
+    expect(compileMarkdownArtifact({ id: 'a', content: '# Just a heading\n' }).declarations).toEqual([]);
+  });
+
+  it('does not treat {#ID} inside a code fence as a declaration', () => {
+    const r = compileMarkdownArtifact({ id: 'a', content: '```\n## Not real {#X}\n```\n' });
+    expect(r.declarations).toEqual([]);
+  });
+});

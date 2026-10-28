@@ -19,10 +19,10 @@ export type { VerificationContext, VerificationReport } from './types/integrity.
 export type { ProjectConfig, InitOptions } from './init/types.js';
 export { MONOLITH_VERSION } from './version.js';
 export { runInit } from './init/index.js';
-export type { ScriptoriumInput, ScriptoriumResult, ConceptCandidate, RelationshipCandidate, Evidence, SourceReference, ScriptoriumDiagnostic, ConceptSource, EvidenceSource, HeadingLevel, } from './scriptorium/index.js';
+export type { ScriptoriumInput, ScriptoriumResult, ConceptCandidate, RelationshipCandidate, Evidence, SourceReference, ScriptoriumDiagnostic, ConceptSource, EvidenceSource, HeadingLevel, ObjectDeclaration, DeclaredObjectKind, } from './scriptorium/index.js';
 export { compileMarkdownArtifact, isStructuralHeadingNoise } from './scriptorium/index.js';
-export type { GraphNode, GraphEdge, GraphDiagnostic, ExplicitRelationshipGraph, } from './graph/index.js';
-export { buildGraph, normalizeLabel, selectCanonicalLabel } from './graph/index.js';
+export type { GraphNode, GraphEdge, GraphDiagnostic, ExplicitRelationshipGraph, UnresolvedReference, IdentityConflict, KnowledgeObject, KnowledgeObjectKind, Resolution, UnresolvedResolution, ObjectIndex, } from './graph/index.js';
+export { buildGraph, buildObjectIndex, resolveRef, makeRef, parseRef, isValidIdentifier } from './graph/index.js';
 export type { CoordinatoriumState, Mission, MissionStatus, MissionResult, CoordinatoriumErrorCode, StartMissionInput, FinishMissionInput, StateWriteTarget, StateReadTarget, } from './coordinatorium/index.js';
 export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, MissionNotFoundError, InvalidTransitionError, ValidationError, readState, mutateState, projectTarget, trustedDirectoryTarget, startMission, listMissions, getMission, finishMission, } from './coordinatorium/index.js';
 export { SafeWriteError } from './root/index.js';

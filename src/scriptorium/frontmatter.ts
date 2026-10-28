@@ -20,6 +20,8 @@ export interface FrontmatterField {
   key: string;
   values: string[];
   isRelationship: boolean;
+  /** 0-based line of the key within the artifact (the opening `---` is line 0). */
+  line: number;
 }
 
 export interface FrontmatterParseResult {
@@ -57,6 +59,7 @@ export function parseFrontmatter(lines: string[]): FrontmatterParseResult | null
     }
 
     const key = keyValueMatch[1];
+    const keyLine = i + 1;
     const rawValue = keyValueMatch[2].trim();
 
     let values: string[] = [];
@@ -92,6 +95,7 @@ export function parseFrontmatter(lines: string[]): FrontmatterParseResult | null
         key,
         values,
         isRelationship: MONOLITH_RELATIONSHIP_FIELDS.has(key),
+        line: keyLine,
       });
     }
   }

@@ -9,6 +9,8 @@ export type {
   ConceptSource,
   EvidenceSource,
   HeadingLevel,
+  ObjectDeclaration,
+  DeclaredObjectKind,
 } from './types.js';
 
 export { compileMarkdownArtifact, isStructuralHeadingNoise } from './compile.js';

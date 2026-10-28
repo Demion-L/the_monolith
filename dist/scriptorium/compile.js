@@ -7,6 +7,7 @@ export function compileMarkdownArtifact(input) {
     const evidence = [];
     const sourceReferences = [];
     const diagnostics = [];
+    const declarations = [];
     let conceptIdx = 0;
     let relIdx = 0;
     let evidenceIdx = 0;
@@ -17,13 +18,21 @@ export function compileMarkdownArtifact(input) {
     const bodyLines = lines.slice(bodyStartLine);
     let docLabel = input.title ?? id;
     let documentId;
+    let documentIdLine;
+    let documentTitleDecl = input.title;
+    let documentStatus;
     if (fm) {
         for (const field of fm.fields) {
             if (field.key === 'title' && field.values[0]) {
                 docLabel = field.values[0];
+                documentTitleDecl = field.values[0];
+            }
+            if (field.key === 'status' && field.values[0]) {
+                documentStatus = field.values[0];
             }
             if (field.key === 'id' && field.values[0]) {
                 documentId = field.values[0];
+                documentIdLine = field.line;
             }
             if (field.isRelationship) {
                 for (const val of field.values) {
@@ -34,6 +43,7 @@ export function compileMarkdownArtifact(input) {
                         relationshipType: field.key,
                         provenance: 'explicit',
                         sourceField: field.key,
+                        sourceLine: field.line,
                     });
                 }
             }
@@ -49,7 +59,27 @@ export function compileMarkdownArtifact(input) {
             }
         }
     }
+    if (documentId !== undefined) {
+        declarations.push({
+            kind: 'document',
+            localId: documentId,
+            ...(documentTitleDecl !== undefined ? { title: documentTitleDecl } : {}),
+            ...(documentStatus !== undefined ? { status: documentStatus } : {}),
+            ...(documentIdLine !== undefined ? { sourceLine: documentIdLine } : {}),
+        });
+    }
     const parsed = parseMarkdownBody(bodyLines);
+    for (const heading of parsed.headings) {
+        if (heading.anchorId === undefined)
+            continue;
+        const title = normalizeLabel(heading.text);
+        declarations.push({
+            kind: 'section',
+            localId: heading.anchorId,
+            ...(title ? { title } : {}),
+            sourceLine: heading.line + bodyStartLine,
+        });
+    }
     for (const heading of parsed.headings) {
         const label = normalizeLabel(heading.text);
         if (!label)
@@ -103,6 +133,9 @@ export function compileMarkdownArtifact(input) {
         artifactId: id,
         documentId,
         documentTitle: docLabel,
+        namespace: input.namespace,
+        sourcePath: input.sourcePath,
+        declarations,
         concepts,
         relationships,
         evidence,

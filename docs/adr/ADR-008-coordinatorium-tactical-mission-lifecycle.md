@@ -412,7 +412,7 @@ boolean (`checkLiveness()` in `lock.ts`):
 >   `start` is field 22 of `/proc/<pid>/stat`; each of the three is `null` when
 >   the platform cannot supply it. A body is a record only if it equals
 >   `formatLockRecord()` byte for byte (no whitespace, trailing newline,
->   duplicate or reordered keys). Limit 256 B (worst case ≈ 190 B).
+>   duplicate or reordered keys). Limit 256 B (worst case 165 B).
 > - **`dead` requires all of:** our own identity is known (Linux, `/proc`
 >   belongs to our PID namespace); the record's `boot` and `pidns` are known and
 >   equal ours; and either `start` differs from the live process now holding

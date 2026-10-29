@@ -10,8 +10,9 @@ Architecture drifts from what the docs say. A new AI session has no way to
 know what was already tried, decided, or rejected.
 
 MONOLITH exists to keep that knowledge structured, consistent, and
-traceable: an open-source project knowledge and governance toolkit for
-AI-assisted development. It helps developers organize ideas, track
+traceable. MONOLITH is Cognitive Infrastructure for AI: an open-source
+toolkit for observable project state, structured knowledge, and explicit
+execution governance. It helps developers organize ideas, track
 progress, preserve architectural decisions, and maintain project context
 across AI sessions, keeping complex AI-driven projects structured,
 consistent, and understandable.

@@ -16,7 +16,7 @@ Authority: `AGENTS.md`. When this file conflicts with AGENTS.md, AGENTS.md wins.
 
 | Field           | Value                   |
 | --------------- | ----------------------- |
-| Package name    | `@monolith/core`        |
+| Package name    | `@latysh-development/monolith` |
 | Version         | `0.1.0-alpha.0`         |
 | Entry point     | `src/index.ts` → `dist/index.js` |
 | MONOLITH root   | `.monolith/`            |

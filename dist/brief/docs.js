@@ -16,8 +16,8 @@
  * this is what makes a symlink cycle (ELOOP) impossible by construction,
  * and is also the first line of defense against using a nested symlink to
  * tunnel outside a configured directory. The *top-level* directories named
- * in `dirs` (i.e. `contextGateway.adrDirs` and the standard protocols/ADR
- * dirs) get an explicit containment check in addition: both a string-level
+ * in `dirs` (i.e. `contextGateway.adrDirs` and the standard protocols
+ * dir) get an explicit containment check in addition: both a string-level
  * check (rejects `..` segments in the configured path itself) and a
  * real-path check after resolving symlinks (rejects a configured directory
  * that is itself a symlink escaping the project root). Neither check alone

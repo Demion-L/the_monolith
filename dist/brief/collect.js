@@ -18,7 +18,7 @@ import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
 import { selectActiveMissions, selectRecentFinishedMissions, selectLatestCheckpoint, hasCheckpointOrderMismatch, } from './selectors.js';
 import { stateFilePath, validateState, createInitialState, MAX_STATE_BYTES } from '../coordinatorium/index.js';
-import { ACTIVE_MD_REL, STANDARD_ADR_DIR, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
+import { ACTIVE_MD_REL, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
 import { evaluateFreshness, parseActiveStoryClaim, parseRoadmapActiveStory, parseRoadmapStatuses, parseStoryIndexStatuses, } from './freshness.js';
 import { readGitSignals } from './git-signals.js';
 const RECENT_FINISHED_MISSIONS_LIMIT = 5;
@@ -281,7 +281,7 @@ export async function collect(targetDir) {
         items: discoverDocs(targetDir, [protocolsRelDir], (fields) => fields.get('enforcement') === 'mandatory', diagnostics),
         provenance: { source: protocolsRelDir },
     };
-    const adrDirs = [`${config.monolithRoot}/${STANDARD_ADR_DIR}`, ...config.extraAdrDirs];
+    const adrDirs = config.adrDirs;
     const adrs = {
         items: discoverDocs(targetDir, adrDirs, (fields) => fields.get('status') === 'accepted', diagnostics),
         provenance: { source: adrDirs.join(', ') },

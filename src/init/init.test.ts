@@ -92,7 +92,7 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
 
     expect(JSON.parse(readFileSync(statePath, 'utf8'))).toEqual(recorded);
     expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);
-    expect(existsSync(join(dir, '.monolith', 'adr', '.gitkeep'))).toBe(true);
+    expect(existsSync(join(dir, '.monolith', 'memory', 'working', 'phases', '.gitkeep'))).toBe(true);
   });
 
   it('does not break existing validate behavior on a freshly scaffolded instance', async () => {
@@ -123,6 +123,18 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     }
 
     expect(exitSpy.code).toBe(0);
+  });
+});
+
+describe('scaffoldInstance — one ADR location', () => {
+  it('creates no ADR directory under the MONOLITH root and points brief at docs/adr', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+
+    expect(existsSync(join(dir, '.monolith', 'adr'))).toBe(false);
+    expect(existsSync(join(dir, 'docs', 'adr'))).toBe(false); // created with the first ADR, with its index
+    const config = JSON.parse(readFileSync(join(dir, 'monolith.config.json'), 'utf8'));
+    expect(config.contextGateway).toEqual({ adrDirs: ['docs/adr'] });
   });
 });
 

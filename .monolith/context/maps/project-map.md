@@ -119,8 +119,7 @@ Add new design documents here when introducing new capabilities. One file per mo
 | Location | Purpose |
 | -------- | ------- |
 | `docs/adr/README.md` | The ADR index — the only index of MONOLITH's ADRs |
-| `docs/adr/ADR-*.md` | ADR records (ADR-007 …) |
-| `.monolith/adr/ADR-*.md` | ADR-001 … 003 records (listed in the index) |
+| `docs/adr/ADR-*.md` | ADR records (ADR-002, ADR-003, ADR-007 …; ADR-001 and ADR-004 … 006 are Webway's) |
 
 ---
 
@@ -133,12 +132,9 @@ Add new design documents here when introducing new capabilities. One file per mo
 | `.monolith/memory/long-term/decisions.md` | Decisions that are not ADRs (`DEC-…`) |
 | `.monolith/memory/long-term/architecture-principles.md` | Core principles |
 | `.monolith/memory/long-term/hypotheses.md` | Hypotheses owned by MONOLITH (`monolith:HYP-NNN`) |
-| `.monolith/memory/long-term/knowledge-regions.md` | Canonical knowledge regions conceptual map |
-| `.monolith/memory/long-term/knowledge-lifecycle.md` | Knowledge Lifecycle v0 — Information → Knowledge Region |
 | `.monolith/memory/long-term/story-lifecycle.md` | Story Lifecycle — Story as unit of engineering evolution; Decision as terminal state |
-| `.monolith/memory/long-term/cognitive-core.md` | Cognitive Core — conceptual future self-directed learning layer |
 | `.monolith/memory/long-term/engineering-gate.md` | Engineering Gate — conceptual task-preparation layer |
-| `.monolith/memory/long-term/webway-v1-research-plan.md` | Webway v1 research plan — semantic linking roadmap |
+| *(not stored here)* | Knowledge regions, Knowledge Lifecycle, Cognitive Core (semantics), Webway v1 plan — Webway repository: `docs/architecture/{knowledge-regions,knowledge-lifecycle,cognitive-core}.md`, `docs/webway-v1-research-plan.md` |
 | `.monolith/memory/long-term/tech-debt.md` | Tech debt registry |
 | `.monolith/memory/long-term/execution-history.md` | Finalization log |
 

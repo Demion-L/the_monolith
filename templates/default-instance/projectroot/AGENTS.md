@@ -87,8 +87,9 @@ state (State Keeper status, active missions and latest checkpoints,
 mandatory protocols, current story, accepted ADRs), with the source of
 each section. It supplements the Boot Sequence; it does not replace it.
 The first line is `Completeness: COMPLETE` or `INCOMPLETE`; exit code 2
-under `--strict` means INCOMPLETE. Additional ADR directories can be listed
-in `monolith.config.json` under `contextGateway.adrDirs`.
+under `--strict` means INCOMPLETE. ADR directories are
+listed in `monolith.config.json` under `contextGateway.adrDirs`; a new instance
+sets `["docs/adr"]`, the only ADR location.
 
 **Mission Checkpoints (COORDINATORIUM-002):** an `in_progress` mission can
 accumulate durable, append-only checkpoints (`summary` required,

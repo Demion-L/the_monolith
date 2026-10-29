@@ -21,11 +21,11 @@ Where authoritative truth lives for each semantic domain.
 | Non-ADR decisions (`DEC-…`) | `memory/long-term/decisions.md`    |
 | MONOLITH hypotheses    | `memory/long-term/hypotheses.md`        |
 | Webway hypotheses and research | Not stored here — Webway repository (`docs/hypotheses.md`, `docs/research/`) |
-| Knowledge regions map  | `memory/long-term/knowledge-regions.md` |
-| Knowledge lifecycle    | `memory/long-term/knowledge-lifecycle.md` |
+| Knowledge regions map, Knowledge lifecycle | Not stored here — Webway repository (`docs/architecture/knowledge-regions.md`, `docs/architecture/knowledge-lifecycle.md`) |
 | Story lifecycle        | `memory/long-term/story-lifecycle.md`     |
-| Webway v1 research plan (historical — Webway now developed externally: https://github.com/Demion-L/webway) | `memory/long-term/webway-v1-research-plan.md` |
-| Cognitive Core definition | `memory/long-term/cognitive-core.md` |
+| Webway v1 research plan | Not stored here — Webway repository (`docs/webway-v1-research-plan.md`) — https://github.com/Demion-L/webway |
+| Cognitive Core — semantic definition | Not stored here — Webway repository (`docs/architecture/cognitive-core.md`, `webway:ADR-002`) |
+| Cognitive Core — execution and integration | `docs/adr/ADR-002-cognitive-core-foundation.md` (`monolith:ADR-002`) |
 | Engineering Gate definition | `memory/long-term/engineering-gate.md` |
 | Execution log          | `memory/long-term/execution-history.md` |
 | Error records          | `memory/errors/ERR-*.md`                |
@@ -78,7 +78,7 @@ Where authoritative truth lives for each semantic domain.
 | What                         | Authoritative Source                   |
 | ---------------------------- | -------------------------------------- |
 | ADR index                    | `docs/adr/README.md` (repo-relative, outside `.monolith/`) |
-| Full ADR records             | `docs/adr/ADR-*.md`; ADR-001 … 003: `adr/ADR-*.md` |
+| Full ADR records             | `docs/adr/ADR-*.md` (the only location; ADR-001 and ADR-004 … 006 are Webway's) |
 
 ---
 

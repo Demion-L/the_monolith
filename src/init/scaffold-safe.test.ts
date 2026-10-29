@@ -143,9 +143,9 @@ describe('FIFOs and special files', () => {
   });
 
   it('a FIFO as a .gitkeep is refused', async () => {
-    mkdirSync(join(project, '.monolith', 'adr'), { recursive: true });
-    execFileSync('mkfifo', [join(project, '.monolith', 'adr', '.gitkeep')]);
-    expect(planScaffoldConflicts(project, CONFIG)).toContain(join('.monolith', 'adr', '.gitkeep'));
+    mkdirSync(join(project, '.monolith', 'learning', 'mistakes', 'workflow'), { recursive: true });
+    execFileSync('mkfifo', [join(project, '.monolith', 'learning', 'mistakes', 'workflow', '.gitkeep')]);
+    expect(planScaffoldConflicts(project, CONFIG)).toContain(join('.monolith', 'learning', 'mistakes', 'workflow', '.gitkeep'));
   });
 });
 
@@ -153,12 +153,12 @@ describe('a target that appears after the preflight', () => {
   it('is not overwritten: creation is exclusive and the file keeps its content', async () => {
     expect(planScaffoldConflicts(project, CONFIG)).toEqual([]);
     writeFileSync(join(project, '.gitkeep-probe'), 'x'); // unrelated, to prove the tree is live
-    mkdirSync(join(project, '.monolith', 'adr'), { recursive: true });
-    writeFileSync(join(project, '.monolith', 'adr', '.gitkeep'), 'user content');
+    mkdirSync(join(project, '.monolith', 'learning', 'mistakes', 'workflow'), { recursive: true });
+    writeFileSync(join(project, '.monolith', 'learning', 'mistakes', 'workflow', '.gitkeep'), 'user content');
     const err = await failure(scaffoldInstance(project, CONFIG));
     expect(err).toBeInstanceOf(SafeWriteError);
     expect((err as SafeWriteError).code).toBe('WRITE_TARGET_EXISTS');
-    expect(readFileSync(join(project, '.monolith', 'adr', '.gitkeep'), 'utf8')).toBe('user content');
+    expect(readFileSync(join(project, '.monolith', 'learning', 'mistakes', 'workflow', '.gitkeep'), 'utf8')).toBe('user content');
   });
 });
 
@@ -172,7 +172,7 @@ describe('modes and residue on a successful init', () => {
     }
     expect(lstatSync(join(project, '.monolith', 'state.json')).mode & 0o777).toBe(0o600);
     expect(lstatSync(join(project, 'CLAUDE.md')).mode & 0o777).toBe(0o644);
-    expect(lstatSync(join(project, '.monolith', 'adr', '.gitkeep')).mode & 0o777).toBe(0o644);
+    expect(lstatSync(join(project, '.monolith', 'learning', 'mistakes', 'workflow', '.gitkeep')).mode & 0o777).toBe(0o644);
     expect(tree(project).filter((n) => /\.tmp\./.test(n))).toEqual([]);
   });
 

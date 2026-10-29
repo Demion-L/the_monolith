@@ -121,7 +121,6 @@ const GITKEEP_DIRS = [
   'learning/mistakes/workflow',
   'learning/mistakes/typescript',
   'learning/mistakes/documentation',
-  'adr',
 ];
 
 /** `.gitkeep` paths (relative to targetDir) that init creates for `r`. */

@@ -14,7 +14,7 @@ Read this file first on every session start. Do not start any task before comple
 
 ## Project
 
-**Package:** `@monolith/core`  
+**Package:** `@latysh-development/monolith`  
 **Version:** `0.1.0-alpha.0`  
 **Language:** TypeScript (strict, ESM)  
 **Runtime:** Node.js >= 20  
@@ -182,7 +182,7 @@ What MONOLITH does today (1737 tests passing in the full `vitest run` as of 2026
 - Generic: task, plan, decision, assumption (value-at-decision, `blocking|advisory`), observation, effect ledger (intent/outcome, in-doubt detection), await/delivery (token, idempotent, any order, duplicates, late), lease + fencing epoch
 - `assess` classifies a resumed task as `direct | adaptive | recovery | waiting | closed`; `resumePacket` is the input a future Reasoning Projector would take (not implemented)
 - Retention: compaction into verified segments, prune with tombstone and protection of tasks referenced by active ones; dry-run by default in the CLI
-- `monolith durable list|show|assess|packet|verify|retention`; library entry: `import { durable } from '@monolith/core'`
+- `monolith durable list|show|assess|packet|verify|retention`; **Experimental. Security acceptance pending.** Library entry: `import { durable } from '@latysh-development/monolith'`
 - Coordinatorium (`state.json`) is **unchanged** and is not yet a client of this layer
 - Limits and residual risks: ADR-017 §9 (clock skew, at-least-once external effects, read cost O(events), POSIX local FS only, TM-C unsupported)
 

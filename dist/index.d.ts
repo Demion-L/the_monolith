@@ -1,5 +1,5 @@
 /**
- * @monolith/core — Public API surface
+ * @latysh-development/monolith — Public API surface
  *
  * This file is the package entrypoint. Exports grow here as Kernel modules
  * are extracted from project instances into this package.

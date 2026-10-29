@@ -66,6 +66,14 @@ checks run in sequence:
 | Instance | All required directories exist under `monolithRoot` |
 | Templates | No unreplaced init-time placeholders (`{{VAR}}`) left in generated files |
 
+**Filesystem contract: read-only.** `validate` only opens files for reading and
+lists directories (confirmed with `strace`: no write-mode `open`, no `mkdir`,
+`unlink` or `rename`). It creates no directories or temporary files, never
+modifies project state, and cannot be redirected to another directory (it always
+uses the current working directory). The only output is on stdout. When it sees
+leftovers of an interrupted write in `monolithRoot` (`state.json.tmp.*`,
+lock staging files) it prints a warning but never deletes them.
+
 Exit codes: `0` = PASS, `1` = FAIL. Use `--quiet` for CI (prints nothing on PASS, errors only on FAIL).
 
 **`validate` never executes project code (SEC-002, ADR-011).** `project.definition.mjs`

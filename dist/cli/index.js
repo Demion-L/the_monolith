@@ -27,8 +27,9 @@ Commands:
               would overwrite any existing tracked file (--yes only skips
               interactive prompts, it does not force an overwrite).
   validate    Static checks of the instance files (config, definition file,
-              AGENTS.md, templates). Never executes project code. Not a
-              security enforcement gate.
+              AGENTS.md, templates). Read-only: writes, creates and deletes
+              nothing. Never executes project code. Not a security
+              enforcement gate.
   status      Not implemented (exits 1).
   dry-run     Not implemented (exits 1).
   mission     Manage Tactical Coordinatorium missions (start/list/show/finish/checkpoint/checkpoints)

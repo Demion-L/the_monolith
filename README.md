@@ -1,50 +1,145 @@
-# @monolith/core
+<p align="center">
+  <img src="./assets/branding/monolith-banner.png" alt="MONOLITH — Cognitive Infrastructure for AI" width="100%">
+</p>
 
-> **[MANIFESTO.md](./MANIFESTO.md)** — Why this project exists and the engineering principles that govern it.
-> **[AGENTS.md](./AGENTS.md)** — Current scope, source structure, and the authoritative entry point for AI assistants working in this repository.
+<h1 align="center">MONOLITH</h1>
 
-**Mission:** Portable Project Knowledge & Governance Toolkit for AI-Assisted
-Development — helping a human and an AI assistant preserve a shared
-understanding of a project's knowledge, architectural decisions, and
-progress across sessions.
+<p align="center">
+  <strong>Cognitive Infrastructure for AI</strong><br>
+  Observable · Structured · Governed
+</p>
 
-MONOLITH is infrastructure for AI-assisted development: it preserves project
-context across sessions, keeps project state in a deterministic, crash-safe
-store, and makes that state observable — from the terminal (`monolith brief`)
-and in a local, read-only web interface (Mission Control).
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node.js >= 20"></a>
+  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status: alpha">
+  <a href="https://hub.xerj.org/contributors/Demion-L"><img src="https://hub.xerj.org/contributors/Demion-L/badge.svg" alt="XERJ Corpus Hub contributor"></a>
+</p>
 
-It does this by deterministically extracting structure from a
-project's own markdown artifacts (frontmatter, headings, explicit links) and
-building an explicit relationship graph over them — then governing how an AI
-assistant reads and updates that memory through protocols, skills, and
-cognitive modes.
+---
 
-## Core Design Principle
+MONOLITH is cognitive infrastructure for AI-assisted development. It gives a
+human and an AI assistant a shared, inspectable record of a project —
+structured knowledge, explicit read and write boundaries, and traceable
+decisions — instead of relying on an assistant's unaided memory.
 
+> **[MANIFESTO.md](./MANIFESTO.md)** — why this project exists and the engineering principles that govern it.
+> **[AGENTS.md](./AGENTS.md)** — current scope, source structure, and the authoritative entry point for AI assistants working in this repository.
+
+## Why MONOLITH?
+
+AI assistants lose context between sessions, and what a project "knows" ends up
+scattered across chats, notes and habits. MONOLITH addresses this with
+mechanisms that are deterministic and testable:
+
+- **Observability** — project state is readable from the terminal (`monolith brief`) and in a local, read-only web interface (Mission Control), including whether that state looks stale.
+- **Structured knowledge** — structure is extracted from a project's own markdown (frontmatter, headings, explicit links) into an explicit relationship graph. No embeddings, no LLM, no fuzzy matching.
+- **Execution governance** — protocols, skills and cognitive modes describe how an assistant reads and updates project memory. Mission lifecycle is a recorded discipline, not a runtime gate (see [Project Status](#project-status)).
+- **Reproducibility** — same input, same output. State lives in a schema-versioned file written with a lock and atomic replace; Durable State adds a hash-chained, crash-safe event log.
+- **Explicit boundaries** — reads and writes of managed files go through strict, bounded, symlink-refusing primitives; `monolith validate` never executes project code; Mission Control has no write endpoint.
+
+## Quick Start
+
+Requires Node.js >= 20. MONOLITH is an alpha package that is **not published
+to npm**. Build it from a clone:
+
+```bash
+git clone https://github.com/Demion-L/the_monolith.git
+cd the_monolith
+pnpm install
+pnpm build
+npm link             # exposes the `monolith` command (or run: node dist/cli/index.js)
 ```
-Kernel knows HOW.
-Instance knows WHAT.
+
+Then, in a project directory:
+
+```bash
+monolith init        # scaffold a MONOLITH instance (refuses to overwrite existing files)
+monolith brief       # bounded, read-only summary of project state
+monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
 ```
 
-The Kernel (`@monolith/core`) contains generic enforcement mechanics,
-integrity validators, protocol routing, and drift detection. It has no
-hardcoded knowledge of any specific project.
+`monolith ui` must be run inside a directory that contains a MONOLITH
+instance, and it does not open a browser — open the printed address yourself.
 
-An Instance (the `.monolith/` directory of a project using MONOLITH, this
-repository included) provides a `project.definition.mjs` file that tells the
-Kernel what protocols exist, where files are, what artifacts are required,
-and which validators are active.
+## Core Capabilities
 
-## Features
-
-| Area | What it gives you | Status |
+| Capability | What it does | Command |
 |---|---|---|
-| Scriptorium + ERG | Deterministic structural extraction from markdown and an explicit relationship graph | implemented |
-| Coordinatorium | Mission lifecycle and checkpoints in `.monolith/state.json` (`monolith mission`) | implemented |
-| Context Gateway | Bounded, read-only project summary for AI sessions (`monolith brief`) | implemented |
-| Validation | Static instance integrity checks (`monolith validate`) | implemented |
-| Durable State | Hash-chained, crash-safe execution log for long-running tasks (`monolith durable`) | implemented, security acceptance open (see `AGENTS.md`) |
-| Mission Control | Read-only local web dashboard (`monolith ui`) | implemented |
+| Scriptorium + ERG | Deterministic structural extraction from markdown and an explicit relationship graph | library |
+| Coordinatorium | Mission lifecycle and checkpoints in `.monolith/state.json` | `monolith mission` |
+| Context Gateway | Bounded, read-only project summary for AI sessions, with a freshness verdict and a reconciliation report | `monolith brief` |
+| Validation | Static instance integrity checks | `monolith validate` |
+| Durable State | Hash-chained, crash-safe execution log for long-running tasks (security acceptance still open, see `AGENTS.md`) | `monolith durable` |
+| Mission Control | Read-only local web dashboard on `127.0.0.1` | `monolith ui` |
+
+## Architecture
+
+```text
+Markdown artifact
+  → Scriptorium (structural extraction)
+    → ERG (explicit relationship graph)
+      → governed project memory (working / long-term, ADRs, roadmap)
+
+MONOLITH Kernel (src/)  ──►  Project Instance (.monolith/, monolith.config.json)
+                                   │   safe, bounded reads (ADR-014)
+                                   ▼
+                      Read model ──► loopback HTTP API ──► Mission Control UI
+```
+
+> **Kernel knows HOW. Instance knows WHAT.** The Kernel (`@monolith/core`)
+> holds generic mechanics and has no hardcoded knowledge of any project. An
+> Instance — the `.monolith/` directory plus `project.definition.mjs` of a
+> project using MONOLITH, this repository included — supplies the project's
+> own knowledge.
+
+Kernel modules in `src/`: `scriptorium`, `graph`, `coordinatorium`, `brief`,
+`durable`, `validate`, `readmodel` / `http` (Mission Control back end), `root`
+(safe read/write primitives) and `init` / `cli`. The UI lives in `ui/`
+(Vue 3 + Vite) and is built into `dist/ui`.
+
+## Ecosystem
+
+- **[Latysh Development](https://github.com/Demion-L)** — developer of MONOLITH.
+- **[Webway](https://github.com/Demion-L/webway)** — a separate, independently developed project on semantic and associative knowledge linking. It was extracted from MONOLITH and has no runtime coupling to it.
+- **SphynX** — a related application. MONOLITH does not depend on it, and this repository does not document it as a current consumer of MONOLITH.
+
+## Community & Recognition
+
+MONOLITH is listed as a contributor project on
+[XERJ Corpus Hub](https://hub.xerj.org/contributors/Demion-L). At the time of
+writing, the contributor page exists, a MONOLITH commit is selected, the corpus
+status is `candidate` and the manifest is `draft`. This is a contribution
+listing — not an official partnership, endorsement or certification.
+
+## Documentation
+
+- [`AGENTS.md`](./AGENTS.md) — scope, source structure, session boot sequence
+- [`MANIFESTO.md`](./MANIFESTO.md) — mission and engineering principles
+- [`docs/README.md`](./docs/README.md) — knowledge-base index
+- [`docs/adr/README.md`](./docs/adr/README.md) — architecture decision records
+- [Reference](#reference) below — CLI, Mission Control, security contract and platform notes
+
+## Project Status
+
+**Alpha** (`0.1.0-alpha.0`). The API and CLI are experimental and may change
+without notice. Not published to npm.
+
+**Not yet implemented:** a write-enabled UI, authentication for Mission
+Control, `monolith context <topic>`, `monolith status`, `monolith dry-run`, the
+enforcement gate engine and integrity validators (type declarations only),
+and protocol drift detection. Mission lifecycle commands are a recommended
+discipline, not a runtime gate. Threat-model limits (concurrent adversarial
+mutation unsupported, Windows unverified) are in [Security & Limitations](#security--limitations).
+`AGENTS.md` is the authoritative status record.
+
+## License
+
+[MIT](./LICENSE) © 2026 Dmytro Latysh
+
+---
+
+# Reference
 
 ## Mission Control
 
@@ -79,45 +174,6 @@ authentication); listens on `127.0.0.1` only and has no option to change
 that; one project per server, fixed at start. See
 [ADR-010](./docs/adr/ADR-010-mission-control-ui.md) and
 [Security & Limitations](#security--limitations).
-
-## Quick Start
-
-Requires Node.js >= 20. MONOLITH is an alpha, unpublished package
-(`@monolith/core`); until it is published, build it from a clone (see
-[Development](#development)) and run the CLI as `node <clone>/dist/cli/index.js`
-or link it (`npm link` in the clone, then `monolith`). The examples below
-use `monolith` / `npx monolith` as in the CLI reference.
-
-```bash
-cd my-project
-monolith init        # scaffold a MONOLITH instance (refuses to overwrite existing files)
-monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
-```
-
-`monolith ui` must be run inside a directory that contains a MONOLITH
-instance; otherwise it exits with an error telling you to run `monolith init`.
-It does not open a browser — open the printed address yourself.
-
-## Components
-
-**Kernel (`src/`, this package)**
-
-- `scriptorium/` — deterministic structural extraction from markdown artifacts (implemented)
-- `graph/` — Explicit Relationship Graph builder (implemented)
-- `init/`, `cli/` — scaffold a new MONOLITH instance (implemented)
-- `validate/` — instance integrity checks (implemented, see below for current scope)
-- `coordinatorium/` — Tactical Coordinatorium: deterministic State Keeper (`.monolith/state.json`), mission lifecycle, and mission checkpoints (implemented, see ADR-008)
-- `brief/` — `monolith brief`: deterministic, read-only, bounded project-state summary for AI sessions (implemented)
-- `readmodel/`, `http/` — dashboard read model and the loopback, read-only HTTP API/static server behind Mission Control (implemented)
-- `ui/` — Mission Control front end (Vue 3 + Vite); built output `dist/ui` (implemented)
-- `durable/` — Durable State execution log (implemented; see `AGENTS.md`)
-- Enforcement gate engine, protocol drift detection, semantic memory routing (declared as types in `src/types/`; **not yet implemented** — see "Not Yet Implemented")
-
-**Instance (per-project, not part of this package's code)**
-
-- `project.definition.mjs` — single source of truth for project-specific knowledge
-- `monolith.config.json` — package manager, active gates, model tiers
-- `.monolith/` — protocol files, governance rules, memory structure, skills
 
 ## CLI
 
@@ -306,26 +362,6 @@ Boot Sequence in `AGENTS.md`.
   means the default `.monolith`; an existing but corrupted one makes
   `mission *` refuse (fail closed) rather than write to the default. `monolith context <topic>` is not implemented.
 
-## Architecture
-
-```text
-MONOLITH Kernel (src/)
-       │
-       ▼
-Project Instance (.monolith/, monolith.config.json)
-       │   safe, bounded reads (ADR-014)
-       ▼
-Read model  (src/readmodel)  ──►  HTTP server (src/http): GET /api/dashboard + static UI
-                                         │
-                                         ▼
-                                  Mission Control UI (ui/, built to dist/ui)
-```
-
-The HTTP layer imports no filesystem module for project data: everything
-arrives through `readDashboardModel`. The built UI is read once at startup
-into memory and served by exact path, so request paths are never mapped onto
-the filesystem.
-
 ## Security & Limitations
 
 - Mission Control and its API are read-only and bound to `127.0.0.1`; the
@@ -355,32 +391,3 @@ node dist/cli/index.js ui dev    # UI development with hot reload
 
 `dist/ui` is tracked in Git and shipped in the npm package, so rebuild it
 (`pnpm build:ui`) whenever `ui/` changes.
-
-## Status
-
-MONOLITH's CLI (`init`, `validate`) and its cognitive-core library modules
-(Scriptorium, ERG) are developed and versioned together in this repository,
-but are not currently tracked under the same Phase/Story numbering: the CLI
-was built incrementally outside the Phase 1 story sequence, while
-Scriptorium and ERG are tracked as Phase 1 stories in `AGENTS.md`. See
-`AGENTS.md` → Current Scope / Success Criteria for the authoritative,
-up-to-date status of what is implemented.
-
-**Implemented today:** `monolith init`, `monolith validate` (the three
-checks above), `monolith mission` (Tactical Coordinatorium: mission
-lifecycle and mission checkpoints, ADR-008, `state.json` schemaVersion 2),
-`monolith brief` (bounded, read-only project-state summary),
-`monolith ui` / `monolith ui dev` (Mission Control launcher),
-Durable State (`monolith durable`; security acceptance still open),
-Scriptorium, Explicit Relationship Graph (ERG).
-
-**In progress:** none registered as a story; see `AGENTS.md` and the roadmap index.
-
-**Not yet implemented:** a write-enabled UI, authentication for Mission Control, `monolith context <topic>`, `monolith status`, `monolith dry-run`, the
-enforcement gate engine and integrity validators described by
-`src/types/enforcement.ts` / `src/types/integrity.ts` (these are type
-declarations with zero runtime implementation today), protocol drift
-detection (`driftLogPath` in `project.definition.mjs` points at a directory
-that does not exist yet).
-
-

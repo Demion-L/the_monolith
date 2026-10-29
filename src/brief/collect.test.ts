@@ -291,29 +291,50 @@ describe('collect — mandatory protocols and ADR discovery', () => {
     expect(model.mandatoryProtocols.items.map((p) => p.id)).toEqual(['protocol-a']);
   });
 
-  it('includes only status: accepted ADRs from the standard <monolithRoot>/adr directory', async () => {
+  it('discovers only status: accepted ADRs from the canonical docs/adr by default', async () => {
     const dir = makeTempDir();
     scaffoldMinimalInstance(dir);
-    write(dir, '.monolith/adr/ADR-001.md', '---\nid: ADR-001\ntitle: Accepted One\nstatus: accepted\n---\n# Accepted One\n');
-    write(dir, '.monolith/adr/ADR-002.md', '---\nid: ADR-002\ntitle: Still Draft\nstatus: proposed\n---\n# Still Draft\n');
+    write(dir, 'docs/adr/ADR-001.md', '---\nid: ADR-001\ntitle: Accepted One\nstatus: accepted\n---\n# Accepted One\n');
+    write(dir, 'docs/adr/ADR-002.md', '---\nid: ADR-002\ntitle: Still Draft\nstatus: proposed\n---\n# Still Draft\n');
     const model = await collect(dir);
     expect(model.adrs.items.map((a) => a.id)).toEqual(['ADR-001']);
   });
 
-  it('does not implicitly fall back to docs/adr when the standard directory is empty', async () => {
+  it('does not implicitly scan <root>/adr or <monolithRoot>/adr without explicit configuration', async () => {
     const dir = makeTempDir();
     scaffoldMinimalInstance(dir);
-    write(dir, 'docs/adr/ADR-999.md', '---\nid: ADR-999\nstatus: accepted\n---\n# Should not appear\n');
+    write(dir, 'adr/ADR-900.md', '---\nid: ADR-900\nstatus: accepted\n---\n# Legacy root\n');
+    write(dir, '.monolith/adr/ADR-901.md', '---\nid: ADR-901\nstatus: accepted\n---\n# Legacy monolith\n');
     const model = await collect(dir);
     expect(model.adrs.items).toEqual([]);
+    expect(model.adrs.provenance.source).toBe('docs/adr');
   });
 
-  it('includes extra ADR directories only when explicitly configured via contextGateway.adrDirs', async () => {
+  it('scans a legacy directory only when it is explicitly named in contextGateway.adrDirs', async () => {
     const dir = makeTempDir();
-    write(dir, 'monolith.config.json', JSON.stringify({ monolithRoot: '.monolith', contextGateway: { adrDirs: ['docs/adr'] } }));
+    write(dir, 'monolith.config.json', JSON.stringify({ monolithRoot: '.monolith', contextGateway: { adrDirs: ['adr'] } }));
     mkdirSync(join(dir, '.monolith'), { recursive: true });
-    write(dir, 'docs/adr/ADR-999.md', '---\nid: ADR-999\nstatus: accepted\n---\n# Extra\n');
+    write(dir, 'adr/ADR-900.md', '---\nid: ADR-900\nstatus: accepted\n---\n# Explicit\n');
+    write(dir, 'docs/adr/ADR-999.md', '---\nid: ADR-999\nstatus: accepted\n---\n# Replaced default\n');
     const model = await collect(dir);
-    expect(model.adrs.items.map((a) => a.id)).toEqual(['ADR-999']);
+    expect(model.adrs.items.map((a) => a.id)).toEqual(['ADR-900']);
+  });
+
+  it('uses a custom contextGateway.adrDirs entry', async () => {
+    const dir = makeTempDir();
+    write(dir, 'monolith.config.json', JSON.stringify({ monolithRoot: '.monolith', contextGateway: { adrDirs: ['decisions'] } }));
+    mkdirSync(join(dir, '.monolith'), { recursive: true });
+    write(dir, 'decisions/ADR-050.md', '---\nid: ADR-050\nstatus: accepted\n---\n# Custom\n');
+    const model = await collect(dir);
+    expect(model.adrs.items.map((a) => a.id)).toEqual(['ADR-050']);
+  });
+
+  it('handles a missing ADR directory and an empty adrDirs list without diagnostics errors', async () => {
+    const dir = makeTempDir();
+    scaffoldMinimalInstance(dir);
+    expect((await collect(dir)).adrs.items).toEqual([]);
+    write(dir, 'monolith.config.json', JSON.stringify({ monolithRoot: '.monolith', contextGateway: { adrDirs: [] } }));
+    write(dir, 'docs/adr/ADR-999.md', '---\nid: ADR-999\nstatus: accepted\n---\n# Not scanned\n');
+    expect((await collect(dir)).adrs.items).toEqual([]);
   });
 });

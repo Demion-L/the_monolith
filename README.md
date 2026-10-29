@@ -18,7 +18,8 @@
 
 ---
 
-MONOLITH is cognitive infrastructure for AI-assisted development. It gives a
+MONOLITH is an open-source toolkit for observable project state, structured
+knowledge, and explicit execution governance. It gives a
 human and an AI assistant a shared, inspectable record of a project —
 structured knowledge, explicit read and write boundaries, and traceable
 decisions — instead of relying on an assistant's unaided memory.

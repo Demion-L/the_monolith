@@ -62,7 +62,8 @@ Until the first publish, install from a clone:
 ```sh
 git clone https://github.com/Demion-L/the_monolith.git
 cd the_monolith
-pnpm install            # also runs the build           — Verified (source)
+pnpm install            # installs dependencies only; does not build
+pnpm build              # explicit build; required before packing
 npm pack                # produces the installable tarball
 npm install -g ./latysh-development-monolith-0.1.0-alpha.0.tgz
 ```
@@ -127,7 +128,7 @@ Not yet satisfied or not verifiable from the repository alone:
 
 1. npm authentication on the publishing machine (`npm whoami` fails here: not logged in).
 2. Ownership of the npm scope `@latysh-development` (existence and membership could not be checked without authentication).
-3. Owner decisions listed in the DIST-002 report (author spelling, deprecated-name handling, `prepare` script).
+3. Owner decisions listed in the DIST-002 report (author spelling, deprecated-name handling). The `prepare` script was replaced by `prepublishOnly` (RELEASE-002).
 4. Owner review of the integrated `feat/release-001-alpha-integration` branch and its merge to `main`.
 
 Publication procedure: see **Publication plan** below.
@@ -156,10 +157,12 @@ pnpm run typecheck && pnpm run build && pnpm test && pnpm run test:ui
 git status --short                   # dist/ must show no diff after the build
 
 # 4. Inspect the tarball
+# `pnpm install` and `npm pack` do not build: run the explicit build (step 3) first.
 npm pack --dry-run                   # 291 files; no tests, no dist/scripts, no ui/images, no .monolith state
 npm pack                             # note the shasum; install it in a clean directory and run the Quickstart
 
-# 5. Publish — the --tag is mandatory; without it npm would also set `latest`
+# 5. Publish — `npm publish` runs `prepublishOnly` (`npm run build`) before packing.
+#    The --tag is mandatory; without it npm would also set `latest`
 npm publish --tag alpha --access public
 
 # 6. Verify what was published

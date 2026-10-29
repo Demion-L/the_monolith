@@ -1,7 +1,7 @@
 {
   "name": "@latysh-development/monolith",
   "version": "0.1.0-alpha.0",
-  "description": "MONOLITH — portable project knowledge and governance toolkit for AI-assisted development",
+  "description": "MONOLITH: Cognitive Infrastructure for AI. An open-source toolkit for observable project state, structured knowledge, and explicit execution governance.",
   "author": "Dmytro Latysh",
   "license": "MIT",
   "homepage": "https://github.com/Demion-L/the_monolith#readme",
@@ -35,7 +35,7 @@
     "dev": "tsc -p tsconfig.json --watch",
     "test": "vitest run",
     "dogfood-graph": "node dist/scripts/dogfood-graph.js",
-    "prepare": "npm run build",
+    "prepublishOnly": "npm run build",
     "dev:api": "node dist/scripts/dev-api.js",
     "dev:ui": "vite --config ui/vite.config.ts",
     "typecheck:ui": "vue-tsc -p ui/tsconfig.json --noEmit",

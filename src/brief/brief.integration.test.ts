@@ -215,13 +215,13 @@ describe('monolith brief — end to end (init then brief)', () => {
   it('a dangling symlink inside the ADR directory does not crash the brief and other ADRs are still collected (F-2)', async () => {
     const dir = makeTempDir();
     await scaffoldInstance(dir, CONFIG);
-    mkdirSync(join(dir, '.monolith', 'adr'), { recursive: true });
+    mkdirSync(join(dir, 'docs', 'adr'), { recursive: true });
     writeFileSync(
-      join(dir, '.monolith', 'adr', 'ADR-001.md'),
+      join(dir, 'docs', 'adr', 'ADR-001.md'),
       ['---', 'id: ADR-001', 'status: accepted', '---', '# One'].join('\n'),
       'utf8',
     );
-    symlinkSync(join(dir, '.monolith', 'adr', 'missing.md'), join(dir, '.monolith', 'adr', 'dangling.md'));
+    symlinkSync(join(dir, 'docs', 'adr', 'missing.md'), join(dir, 'docs', 'adr', 'dangling.md'));
 
     const { exitCode, stdout } = await runBriefCaptured([], dir);
     expect(exitCode).toBe(0);

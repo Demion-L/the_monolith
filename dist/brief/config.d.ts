@@ -25,11 +25,11 @@ export interface BriefConfig {
     monolithRoot: string;
     projectName: string;
     /**
-     * Additional ADR directories to scan, relative to targetDir, beyond the
-     * standard `<monolithRoot>/adr`. Empty unless explicitly configured via
-     * `monolith.config.json`'s `contextGateway.adrDirs` field.
+     * ADR directories to scan, relative to targetDir. Defaults to the canonical
+     * `docs/adr`; `monolith.config.json`'s `contextGateway.adrDirs` replaces
+     * (does not extend) that default. No legacy directory is scanned implicitly.
      */
-    extraAdrDirs: string[];
+    adrDirs: string[];
 }
 /**
  * Throws RootContainmentError when `monolithRoot` violates the SEC-001A

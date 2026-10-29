@@ -22,6 +22,7 @@
  */
 
 import { readConfigFile, resolveMonolithRoot, DEFAULT_MONOLITH_ROOT } from '../root/index.js';
+import { DEFAULT_ADR_DIR } from './constants.js';
 import type { BriefDiagnostic } from './types.js';
 
 const DEFAULT_PROJECT_NAME = 'project';
@@ -30,11 +31,11 @@ export interface BriefConfig {
   monolithRoot: string;
   projectName: string;
   /**
-   * Additional ADR directories to scan, relative to targetDir, beyond the
-   * standard `<monolithRoot>/adr`. Empty unless explicitly configured via
-   * `monolith.config.json`'s `contextGateway.adrDirs` field.
+   * ADR directories to scan, relative to targetDir. Defaults to the canonical
+   * `docs/adr`; `monolith.config.json`'s `contextGateway.adrDirs` replaces
+   * (does not extend) that default. No legacy directory is scanned implicitly.
    */
-  extraAdrDirs: string[];
+  adrDirs: string[];
 }
 
 function errMsg(err: unknown): string {
@@ -47,7 +48,7 @@ function errMsg(err: unknown): string {
  * root in that case.
  */
 export function readBriefConfig(targetDir: string, diagnostics: BriefDiagnostic[] = []): BriefConfig {
-  const defaults: BriefConfig = { monolithRoot: DEFAULT_MONOLITH_ROOT, projectName: DEFAULT_PROJECT_NAME, extraAdrDirs: [] };
+  const defaults: BriefConfig = { monolithRoot: DEFAULT_MONOLITH_ROOT, projectName: DEFAULT_PROJECT_NAME, adrDirs: [DEFAULT_ADR_DIR] };
   const read = readConfigFile(targetDir);
 
   if (read.status === 'absent') {
@@ -75,30 +76,30 @@ export function readBriefConfig(targetDir: string, diagnostics: BriefDiagnostic[
     if (typeof name === 'string' && name.length > 0) projectName = name;
   }
 
-  let extraAdrDirs: string[] = [];
+  let adrDirs: string[] = [DEFAULT_ADR_DIR];
   const contextGateway = cfg.contextGateway;
   if (typeof contextGateway === 'object' && contextGateway !== null && !Array.isArray(contextGateway)) {
-    const adrDirs = (contextGateway as Record<string, unknown>).adrDirs;
-    if (adrDirs !== undefined) {
-      if (!Array.isArray(adrDirs)) {
+    const configured = (contextGateway as Record<string, unknown>).adrDirs;
+    if (configured !== undefined) {
+      if (!Array.isArray(configured)) {
         diagnostics.push({
           code: 'CONFIG_ADR_DIRS_INVALID',
           severity: 'error',
-          message: 'monolith.config.json#contextGateway.adrDirs is present but is not an array; ignoring it.',
+          message: 'monolith.config.json#contextGateway.adrDirs is present but is not an array; using the default ADR directory.',
         });
       } else {
-        const stringEntries = adrDirs.filter((d): d is string => typeof d === 'string' && d.length > 0);
-        if (stringEntries.length !== adrDirs.length) {
+        const stringEntries = configured.filter((d): d is string => typeof d === 'string' && d.length > 0);
+        if (stringEntries.length !== configured.length) {
           diagnostics.push({
             code: 'CONFIG_ADR_DIRS_INVALID',
             severity: 'warn',
             message: 'monolith.config.json#contextGateway.adrDirs contains non-string entries; they were dropped.',
           });
         }
-        extraAdrDirs = stringEntries;
+        adrDirs = stringEntries;
       }
     }
   }
 
-  return { monolithRoot, projectName, extraAdrDirs };
+  return { monolithRoot, projectName, adrDirs };
 }

@@ -1,6 +1,7 @@
 /** Shared path constants for the brief subsystem (relative to monolithRoot). */
 export declare const ACTIVE_MD_REL = "memory/working/active.md";
-export declare const STANDARD_ADR_DIR = "adr";
+/** Canonical ADR directory, relative to the project root (not monolithRoot). Used when `contextGateway.adrDirs` is not configured. */
+export declare const DEFAULT_ADR_DIR = "docs/adr";
 export declare const PROTOCOLS_DIR = "protocols";
 /** State documents whose last commit marks the "last recorded state update" (SELF-AWARENESS-001). */
 export declare const ROADMAP_INDEX_REL = "context/maps/roadmap-index.md";

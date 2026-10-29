@@ -21,6 +21,7 @@
  * a lesser problem than the field having the wrong shape entirely.
  */
 import { readConfigFile, resolveMonolithRoot, DEFAULT_MONOLITH_ROOT } from '../root/index.js';
+import { DEFAULT_ADR_DIR } from './constants.js';
 const DEFAULT_PROJECT_NAME = 'project';
 function errMsg(err) {
     return err instanceof Error ? err.message : String(err);
@@ -31,7 +32,7 @@ function errMsg(err) {
  * root in that case.
  */
 export function readBriefConfig(targetDir, diagnostics = []) {
-    const defaults = { monolithRoot: DEFAULT_MONOLITH_ROOT, projectName: DEFAULT_PROJECT_NAME, extraAdrDirs: [] };
+    const defaults = { monolithRoot: DEFAULT_MONOLITH_ROOT, projectName: DEFAULT_PROJECT_NAME, adrDirs: [DEFAULT_ADR_DIR] };
     const read = readConfigFile(targetDir);
     if (read.status === 'absent') {
         // Absent config is a legitimate, unconfigured project — not an error.
@@ -55,30 +56,30 @@ export function readBriefConfig(targetDir, diagnostics = []) {
         if (typeof name === 'string' && name.length > 0)
             projectName = name;
     }
-    let extraAdrDirs = [];
+    let adrDirs = [DEFAULT_ADR_DIR];
     const contextGateway = cfg.contextGateway;
     if (typeof contextGateway === 'object' && contextGateway !== null && !Array.isArray(contextGateway)) {
-        const adrDirs = contextGateway.adrDirs;
-        if (adrDirs !== undefined) {
-            if (!Array.isArray(adrDirs)) {
+        const configured = contextGateway.adrDirs;
+        if (configured !== undefined) {
+            if (!Array.isArray(configured)) {
                 diagnostics.push({
                     code: 'CONFIG_ADR_DIRS_INVALID',
                     severity: 'error',
-                    message: 'monolith.config.json#contextGateway.adrDirs is present but is not an array; ignoring it.',
+                    message: 'monolith.config.json#contextGateway.adrDirs is present but is not an array; using the default ADR directory.',
                 });
             }
             else {
-                const stringEntries = adrDirs.filter((d) => typeof d === 'string' && d.length > 0);
-                if (stringEntries.length !== adrDirs.length) {
+                const stringEntries = configured.filter((d) => typeof d === 'string' && d.length > 0);
+                if (stringEntries.length !== configured.length) {
                     diagnostics.push({
                         code: 'CONFIG_ADR_DIRS_INVALID',
                         severity: 'warn',
                         message: 'monolith.config.json#contextGateway.adrDirs contains non-string entries; they were dropped.',
                     });
                 }
-                extraAdrDirs = stringEntries;
+                adrDirs = stringEntries;
             }
         }
     }
-    return { monolithRoot, projectName, extraAdrDirs };
+    return { monolithRoot, projectName, adrDirs };
 }

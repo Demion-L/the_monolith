@@ -19,7 +19,7 @@ package and is **not published to npm**; build it from a clone (see the
 ```bash
 monolith init       # scaffold a new instance from templates/ (implemented)
 monolith validate   # check instance integrity (implemented, see below)
-monolith mission    # Tactical Coordinatorium: start|list|show|finish|checkpoint|checkpoints (implemented, ADR-008)
+monolith mission    # Tactical Coordinatorium: start|list|show|finish|checkpoint|checkpoints (implemented, experimental, ADR-008)
 monolith brief      # deterministic, read-only project-state summary [--max-chars N] [--strict] [--reconcile] (implemented)
 monolith durable    # Durable State: list|show|assess|packet|verify|retention (implemented; see below)
 monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented)

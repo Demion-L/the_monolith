@@ -8,9 +8,16 @@ status: pre-publication
 
 # MONOLITH `0.1.0-alpha.0` — Installation and Verified Commands
 
-Source of verified commands for the README rewrite (BRAND-002). Written by
-DIST-002. **The package is not published yet**; every command below is marked
-with how it was verified.
+Canonical source for **installation** and the **release procedure**. Written by
+DIST-002, reconciled by RELEASE-001. **The package is not published yet**; every
+command below is marked with how it was verified.
+
+| Topic | Canonical source (not repeated here) |
+| ----- | ------------------------------------ |
+| CLI commands and flags | [`../reference/cli.md`](../reference/cli.md) |
+| Security, platforms, threat model | [`../reference/security-and-limitations.md`](../reference/security-and-limitations.md) |
+| Programmatic API | [`../reference/write-scope-api.md`](../reference/write-scope-api.md) |
+| Installation, publication gate | this file |
 
 | Mark | Meaning |
 | ---- | ------- |
@@ -69,23 +76,8 @@ monolith --version      # 0.1.0-alpha.0                 — Verified (tarball)
 monolith --help         #                               — Verified (tarball)
 ```
 
-### Implemented commands
-
-| Command | What it does | Notes |
-| ------- | ------------ | ----- |
-| `monolith init [--yes]` | Scaffolds a MONOLITH instance into the **current directory** from `templates/` | Refuses to overwrite existing files; `--yes` only skips prompts. Not atomic and not coordinated between processes |
-| `monolith validate [--quiet]` | **Static** checks of the instance files (config, `project.definition.mjs` as a file, `AGENTS.md`, templates) | Never imports or executes project code. A PASS does **not** verify JS syntax, content safety or executability. **Not a security enforcement gate** |
-| `monolith brief [--max-chars N] [--strict]`, `brief --reconcile` | Deterministic, read-only, character-budgeted summary of project state | Reads files; runs read-only `git log`/`git rev-parse` for the Freshness signal. No LLM, no network |
-| `monolith mission start\|list\|show\|finish\|checkpoint\|checkpoints` | Mission lifecycle in `.monolith/state.json` | **Experimental** (Coordinatorium). Writes `state.json`. Recommended discipline, not runtime-enforced |
-| `monolith durable list\|show\|assess\|packet\|verify\|retention` | Inspect and maintain Durable State task logs | **Experimental. Security acceptance pending.** `retention` is dry-run unless `--apply` |
-| `monolith ui [--port N]` | Mission Control: read-only dashboard + API | Listens on `127.0.0.1` only (default port 4173); no authentication; does not open a browser, write to the project or run project code |
-
-### Not implemented
-
-`monolith status`, `monolith dry-run` and `monolith context` do **not**
-work. `status` and `dry-run` print "not yet implemented" and exit 1 (the
-help says so); `context` is an unknown command. `monolith ui dev` needs a
-source checkout with devDependencies and is not usable from the npm package.
+Implemented, experimental and not-implemented commands (`status`, `dry-run`,
+`context`, `ui dev`) are listed in the [CLI reference](../reference/cli.md).
 
 ---
 
@@ -96,8 +88,6 @@ mkdir my-project && cd my-project && git init
 monolith init --yes
 monolith validate                    # Result: PASS
 monolith brief                       # Completeness: COMPLETE (Freshness is UNKNOWN until the instance is committed)
-monolith mission start --title "First task" --system "my-project"
-monolith mission list
 monolith ui                          # http://127.0.0.1:4173 (Ctrl+C to stop)
 ```
 
@@ -123,14 +113,11 @@ files to type-check without `skipLibCheck`.
 
 ## Alpha limitations
 
-- **Pre-1.0, `alpha` tag.** Public API, file formats and CLI output may change in any alpha release.
-- **Experimental: Durable State** (`durable` export, `monolith durable`) — **Experimental. Security acceptance pending.** The independent security review outcome is not recorded; findings F-1/F-2 are tracked as open. Do not rely on it for untrusted data or multi-user hosts.
-- **Experimental: Coordinatorium** (`monolith mission`, `.monolith/state.json`, `schemaVersion: 2`) — the schema and library exports may change. Missions are not enforced; nothing stops an AI session from ignoring them.
-- **Threat model.** Supported: a trusted local project (TM-A, with limitations). Hostile content at rest (TM-B): partially supported. Concurrent adversarial mutation (TM-C): **unsupported** (check-then-use races remain open, SEC-001B.3). POSIX local filesystem only; Windows best-effort and unverified; NFS/SMB outside. See ADR-013.
-- **`validate` is not security enforcement** (see above).
-- **`brief` starts a `git` subprocess** (`git log`, `git rev-parse`; helper-launching config such as `core.fsmonitor`/`diff.external` is disabled, no shell). It does not execute project code, but it does read the project's git repository; run it only in projects you trust.
-- **Mission Control is read-only and unauthenticated**, loopback only. A write-capable UI is blocked by ADR-010.
-- **Not implemented:** `status`, `dry-run`, `context`, Strategic Coordinatorium, Engineering Gate runtime.
+Pre-1.0, `alpha` tag: the public API, file formats and CLI output may change in
+any alpha release. **Durable State** and the **Coordinatorium** are experimental,
+Durable State's security acceptance is pending, Mission Control is read-only and
+unauthenticated, and Windows is unverified. Details:
+[Security & Limitations](../reference/security-and-limitations.md).
 
 ---
 
@@ -141,7 +128,7 @@ Not yet satisfied or not verifiable from the repository alone:
 1. npm authentication on the publishing machine (`npm whoami` fails here: not logged in).
 2. Ownership of the npm scope `@latysh-development` (existence and membership could not be checked without authentication).
 3. Owner decisions listed in the DIST-002 report (author spelling, deprecated-name handling, `prepare` script).
-4. README replaced by BRAND-002 (the current README in the tarball still uses the old name).
+4. Owner review of the integrated `feat/release-001-alpha-integration` branch and its merge to `main`.
 
 Publication procedure: see **Publication plan** below.
 

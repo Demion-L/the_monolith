@@ -54,13 +54,15 @@ pnpm build
 npm link             # exposes the `monolith` command (or run: node dist/cli/index.js)
 ```
 
+Once the first alpha is published, `npm install -g @latysh-development/monolith@alpha`
+becomes the primary install path ([release notes](./docs/release/alpha-installation.md)).
+
 Then, in a project directory:
 
 ```bash
 monolith init        # scaffold a MONOLITH instance (refuses to overwrite existing files)
 monolith validate    # static integrity check of the instance
 monolith brief       # bounded, read-only summary of project state
-monolith mission list
 monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
 ```
 
@@ -111,7 +113,9 @@ listing — not an official partnership, endorsement or certification.
 ## Project Status
 
 **Alpha** (`0.1.0-alpha.0`). The API and CLI are experimental and may change
-without notice. Not published to npm.
+without notice. Not published to npm. Durable State and the Coordinatorium
+(`monolith durable`, `monolith mission`) are experimental and are not part of
+the Quick Start.
 
 **Security:** Mission Control is read-only, listens on `127.0.0.1` only and has
 no authentication. Concurrent adversarial mutation of a project is unsupported;

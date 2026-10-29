@@ -71,6 +71,12 @@ Durable State is merged but **not accepted**: its independent security review
 outcome is unknown and findings F-1/F-2 remain open. See `AGENTS.md` and
 [Durable State Retention Safety](../architecture/DURABLE-STATE-RETENTION-SAFETY.md).
 
+## Coordinatorium
+
+`monolith mission` and `.monolith/state.json` (Coordinatorium, ADR-008) are
+**experimental**: the schema and library exports may change, and missions are a
+recorded discipline that nothing enforces at runtime.
+
 ## Related decisions
 
 [ADR-009](../adr/ADR-009-monolith-root-containment.md) ·

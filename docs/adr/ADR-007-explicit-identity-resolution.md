@@ -2,14 +2,21 @@
 type: adr
 id: ADR-007
 title: Explicit-Only Identity Resolution in the Explicit Relationship Graph
-status: accepted
+status: superseded
 date: 2026-06-28
+superseded_by: ADR-020
 related_adrs:
   - webway:ADR-004
   - webway:ADR-005
 ---
 
 # ADR-007 — Explicit-Only Identity Resolution in the Explicit Relationship Graph
+
+> **Superseded by [ADR-020](ADR-020-canonical-knowledge-identity.md) (2026-10-28).**
+> The identity model below — concept-slug nodes, `id:`/`title:` aliases,
+> first-document-wins, synthesized nodes — was removed by ERG-001A. What survives is the
+> principle that resolution is explicit-only (no fuzzy matching, no embeddings). The text
+> below is the historical decision and is not edited.
 
 ---
 

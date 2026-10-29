@@ -72,7 +72,7 @@ before it is added.
 Scriptorium and the Explicit Relationship Graph are deterministic by
 design: the same input always produces the same output, and every
 relationship edge traces back to an explicit frontmatter field — no fuzzy
-matching, no inferred aliases, no LLM call in the governance path (ADR-007).
+matching, no aliases, no LLM call in the governance path (ADR-020, which supersedes ADR-007).
 An AI assistant reading MONOLITH's own memory should be able to trust it
 without re-verifying it.
 

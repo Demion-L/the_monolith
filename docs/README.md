@@ -33,10 +33,13 @@ docs/
 │
 ├── adr/                             — architectural decision records
 │   ├── README.md                    — the ADR index (canonical)
-│   ├── ADR-007-explicit-identity-resolution.md
+│   ├── ADR-002-cognitive-core-foundation.md — accepted (execution and integration; semantics are Webway's)
+│   ├── ADR-003-engineering-gate-foundation.md — accepted
+│   ├── ADR-007-explicit-identity-resolution.md   (superseded by ADR-020)
 │   ├── ADR-008-coordinatorium-tactical-mission-lifecycle.md
 │   ├── ADR-009-monolith-root-containment.md — accepted (SEC-001A)
-│   └── ADR-010-mission-control-ui.md        — accepted (not implemented)
+│   ├── ADR-010-mission-control-ui.md        — accepted (not implemented)
+│   └── ADR-020-canonical-knowledge-identity.md — accepted (ERG identity; supersedes ADR-007)
 │
 └── architecture/                    — current system description
     ├── README.md

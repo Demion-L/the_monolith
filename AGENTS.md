@@ -62,7 +62,7 @@ Markdown artifact
 
 The objective is not similarity-based retrieval. It is an explicit,
 inspectable graph of what a project decided and why — every edge traceable
-to a declared frontmatter field, never inferred (ADR-007).
+to a declared frontmatter field, never inferred (ADR-020, which supersedes ADR-007).
 
 Webway, developed separately ([github.com/Demion-L/webway](https://github.com/Demion-L/webway)),
 pursues a related but distinct goal: discovering non-obvious semantic
@@ -117,9 +117,10 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/scriptorium/markdown.ts`     | Heading/content extraction                                           |
 | `src/scriptorium/index.ts`        | Module barrel export                                                 |
 | `src/scriptorium/scriptorium.test.ts` | Vitest test suite (see integrity-result.md for count)            |
-| `src/graph/types.ts`              | GraphNode, GraphEdge, ExplicitRelationshipGraph, ...                 |
-| `src/graph/builder.ts`            | `buildGraph()` — Pass 1 (nodes) + Pass 2 (edges) + Pass 2.5 (aliases) |
-| `src/graph/normalize.ts`          | `normalizeLabel()`, `selectCanonicalLabel()`                         |
+| `src/graph/types.ts`              | GraphNode (= KnowledgeObject), GraphEdge, UnresolvedReference, IdentityConflict, ExplicitRelationshipGraph |
+| `src/graph/identity.ts`           | `KnowledgeObject`, `namespace:localId` refs, `parseRef()`, deterministic ordering (ADR-020) |
+| `src/graph/resolver.ts`           | `resolveRef()` — RESOLVED / MISSING / AMBIGUOUS / EXTERNAL_UNAVAILABLE / INVALID_REF |
+| `src/graph/builder.ts`            | `buildGraph()` — declarations → objects, conflicts, edges for RESOLVED references only |
 | `src/graph/index.ts`              | Module barrel export                                                 |
 | `src/graph/graph.test.ts`         | Vitest test suite (see integrity-result.md for count)                |
 | `src/coordinatorium/types.ts`     | `CoordinatoriumState`, `Mission`, `Checkpoint`, schema version        |
@@ -157,11 +158,12 @@ What MONOLITH does today (1737 tests passing in the full `vitest run` as of 2026
 - Full determinism — same input always produces identical output
 
 **ERG** (`buildGraph`):
-- Pass 1: builds `GraphNode` per compiled document (explicit `id:` required)
-- Pass 2: resolves relationship candidates to real node edges (explicit-only, no fuzzy matching)
-- Pass 2.5: registers aliases — `id:` → documentId, `title:` → documentTitle; first-document-wins on collision
-- Validation (measured 2026-06-28, not re-measured since; the corpus has grown): 481 real nodes, 0 synthesized nodes, 32 explicit edges from MONOLITH corpus
-- ADR-007: explicit-only identity resolution (no fuzzy matching, no inferred aliases)
+- Nodes are `KnowledgeObject`s with identity `namespace:localId` (ADR-020): a document declared by frontmatter `id:`, a section declared by a `{#ID}` heading marker. The namespace is supplied by the caller, never inferred; ids are case-sensitive
+- References resolve through one deterministic resolver: `RESOLVED`, `MISSING`, `AMBIGUOUS`, `EXTERNAL_UNAVAILABLE` or `INVALID_REF`. An edge exists only for `RESOLVED`; everything else is listed as an unresolved reference
+- A ref declared more than once is an identity conflict: none of the declarations becomes a node, and references to it are `AMBIGUOUS`. There are no synthetic nodes, no aliases and no first-wins (these ADR-007 mechanisms were removed by ERG-001A)
+- An unqualified reference is looked up only in the source's own namespace; a qualified `ns:id` only in `ns`; a namespace with no loaded corpus is `EXTERNAL_UNAVAILABLE`, not `MISSING`
+- Corpus statistics are not recorded here; `pnpm dogfood-graph [dir ...] [--namespace NS]` prints them to stdout and writes nothing. Open technical tasks, not done in this documentation pass: production namespace configuration, unresolved references (`MISSING`) in the current corpus, identity conflicts between mirrored corpora, the YAML parser, and `{#ID}` markers absent from the current corpus
+- ADR-020 supersedes ADR-007 and keeps its principle: explicit-only, no fuzzy matching, no LLM
 
 **Webway** (`analyzeArtifact`) — extracted to its own repository:
 - Originally Story 1.1's deterministic frequency-based concept extraction / semantic linking prototype
@@ -252,8 +254,9 @@ Missions, and a pointer block. Every section names its source.
   2 `--strict` and INCOMPLETE.
 - **Absent `state.json`** is reported as `status: absent` (no missions ever
   recorded); it is never read as an active mission.
-- **ADR directories:** `<monolithRoot>/adr` plus any `contextGateway.adrDirs`
-  entries in `monolith.config.json` (this repository sets `["docs/adr"]`).
+- **ADR directories:** any `contextGateway.adrDirs` entries in `monolith.config.json`
+  (this repository and a new `init` instance set `["docs/adr"]`, the only ADR location),
+  plus `<monolithRoot>/adr` if it exists — `init` does not create it and MONOLITH keeps no ADRs there.
   Configured directories must stay inside the project root.
 - **Sanitization:** all project-controlled strings are escaped so project
   data cannot forge brief structure; the Story excerpt is the only
@@ -369,8 +372,8 @@ matching name does not prove a file is an orphan (FS-CLEAN-001).
 replacement) of `state.json`, the lock files and the `init` scaffold goes through
 `src/root/safe-write.ts`. Not everything that touches a file does: lock release
 and stale-lock recovery `unlink` the lock path directly, `trusted-directory`
-scope creates its directory with `mkdirSync`, and `src/scripts/dogfood-*.ts`
-write reports on their own:
+scope creates its directory with `mkdirSync`, and `src/scripts/dogfood-graph.ts`
+is read-only (stdout; it writes no file):
 
 | Property | Contract |
 |---|---|
@@ -436,8 +439,9 @@ The following are explicitly deferred. Do not implement without a finalized stor
 4. **Module isolation** — each subsystem (`scriptorium`, `graph`, `webway`) is self-contained. Cross-module imports only through `src/index.ts`.
 5. **Additive evolution** — existing outputs remain structurally valid when later stories enrich them. No breaking shape changes without a Decision record.
 6. **Vertical slice first** — a working end-to-end flow is more valuable than a partially built abstraction.
-7. **Explicit-only identity** — ADR-007: aliases only from frontmatter `id:` and `title:`; no fuzzy matching; no inferred aliases. Provenance must be traceable.
+7. **Explicit-only identity** — ADR-020 (supersedes ADR-007): identity is a declared `namespace:localId`; references resolve deterministically or stay unresolved; no aliases, no synthetic nodes, no first-wins, no fuzzy matching. Provenance must be traceable.
 8. **TypeScript strict + ESM** — `"type": "module"` in package.json; `strict: true`; no `any`; all imports use `.js` extensions.
+9. **Knowledge belongs to its responsible system** — a document, ADR or hypothesis lives in the repository of the system it describes, once. Webway owns semantic knowledge (Cognitive Loop, Cognitive Core semantics, Knowledge Lifecycle and Regions, hypotheses, research); MONOLITH owns the toolkit and the execution and integration of cognitive capabilities (`monolith:ADR-002`). No duplicated canonical documents, no redirect files.
 
 ---
 
@@ -457,7 +461,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 | ---- | ---------- |
 | **MONOLITH** | Portable project knowledge and governance toolkit for AI-assisted development. |
 | **Scriptorium** | Deterministic structural extraction from a markdown artifact: `ScriptoriumInput` → `ScriptoriumResult` (`ConceptCandidate`, `RelationshipCandidate`, `Evidence`, `SourceReference`). |
-| **Explicit Relationship Graph (ERG)** | The typed graph (`GraphNode`, `GraphEdge`) built from compiled documents; edges resolve only from explicit frontmatter fields — no fuzzy matching (ADR-007). |
+| **Explicit Relationship Graph (ERG)** | The typed graph (`GraphNode`, `GraphEdge`) built from compiled documents; nodes are canonical `KnowledgeObject`s (`namespace:localId`); edges resolve only from explicit frontmatter fields to exactly one object — no fuzzy matching, no aliases (ADR-020). |
 | **Coordinatorium** | Tactical mission lifecycle: `Mission`, `CoordinatoriumState`, backed by `.monolith/state.json` (ADR-008). |
 | **Instance** | A project-specific MONOLITH deployment with its own `project.definition.mjs`. |
 | **Webway** | A separate, independently developed project (not part of MONOLITH) pursuing semantic/associative knowledge linking. See `docs/webway-v0.md` and [github.com/Demion-L/webway](https://github.com/Demion-L/webway). |
@@ -476,7 +480,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 **Story 1.3 — Scriptorium, ERG, and Canonical Identity Resolution** ✅ 2026-06-28
 - [x] `compileMarkdownArtifact()` — structural extraction pipeline, 138 tests
 - [x] `buildGraph()` — Pass 1 + 2 + 2.5 alias system, explicit-only
-- [x] ADR-007: explicit-only identity resolution
+- [x] ADR-007: explicit-only identity resolution *(superseded by ADR-020, 2026-10-28)*
 
 **COORDINATORIUM-001 — Tactical Mission Lifecycle (First Vertical Slice)** ✅ finalized 2026-10-21
 - [x] Deterministic State Keeper (`.monolith/state.json`) — lock + atomic write, no lost updates

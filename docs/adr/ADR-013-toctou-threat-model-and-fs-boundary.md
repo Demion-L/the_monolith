@@ -315,7 +315,9 @@ re-resolved path string. Nothing in this section is implemented or scheduled.
     `src/init/scaffold.ts`.
 
   `src/scripts/dogfood-*.ts` write reports on their own and are not part of the
-  product boundary.
+  product boundary. *(Update 2026-10-28: ERG-001A left one such script,
+  `dogfood-graph.ts`; it only reads and prints to stdout. It is still not part of
+  the product boundary.)*
 
 ### 5. Product decision
 
@@ -417,8 +419,9 @@ independent architectural review and stays `proposed`.
 the corrective pass), run these on the merged tree:
 
 - `grep -h '^id:' docs/adr/*.md | sort | uniq -d` must print nothing (explicit
-  identity resolution is first-document-wins, ADR-007; a duplicate `id` silently
-  hides one document).
+  identity resolution was first-document-wins under ADR-007; a duplicate `id` silently
+  hid one document. *Update 2026-10-28: ADR-020 removed first-wins — a duplicate ref is
+  now a reported identity conflict — but the check is still a cheap guard on `docs/adr/`.*).
 - `git grep -n 'ADR-013'` — every hit must mean the TOCTOU decision;
   `git grep -n 'ADR-014'` — every hit must mean the read contract.
 - `git grep -n -i 'not implemented\|not merged\|not integrated'` over

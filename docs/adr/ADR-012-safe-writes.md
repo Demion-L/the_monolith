@@ -93,7 +93,7 @@ the repository. Mutations that do **not** go through the primitive:
 | Stale-lock recovery | `lock.ts` `recoverDeadOwner` | `unlinkSync` of the lock path of a confirmed-dead owner, under the recovery mutex (ADR-008); same residual race |
 | Recovery mutex release | `lock.ts` `releaseIfOwned` | as lock release |
 | `trusted-directory` directory creation | `state-keeper.ts` | `mkdirSync(stateDir, { recursive: true })`: the caller asserts the directory and its ancestors are trusted, so nothing about them is checked |
-| Developer scripts | `src/scripts/dogfood-*.ts` | write reports under `docs/`; not part of the CLI or the package API, not covered |
+| Developer scripts | `src/scripts/dogfood-*.ts` | *(written 2026-10-23; since ERG-001A the only such script, `dogfood-graph.ts`, is read-only and prints to stdout — nothing is written)* write reports under `docs/`; not part of the CLI or the package API, not covered |
 
 The temp file is always opened `O_CREAT|O_EXCL|O_NOFOLLOW` (where the platform
 has `O_NOFOLLOW`; the constant is checked with `typeof`, because on Windows it

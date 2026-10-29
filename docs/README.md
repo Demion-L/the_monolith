@@ -45,6 +45,13 @@ docs/
 │   ├── README.md
 │   └── toolkit-pipeline.md
 │
+├── reference/                       — user-facing reference (CLI, UI, security, API, development)
+│   ├── cli.md
+│   ├── mission-control.md
+│   ├── security-and-limitations.md
+│   ├── write-scope-api.md
+│   └── development.md
+│
 └── release/                         — release preparation (not architecture)
     └── alpha-installation.md        — verified install/CLI commands for 0.1.0-alpha.0 (DIST-002)
 ```
@@ -58,6 +65,8 @@ docs/
 | Why does this project exist?                     | `../MANIFESTO.md`                                        |
 | Why was this design choice made?                 | `adr/`                                                   |
 | What does the system look like today?            | `architecture/`                                          |
+| How do I use the CLI / Mission Control?          | `reference/cli.md`, `reference/mission-control.md`       |
+| What are the security limits?                    | `reference/security-and-limitations.md`                  |
 | What do these terms mean?                        | `../AGENTS.md` (Glossary)                                |
 | What was Webway, and why isn't it here anymore?  | `webway-v0.md`, `adr/README.md`                          |
 

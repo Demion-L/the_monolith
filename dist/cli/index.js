@@ -5,9 +5,9 @@
  *
  * Commands:
  *   monolith init       — scaffold a new MONOLITH instance from templates/
- *   monolith validate   — run all enforcement + integrity checks
- *   monolith status     — show current protocol state and drift summary
- *   monolith dry-run    — run finalization gate without writing output
+ *   monolith validate   — static instance checks (never executes project code)
+ *   monolith status     — not implemented
+ *   monolith dry-run    — not implemented
  *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
  *   monolith brief       — deterministic, bounded project context summary
  *   monolith durable     — inspect/verify/maintain Durable State task logs
@@ -26,9 +26,11 @@ Commands:
               No positional target-directory argument; refuses to run if it
               would overwrite any existing tracked file (--yes only skips
               interactive prompts, it does not force an overwrite).
-  validate    Run enforcement gates and integrity validators
-  status      Show active protocol, phase, story, and drift summary
-  dry-run     Simulate finalization gate — no writes, exit-code only
+  validate    Static checks of the instance files (config, definition file,
+              AGENTS.md, templates). Never executes project code. Not a
+              security enforcement gate.
+  status      Not implemented (exits 1).
+  dry-run     Not implemented (exits 1).
   mission     Manage Tactical Coordinatorium missions (start/list/show/finish/checkpoint/checkpoints)
   brief       Print a deterministic, bounded summary of project state (Story,
               active Missions, latest Checkpoints, mandatory Protocols,

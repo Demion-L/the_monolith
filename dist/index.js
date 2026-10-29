@@ -1,5 +1,5 @@
 /**
- * @monolith/core — Public API surface
+ * @latysh-development/monolith — Public API surface
  *
  * This file is the package entrypoint. Exports grow here as Kernel modules
  * are extracted from project instances into this package.
@@ -22,4 +22,5 @@ export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSche
 export { SafeWriteError } from './root/index.js';
 // Durable State — domain-neutral, crash-safe execution record for long-running agentic tasks (ADR-017).
 // Namespaced: its error taxonomy deliberately shares names (e.g. ValidationError) with Coordinatorium's.
+// EXPERIMENTAL. Security acceptance pending (see AGENTS.md → Durable State); the API may change in any alpha.
 export * as durable from './durable/index.js';

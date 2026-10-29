@@ -1,5 +1,5 @@
 /**
- * @monolith/core — Public API surface
+ * @latysh-development/monolith — Public API surface
  *
  * This file is the package entrypoint. Exports grow here as Kernel modules
  * are extracted from project instances into this package.
@@ -56,6 +56,7 @@ export type {
 export { buildGraph, buildObjectIndex, resolveRef, makeRef, parseRef, isValidIdentifier } from './graph/index.js';
 
 // Coordinatorium — deterministic project state + mission lifecycle (Tactical v0.1, ADR-008)
+// EXPERIMENTAL in 0.1.0-alpha: the state schema (schemaVersion 2) and these exports may change.
 export type {
   CoordinatoriumState,
   Mission,
@@ -92,4 +93,5 @@ export type { WriteErrorCode, WriteWarning, WriteWarningCode, PublicationState }
 
 // Durable State — domain-neutral, crash-safe execution record for long-running agentic tasks (ADR-017).
 // Namespaced: its error taxonomy deliberately shares names (e.g. ValidationError) with Coordinatorium's.
+// EXPERIMENTAL. Security acceptance pending (see AGENTS.md → Durable State); the API may change in any alpha.
 export * as durable from './durable/index.js';

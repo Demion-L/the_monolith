@@ -1,7 +1,17 @@
 {
-  "name": "@monolith/core",
+  "name": "@latysh-development/monolith",
   "version": "0.1.0-alpha.0",
   "description": "MONOLITH — portable project knowledge and governance toolkit for AI-assisted development",
+  "author": "Dmytro Latysh",
+  "license": "MIT",
+  "homepage": "https://github.com/Demion-L/the_monolith#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Demion-L/the_monolith.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Demion-L/the_monolith/issues"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,8 +24,8 @@
   },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "scripts": {
@@ -38,7 +48,6 @@
     "enforcement",
     "protocol"
   ],
-  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@vitejs/plugin-vue": "^5",
@@ -52,5 +61,8 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

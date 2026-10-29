@@ -41,9 +41,12 @@ docs/
 │   ├── ADR-010-mission-control-ui.md        — accepted (not implemented)
 │   └── ADR-020-canonical-knowledge-identity.md — accepted (ERG identity; supersedes ADR-007)
 │
-└── architecture/                    — current system description
-    ├── README.md
-    └── toolkit-pipeline.md
+├── architecture/                    — current system description
+│   ├── README.md
+│   └── toolkit-pipeline.md
+│
+└── release/                         — release preparation (not architecture)
+    └── alpha-installation.md        — verified install/CLI commands for 0.1.0-alpha.0 (DIST-002)
 ```
 
 ---

@@ -156,7 +156,7 @@ pnpm run typecheck && pnpm run build && pnpm test && pnpm run test:ui
 git status --short                   # dist/ must show no diff after the build
 
 # 4. Inspect the tarball
-npm pack --dry-run                   # 300 files, no tests, no ui/images, no .monolith state
+npm pack --dry-run                   # 291 files; no tests, no dist/scripts, no ui/images, no .monolith state
 npm pack                             # note the shasum; install it in a clean directory and run the Quickstart
 
 # 5. Publish — the --tag is mandatory; without it npm would also set `latest`

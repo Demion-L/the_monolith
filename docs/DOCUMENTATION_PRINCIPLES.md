@@ -57,6 +57,13 @@ needs them — see `docs/MIGRATION_REPORT.md`.
 - References ADRs for justification.
 - Updated when the system changes, not when plans change.
 
+### Reference (`docs/reference/`)
+
+- User-facing description of commands, interfaces, limits and development workflow.
+- Describes only what is implemented; unimplemented commands are marked as such.
+- Subordinate to ADRs and `AGENTS.md` (scope): on conflict, they win.
+- Not a place for decisions (ADR) or internal design (architecture).
+
 ---
 
 ## Document Identity Rules
@@ -84,6 +91,7 @@ needs them — see `docs/MIGRATION_REPORT.md`.
 | ------------------------------------ | --------------------- |
 | MONOLITH architectural decisions     | `docs/adr/`           |
 | MONOLITH system description (today)  | `docs/architecture/`  |
+| CLI, UI, security limits, dev workflow | `docs/reference/`   |
 | Operational template for instances   | `templates/`          |
 | AI session protocols and skills      | `templates/...`       |
 

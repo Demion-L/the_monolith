@@ -29,18 +29,54 @@ decisions — instead of relying on an assistant's unaided memory.
 
 ## Why MONOLITH?
 
-AI assistants lose context between sessions, and what a project "knows" ends up
-scattered across chats, notes and habits. MONOLITH keeps that knowledge in the
-project itself, in a form both a person and an assistant can read, check and
-trust — using mechanisms that are deterministic and testable.
+You are deep in a task when a good idea arrives — one that has nothing to do
+with what you are doing right now. Switching to it would break your focus, so
+you postpone it. A few hours later it is buried in a long chat, or simply gone.
+
+A conversation history is a poor place to keep it. It is tied to one session,
+it is hard to search, and an AI assistant that starts a new session does not
+carry it over. A thought that only lives in a chat lasts as long as the chat.
+
+MONOLITH keeps that knowledge in the project itself: ideas, structured project
+context and recorded decisions, as plain Markdown that both a person and an
+assistant can read, check and commit. You save the idea, and keep working.
+
+> **Your AI assistant may forget the conversation. Your project shouldn't forget the ideas.**
+
+Ideas are where MONOLITH started, not where it ends: the same approach — durable,
+inspectable, deterministic — also covers project state and execution governance.
 
 ## What MONOLITH Does
 
+- **Idea Capture** — save a thought that is unrelated to the current task, without losing focus. You decide what to save; ideas are stored as one Markdown file each in `.monolith/memory/long-term/ideas/`, independent of the active story, and are managed with `monolith idea add|list|show` or by an assistant that follows your project's instructions.
 - **Observable** — `monolith brief` summarizes project state in the terminal, including whether it looks stale; Mission Control shows it in a local, read-only web interface.
 - **Structured** — structure is extracted from a project's own markdown (frontmatter, headings, explicit links) into an explicit relationship graph. No embeddings, no LLM, no fuzzy matching.
 - **Governed** — protocols, skills and cognitive modes describe how an assistant reads and updates project memory; missions and checkpoints record progress. This is a recorded discipline, not a runtime gate.
 - **Reproducible** — same input, same output. State lives in a schema-versioned file written with a lock and atomic replace; Durable State adds a hash-chained event log.
 - **Bounded** — managed files are read and written through strict primitives that refuse symlinks; `monolith validate` never executes project code; Mission Control has no write endpoint.
+
+## Idea Capture Example
+
+```bash
+monolith idea add \
+  --title 'Automatic Tool Tests' \
+  --description 'Generate tests from business tool contracts'
+
+monolith idea list
+monolith idea show IDEA-001
+```
+
+`IDEA-001` is a demonstration ID; the real ID is printed by `idea add`, and
+`idea list` shows every saved idea.
+
+With an AI assistant, you can simply say: *"Save this idea for later."* The
+assistant then saves it by running `monolith idea add` — it does not edit idea
+files itself. This works because `monolith init` installs instructions and an
+`idea-capture` skill for the assistant; it is not guaranteed for an arbitrary
+model without that setup. Details and limits: [`monolith idea` in the CLI reference](./docs/reference/cli.md#monolith-idea).
+
+Ideas are saved and recalled **manually**. There is no automatic idea detection,
+no automatic recall or reminders, no idea status management and no idea UI yet.
 
 ## Quick Start
 
@@ -98,7 +134,7 @@ listing — not an official partnership, endorsement or certification.
 
 ## Documentation
 
-- [CLI reference](./docs/reference/cli.md) — every command, `init`, `validate`, `brief`, `mission`, `durable`, `ui`
+- [CLI reference](./docs/reference/cli.md) — every command, `init`, `validate`, `brief`, `idea`, `mission`, `durable`, `ui`
 - [Mission Control](./docs/reference/mission-control.md) — sections, LIVE/DEMO, skins, limitations
 - [Security & Limitations](./docs/reference/security-and-limitations.md) — threat model, platform and filesystem caveats
 - [Programmatic API](./docs/reference/write-scope-api.md) · [Development](./docs/reference/development.md)

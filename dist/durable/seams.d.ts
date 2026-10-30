@@ -27,6 +27,8 @@ export interface FsStoreSeams {
     skipPrunePrecondition?: boolean;
     /** replaces `fs.unlinkSync` in the roll-forward of a committed prune, to stop it after a chosen number of removals. */
     removeFile?: (abs: string) => void;
+    /** called by the audit of a committed prune: `listed` after the data was listed (nothing read yet), `surveyed` after it was read, before `tombstone.json` is. */
+    auditHook?: (point: 'listed' | 'surveyed') => void;
     /** simulate an I/O error on reading a file of the store: return an errno code (`'EIO'`) to fail with, or nothing. */
     readFault?: (abs: string) => string | null | undefined;
 }

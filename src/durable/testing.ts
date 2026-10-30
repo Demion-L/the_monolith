@@ -10,8 +10,8 @@ export type { FsStoreSeams, MemoryStoreSeams };
 export type FsStoreInternalOptions = FsStoreOptions & FsStoreSeams;
 
 export function createFsStoreWithSeams(opts: FsStoreInternalOptions): FsEventStore {
-  const { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, removeFile, ...pub } = opts;
-  handOver('fs', { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, removeFile });
+  const { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, removeFile, auditHook, ...pub } = opts;
+  handOver('fs', { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, removeFile, auditHook });
   try {
     return new FsEventStore(pub);
   } finally {

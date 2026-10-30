@@ -103,6 +103,8 @@ const SEGMENT_NAME = /^S(\d{9})-(\d{9})\.jsonl$/;
 const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.json$/;
 const TMP_NAME = STAGING_RE;
 const TOMBSTONE_NAME = TOMBSTONE_FILE;
+/** how often the audit of a committed prune looks at a log with a gap and no tombstone before it refuses (I-1). */
+const AUDIT_PASSES = 3;
 const MAX_TOMBSTONE_BYTES = 4096;
 const READ_ATTEMPTS = 8;
 
@@ -732,7 +734,9 @@ export class FsEventStore implements EventStore {
       const m = SEGMENT_NAME.exec(e.name);
       if (m && e.isFile() && Number(m[1]) <= upTo) segs.push({ name: e.name, from: Number(m[1]), to: Number(m[2]) });
     }
-    for (const e of this.listDir(this.eventsDir(taskId)) ?? []) {
+    const eventEntries = this.listDir(this.eventsDir(taskId)) ?? [];
+    this.seams.auditHook?.('listed');
+    for (const e of eventEntries) {
       const m = EVENT_NAME.exec(e.name);
       if (!m || !e.isFile() || Number(m[1]) > upTo) continue; // only regular event files are ever read, and nothing past the head is evidence
       const seq = Number(m[1]);
@@ -759,17 +763,39 @@ export class FsEventStore implements EventStore {
   /**
    * O-1: a committed register is not self-proving (its checksum is unkeyed), so the data still on disk must not contradict
    * it before anything is unlinked. See `committedProblem` for what a partly removed log can and cannot prove. Reads only.
+   *
+   * I-1: the data is read FIRST and `tombstone.json` AFTER it. The roll-forward publishes the tombstone before its first
+   * unlink and nothing ever removes it, so a tombstone that is still absent after the data was read proves that no unlink
+   * had begun when the data was read (it was absent at every earlier moment too): a gap in the data is then not a removal
+   * but a torn observation (a compaction moving events into a segment between the two listings) or real damage. Read the
+   * other way round, a concurrent pruner that publishes the tombstone and removes events between the two reads is taken
+   * for damage. A gap seen without a tombstone is therefore looked at again a few times before it is refused, so that a
+   * torn observation is not taken for damage either. No lock: a pruner that races this audit only ever turns the verdict
+   * from "the whole log must be there" into "a part may be gone", and the roll-forward still checks the tombstone it finds.
    */
   private auditCommitted(taskId: string, tombstone: Tombstone): void {
-    const published = this.registerIO(taskId).tombstone();
-    if (published.k === 'ioerr') throw new StoreIoError(`cannot read tombstone.json of task "${taskId}": ${published.reason}; nothing was changed. Try again.`);
-    const deletionStarted = published.k !== 'absent'; // the roll-forward publishes it before its first unlink
-    let problem: string | null;
-    try {
-      problem = committedProblem(taskId, this.survivingEvents(taskId, tombstone.headSeq), tombstone, deletionStarted);
-    } catch (err) {
-      if (err instanceof LogCorruptError) problem = err.message;
-      else throw err;
+    let problem: string | null = null;
+    for (let pass = 0; pass < AUDIT_PASSES; pass++) {
+      let events: TaskEvent[] | null = null;
+      try {
+        events = this.survivingEvents(taskId, tombstone.headSeq);
+      } catch (err) {
+        if (!(err instanceof LogCorruptError)) throw err;
+        problem = err.message; // an event that does not verify on its own does not heal
+        break;
+      }
+      this.seams.auditHook?.('surveyed');
+      const published = this.registerIO(taskId).tombstone();
+      if (published.k === 'ioerr') throw new StoreIoError(`cannot read tombstone.json of task "${taskId}": ${published.reason}; this call changed nothing. Try again.`);
+      const deletionStarted = published.k !== 'absent'; // the roll-forward publishes it before its first unlink
+      try {
+        problem = committedProblem(taskId, events, tombstone, deletionStarted);
+      } catch (err) {
+        if (!(err instanceof LogCorruptError)) throw err;
+        problem = err.message;
+        break;
+      }
+      if (problem === null || deletionStarted) break; // with a tombstone the verdict is already the lenient one
     }
     if (problem !== null) throw new PruneDecisionCorruptError(taskId, 'commit-audit', null, null, false, problem);
   }

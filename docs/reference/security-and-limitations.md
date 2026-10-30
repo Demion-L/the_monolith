@@ -81,7 +81,18 @@ acceptance criterion 23 has not been finished, and no full security acceptance i
   DURABLE-SEC-003: before the first `unlink`, `prune()` audits the data still on disk against the commit. A register is
   not self-proving (its checksum is unkeyed), so a person who can write into the store directory can still forge a
   register *and* delete the store's own files directly; that is outside the supported models. If the audit refuses, it
-  reports `PruneDecisionCorruptError` (`commit-audit`) and removes nothing; an operator must decide.
+  reports `PruneDecisionCorruptError` (`commit-audit`) and this call removes nothing; an operator must decide. The audit
+  reads the data first and `tombstone.json` after it, so a concurrent legitimate pruner is not mistaken for damage
+  (DURABLE-SEC-004 I-1, fixed by DURABLE-SEC-005).
+- **I-2 (known limit): committed + part of the log gone + no `tombstone.json`.** A roll-forward publishes `tombstone.json`
+  before its first unlink, so this state is not produced by a crashed process (SIGKILL). It is possible after a power loss
+  when `durability` is `'file'` or `'none'` (the directory entry of the tombstone is not forced, the unlinks may be). It
+  cannot be told from a forged register over a damaged log (the checksum is unkeyed), so `prune()` refuses it and
+  changes nothing; the task stays unreadable/gone. Keep `durability: 'full'` (the default) where this matters. There is no
+  recovery command. An operator who has established outside the store that the commit is genuine can restore the missing
+  events from a backup (the whole log then passes the audit) or publish `tombstone.json` for that commit with the store's own
+  encoder (`encodeTombstone`) and run `prune()` again. Follow-up task proposed: an explicit, logged operator recovery
+  command; it needs a decision on what the operator authenticates against, and is not part of this fix.
 - Not claimed: durability across OS crash or power loss, network filesystems.
 
 See the [DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REMEDIATION-REPORT.md),

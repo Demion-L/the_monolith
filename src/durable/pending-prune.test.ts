@@ -300,5 +300,34 @@ describe.each(backends)('pending prune on %s store', (name, make) => {
       expect(existsSync(join(s.dir as string, 'tasks', 'P', 'tombstone.json'))).toBe(true);
       expect((await s.inner.readLog('P')).diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE')).toBe(false);
     });
+
+    // DURABLE-SEC-005 / I-2: the state this test modelled before the O-1 audit (committed, a part of the log gone, NO
+    // tombstone.json) cannot be produced by a roll-forward, which publishes the tombstone before its first unlink. It can be
+    // left by a power loss under a durability below 'full' (the unlinks reached the disk, the new directory entry did not),
+    // and it is indistinguishable from a forged register over a damaged log. The audit refuses it; the task stays GONE.
+    it('I-2: committed + a part of the log gone + NO tombstone.json: still GONE, the removal is refused (never guessed), nothing changes', async () => {
+      const s = setup();
+      await parentWithChild(s);
+      const tomb = await tombstoneOnly(s);
+      const att = await (s.inner.preparePrune as NonNullable<EventStore['preparePrune']>)(tomb);
+      await (s.inner.decidePrune as NonNullable<EventStore['decidePrune']>)('P', att.attempt, 'commit', tomb);
+      const evDir = join(s.dir as string, 'tasks', 'P', 'events');
+      const files = readdirSync(evDir).sort();
+      unlinkSync(join(evDir, files[0] as string)); // unlinks durable, tombstone.json never was
+      const left = readdirSync(evDir).sort();
+      // logically still gone: a part of a committed log is missing
+      expect((await s.inner.readLog('P')).diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE')).toBe(true);
+      await expect(s.fresh().claim('C', { owner: 'w' })).rejects.toBeInstanceOf(TaskOrphanedError);
+      expect((await (s.inner.pruneState as NonNullable<EventStore['pruneState']>)('P')).kind).toBe('committed');
+      // the removal is refused, without touching anything
+      await expect(s.fresh().applyRetention(POLICY)).rejects.toMatchObject({ code: 'PRUNE_DECISION_CORRUPT' });
+      expect(readdirSync(evDir).sort()).toEqual(left);
+      expect(existsSync(join(s.dir as string, 'tasks', 'P', 'tombstone.json'))).toBe(false);
+      // an operator who has established by other means that the commit is genuine publishes tombstone.json from it
+      // (what a recovery command would do; none exists yet: see the I-2 section of docs/reference/security-and-limitations.md)
+      writeFileSync(join(s.dir as string, 'tasks', 'P', 'tombstone.json'), encodeTombstone(tomb));
+      await s.fresh().applyRetention(POLICY);
+      expect(existsSync(evDir)).toBe(false);
+    });
   }
 });

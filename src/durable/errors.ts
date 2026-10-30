@@ -274,7 +274,7 @@ export class PruneDecisionCorruptError extends DurableError {
   ) {
     super(
       'PRUNE_DECISION_CORRUPT',
-      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}${detail ? `; ${detail}` : ''}); nothing was deleted or cancelled.`,
+      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}${detail ? `; ${detail}` : ''}); this call deleted and cancelled nothing (another process may have changed the task).`,
     );
     this.name = 'PruneDecisionCorruptError';
   }

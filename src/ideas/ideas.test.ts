@@ -622,3 +622,92 @@ describe('permanent id reservation (IDEA-001D)', () => {
     expect(add()).toBe('IDEA-002');
   });
 });
+
+describe('stored size is bounded by what the reader accepts (IDEA-001D-GATE)', () => {
+  const bytesOf = (id: string, description: string, context?: string) =>
+    Buffer.byteLength(serializeIdea({ id, title: 't', description, createdAt: fixedNow().toISOString(), status: 'inbox', ...(context !== undefined ? { context } : {}) }), 'utf8');
+  const markers = () => (existsSync(join(ideasDir, '.ids')) ? readdirSync(join(ideasDir, '.ids')) : []);
+
+  it('the largest description that fits the file limit exactly is saved and read back byte for byte', () => {
+    // 3-byte characters: the character limit alone would allow ~300 KB.
+    const overhead = bytesOf('IDEA-001', '');
+    const chars = Math.floor((IDEA_LIMITS.fileBytes - overhead) / 3);
+    const description = '漢'.repeat(chars) + 'x'.repeat(IDEA_LIMITS.fileBytes - overhead - chars * 3);
+    expect(bytesOf('IDEA-001', description)).toBe(IDEA_LIMITS.fileBytes);
+    expect(description.length).toBeLessThanOrEqual(IDEA_LIMITS.description);
+    const { idea } = addIdea(store(), { title: 't', description }, { now: fixedNow });
+    expect(getIdea(store(), idea.id).description).toBe(description);
+    expect(listIdeas(store()).every((e) => e.ok)).toBe(true);
+  });
+
+  it('one byte more is refused as invalid input before an id is reserved or anything is written', () => {
+    const overhead = bytesOf('IDEA-001', '');
+    const description = 'x'.repeat(IDEA_LIMITS.fileBytes - overhead + 1);
+    // 'x' alone would exceed the description character limit; mix in 3-byte characters to stay under it.
+    const mixed = '漢'.repeat(Math.ceil(description.length / 3));
+    expect(mixed.length).toBeLessThanOrEqual(IDEA_LIMITS.description);
+    expect(bytesOf('IDEA-001', mixed)).toBeGreaterThan(IDEA_LIMITS.fileBytes);
+    expect(codeOf(() => addIdea(store(), { title: 't', description: mixed }))).toBe('IDEA_INVALID_INPUT');
+    expect(markers()).toEqual([]);
+    expect(existsSync(ideasDir) ? readdirSync(ideasDir).filter((n) => n.endsWith('.md')) : []).toEqual([]);
+    // The next idea still gets IDEA-001: the refusal burned nothing.
+    expect(addIdea(store(), { title: 't', description: 'd' }, { now: fixedNow }).idea.id).toBe('IDEA-001');
+  });
+
+  it('maximal title, description and context made of escape-heavy text either round-trip or are refused cleanly', () => {
+    for (const unit of ['a', '漢', '"', '\n', '\u0001']) {
+      const text = (n: number) => unit.repeat(n).slice(0, n);
+      const input = { title: 't'.repeat(IDEA_LIMITS.title), description: text(IDEA_LIMITS.description), context: text(IDEA_LIMITS.context) };
+      try {
+        const { idea } = addIdea(store(), input, { now: fixedNow });
+        const back = getIdea(store(), idea.id);
+        expect(back.description).toBe(input.description);
+        expect(back.context).toBe(input.context);
+      } catch (err) {
+        expect(err).toBeInstanceOf(IdeaError);
+        expect((err as IdeaError).code).toBe('IDEA_INVALID_INPUT');
+      }
+    }
+    // Whatever was saved can be listed.
+    expect(listIdeas(store()).every((e) => e.ok)).toBe(true);
+  });
+});
+
+describe('backfill of pre-reservation ideas (IDEA-001D-GATE)', () => {
+  const legacy = (ids: string[]) => {
+    mkdirSync(ideasDir, { recursive: true });
+    for (const id of ids) writeFileSync(join(ideasDir, `${id}.md`), serializeIdea({ id, title: 't', description: 'd', createdAt: fixedNow().toISOString(), status: 'inbox' }));
+  };
+  const markers = () => readdirSync(join(ideasDir, '.ids')).sort();
+
+  it('list and show work without any marker and create none', () => {
+    legacy(['IDEA-001', 'IDEA-002']);
+    expect(listIdeas(store()).map((e) => (e.ok ? e.idea.id : e.id))).toEqual(['IDEA-001', 'IDEA-002']);
+    expect(getIdea(store(), 'IDEA-002').title).toBe('t');
+    expect(existsSync(join(ideasDir, '.ids'))).toBe(false);
+  });
+
+  it('a write error during backfill saves nothing and loses no id; a retry completes the backfill', () => {
+    legacy(['IDEA-001', 'IDEA-002', 'IDEA-003']);
+    expect(() =>
+      addIdea(store(), { title: 'x', description: 'd' }, {
+        ops: { linkSync: (a: string, b: string) => { if (b.endsWith('IDEA-002')) throw Object.assign(new Error('boom'), { code: 'EIO' }); return linkSync(a, b); } },
+      }),
+    ).toThrow();
+    expect(markers()).toEqual(['IDEA-001']); // partial markers are harmless
+    expect(readdirSync(ideasDir).filter((n) => n.endsWith('.md'))).toHaveLength(3);
+    expect(addIdea(store(), { title: 'x', description: 'd' }, { now: fixedNow }).idea.id).toBe('IDEA-004'); // retry completes the backfill
+    expect(markers()).toEqual(['IDEA-001', 'IDEA-002', 'IDEA-003', 'IDEA-004']);
+    rmSync(join(ideasDir, 'IDEA-004.md'));
+    rmSync(join(ideasDir, 'IDEA-003.md'));
+    expect(addIdea(store(), { title: 'x', description: 'd' }, { now: fixedNow }).idea.id).toBe('IDEA-005'); // both stay burned
+  });
+
+  it('partially created markers (only some ideas covered) still protect the highest legacy id', () => {
+    legacy(['IDEA-001', 'IDEA-002', 'IDEA-005']);
+    mkdirSync(join(ideasDir, '.ids'));
+    writeFileSync(join(ideasDir, '.ids', 'IDEA-001'), 'reserved\n');
+    rmSync(join(ideasDir, 'IDEA-005.md')); // deleted before any backfill could cover it: unrecoverable by design, documented
+    expect(addIdea(store(), { title: 'x', description: 'd' }, { now: fixedNow }).idea.id).toBe('IDEA-003');
+  });
+});

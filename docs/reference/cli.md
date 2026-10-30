@@ -210,8 +210,12 @@ become anything.
   shell is safe is the caller's concern (an assistant uses the `idea-capture` skill).
 - **Input:** `--title` is one line (at most 300 characters, no control
   characters); `--description` at most 100 000 and `--context` at most 20 000
-  characters. Empty or whitespace-only values, unknown or repeated flags and
-  stray arguments are refused before anything is written.
+  characters. The stored file (frontmatter and body, in UTF-8, after escaping) is
+  also capped at 262 144 bytes, the same cap the reader applies, so an idea that
+  was saved can always be read back; text that fits the character limits but not
+  the byte cap (for example about 87 000 or more CJK characters) is refused with
+  `IDEA_INVALID_INPUT` before an id is reserved. Empty or whitespace-only values,
+  unknown or repeated flags and stray arguments are refused before anything is written.
 - **`list`:** ordered by number; shows id, status, title. Prints `No ideas.` when
   empty. A file that cannot be read as an idea is listed as `[unreadable]` with
   the reason, left untouched, and makes the command exit 2.

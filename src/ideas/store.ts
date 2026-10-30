@@ -190,6 +190,15 @@ export function addIdea(store: IdeaStore, input: NewIdea, opts: AddIdeaOptions =
     const next = Math.max(highestNumber(scanIds(store)), highestNumber(scanReservedIds(store))) + 1;
     if (next > MAX_IDEA_NUMBER) throw new IdeaError('IDEA_ID_EXHAUSTED', 'the idea id space is exhausted; nothing was written.');
     const id = formatIdeaId(next);
+    const idea: Idea = { id, title: input.title, description: input.description, createdAt, status: 'inbox' };
+    if (input.context !== undefined) idea.context = input.context;
+    const text = serializeIdea(idea);
+    // The character limits do not bound the file (UTF-8 and JSON escaping expand text), and the reader refuses
+    // files over `fileBytes`: refuse here, before an id is reserved, so nothing is saved that cannot be read back.
+    const bytes = Buffer.byteLength(text, 'utf8');
+    if (bytes > IDEA_LIMITS.fileBytes) {
+      throw new IdeaError('IDEA_INVALID_INPUT', `the idea is too large once stored (${bytes} > ${IDEA_LIMITS.fileBytes} bytes in UTF-8); shorten the description or context. Nothing was written.`);
+    }
     // Reserve first: once the marker exists the id is never handed out again, whatever happens next.
     try {
       if (!reserveId(markers, id, createdAt, opts)) continue; // lost the race for this number
@@ -197,9 +206,6 @@ export function addIdea(store: IdeaStore, input: NewIdea, opts: AddIdeaOptions =
       if (err instanceof SafeWriteError) throw unsafe(err);
       throw err;
     }
-    const idea: Idea = { id, title: input.title, description: input.description, createdAt, status: 'inbox' };
-    if (input.context !== undefined) idea.context = input.context;
-    const text = serializeIdea(idea);
     try {
       const outcome = createFile(parent, ideaFileName(id), text, {
         mode: 0o666,

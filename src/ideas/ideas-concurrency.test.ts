@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import ts from 'typescript';
+import { serializeIdea } from './format.js';
 
 // Real, independent OS processes adding ideas to the SAME instance at the same
 // time. The sources are transpiled once into plain .mjs files (as the
@@ -78,5 +79,25 @@ describe('concurrent idea capture across processes', () => {
     // Each reported id's file holds exactly that process's text.
     const titles = new Set(files.map((f) => /title: "(.*)"/.exec(readFileSync(join(dir, f), 'utf8'))![1]));
     expect(titles.size).toBe(PROCS * EACH);
+  }, 60_000);
+
+  it('concurrent backfill of pre-reservation ideas yields one marker per id and no id is reused', async () => {
+    const project = join(work, 'legacy-project');
+    const dir = join(project, '.monolith', 'memory', 'long-term', 'ideas');
+    mkdirSync(dir, { recursive: true });
+    const LEGACY = 12;
+    for (let i = 1; i <= LEGACY; i++) {
+      const id = `IDEA-${String(i).padStart(3, '0')}`;
+      writeFileSync(join(dir, `${id}.md`), serializeIdea({ id, title: `old-${i}`, description: 'old', createdAt: '2026-10-01T00:00:00.000Z', status: 'inbox' }));
+    }
+    const PROCS = 6;
+    const results = await Promise.all(Array.from({ length: PROCS }, (_, i) => runChild(project, `b${i}`, 2)));
+    for (const r of results) expect(r, r.err).toMatchObject({ code: 0 });
+    const reported = results.flatMap((r) => JSON.parse(r.out.trim()) as string[]);
+    expect(new Set(reported).size).toBe(PROCS * 2);
+    for (const id of reported) expect(Number(id.slice(5))).toBeGreaterThan(LEGACY);
+    const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    expect(files).toHaveLength(LEGACY + PROCS * 2);
+    expect(readdirSync(join(dir, '.ids')).sort()).toEqual(files.map((f) => f.replace(/\.md$/, '')).sort());
   }, 60_000);
 });

@@ -28,6 +28,7 @@ Where authoritative truth lives for each semantic domain.
 | Cognitive Core — execution and integration | `docs/adr/ADR-002-cognitive-core-foundation.md` (`monolith:ADR-002`) |
 | Engineering Gate definition | `memory/long-term/engineering-gate.md` |
 | Execution log          | `memory/long-term/execution-history.md` |
+| Ideas (deferred thoughts) | `monolith idea list` / `show` — the CLI owns the files; nothing else reads or writes them |
 | Error records          | `memory/errors/ERR-*.md`                |
 | Captured ideas (`IDEA-NNN`) | `memory/long-term/ideas/IDEA-*.md`, written only by `monolith idea add` |
 

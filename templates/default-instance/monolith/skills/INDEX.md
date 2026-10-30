@@ -19,6 +19,7 @@ Available skills for {{PROJECT_NAME}}.
 | current-status   | "status", "what are we working on"    | `{{MONOLITH_ROOT}}/skills/current-status/SKILL.md`   |
 | global-status    | "global overview", "project status"   | `{{MONOLITH_ROOT}}/skills/global-status/SKILL.md`    |
 | self-improvement | "analyze mistake", "learn from error" | `{{MONOLITH_ROOT}}/skills/self-improvement/SKILL.md` |
+| idea-capture     | "save an idea", "show my ideas"       | `{{MONOLITH_ROOT}}/skills/idea-capture/SKILL.md`     |
 
 ---
 

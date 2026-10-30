@@ -9,7 +9,7 @@
  * Logical states of a required task: LIVE / PRUNE_PENDING / GONE (see runtime.ts `requirementState`).
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, readdirSync, rmSync, unlinkSync, existsSync } from 'fs';
+import { mkdtempSync, readdirSync, rmSync, unlinkSync, existsSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { DurableTasks } from './runtime.js';
@@ -18,6 +18,7 @@ import { MemoryEventStore } from './memory-store.js';
 import { RequiredTaskPendingError, RetentionRefusedError, StoreIoError, TaskOrphanedError, TaskPrunedError, ValidationError } from './errors.js';
 import type { EventStore, TaskEvent, Tombstone } from './types.js';
 import { tombstoneFor } from './prune-check.js';
+import { encodeTombstone } from './register.js';
 
 const initStore = (s: FsEventStore): FsEventStore => (s.initializeProtocolSync(), s);
 
@@ -285,6 +286,9 @@ describe.each(backends)('pending prune on %s store', (name, make) => {
       await (s.inner.decidePrune as NonNullable<EventStore['decidePrune']>)('P', att.attempt, 'commit', tomb);
       const evDir = join(s.dir as string, 'tasks', 'P', 'events');
       const files = readdirSync(evDir).sort();
+      // The roll-forward publishes tombstone.json BEFORE its first unlink (ADR-019): a log with a part missing and no
+      // tombstone.json was not removed by a roll-forward, and the O-1 audit of a committed prune relies on that order.
+      writeFileSync(join(s.dir as string, 'tasks', 'P', 'tombstone.json'), encodeTombstone(tomb));
       unlinkSync(join(evDir, files[0] as string)); // SIGKILL of the pruner in the middle of the removal
       expect((await s.inner.readLog('P')).diagnostics.some((d) => d.code === 'PRUNE_INCOMPLETE')).toBe(true);
       await expect(s.fresh().claim('C', { owner: 'w' })).rejects.toBeInstanceOf(TaskOrphanedError);

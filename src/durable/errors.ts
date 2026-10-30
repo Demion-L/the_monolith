@@ -269,10 +269,12 @@ export class PruneDecisionCorruptError extends DurableError {
     readonly file: string | null = null,
     readonly attempt: number | null = null,
     readonly published = false,
+    /** Why the register was not trusted, when the reason alone does not say (e.g. which datum contradicted a commit). */
+    readonly detail: string | null = null,
   ) {
     super(
       'PRUNE_DECISION_CORRUPT',
-      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}); nothing was deleted or cancelled.`,
+      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}${detail ? `; ${detail}` : ''}); nothing was deleted or cancelled.`,
     );
     this.name = 'PruneDecisionCorruptError';
   }

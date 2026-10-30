@@ -67,11 +67,24 @@ never deletes them automatically (FS-CLEAN-001).
 
 ## Durable State
 
-Durable State is merged but **not accepted**: its independent security review
-outcome is unknown. Findings F-1/F-2 were remediated in `02701d4` (merged by
-`e72e5f5`) but that fix has not been independently re-reviewed; concurrent
-adversarial mutation (TM-C) remains unsupported. See
-[DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REMEDIATION-REPORT.md),
+Durable State is merged but **not accepted**. Its independent security review is incomplete: the targeted review of
+acceptance criterion 23 has not been finished, and no full security acceptance is claimed.
+
+- **Threat models** (ADR-013): TM-A (trusted local project) is supported with limitations; TM-B (static hostile content)
+  is supported only partially; TM-C (concurrent adversarial mutation of directories, symlinks or file names while a
+  command runs) is **not supported**. Roll-forward and residue repair unlink by path after a boundary check, so a
+  same-user process that swaps a directory between the check and the `unlink` can redirect it.
+- **Findings F-1/F-2** (unchecked public prune; test seams in public constructors) were remediated in `02701d4` and
+  confirmed by the independent review DURABLE-SEC-002. Seam hygiene is API hygiene, not a boundary against code in the
+  same process.
+- **O-1** (a committed prune register forged by hand was rolled forward without the F-1 preconditions) is fixed by
+  DURABLE-SEC-003: before the first `unlink`, `prune()` audits the data still on disk against the commit. A register is
+  not self-proving (its checksum is unkeyed), so a person who can write into the store directory can still forge a
+  register *and* delete the store's own files directly; that is outside the supported models. If the audit refuses, it
+  reports `PruneDecisionCorruptError` (`commit-audit`) and removes nothing; an operator must decide.
+- Not claimed: durability across OS crash or power loss, network filesystems.
+
+See the [DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REMEDIATION-REPORT.md),
 `AGENTS.md` and
 [Durable State Retention Safety](../architecture/DURABLE-STATE-RETENTION-SAFETY.md).
 

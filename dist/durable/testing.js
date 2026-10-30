@@ -5,8 +5,8 @@ import { FsEventStore } from './fs-store.js';
 import { MemoryEventStore } from './memory-store.js';
 import { handOver, takeFsSeams, takeMemorySeams } from './seams.js';
 export function createFsStoreWithSeams(opts) {
-    const { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, ...pub } = opts;
-    handOver('fs', { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault });
+    const { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, removeFile, ...pub } = opts;
+    handOver('fs', { ops, beforePublish, afterListing, earlyPruneCheck, maxPruneAttempts, registerListing, skipPrunePrecondition, readFault, removeFile });
     try {
         return new FsEventStore(pub);
     }

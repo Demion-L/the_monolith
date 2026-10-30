@@ -166,8 +166,12 @@ export declare class PruneDecisionCorruptError extends DurableError {
     readonly file: string | null;
     readonly attempt: number | null;
     readonly published: boolean;
+    /** Why the register was not trusted, when the reason alone does not say (e.g. which datum contradicted a commit). */
+    readonly detail: string | null;
     readonly retryable = false;
-    constructor(taskId: string, reason: PruneCorruptReason, file?: string | null, attempt?: number | null, published?: boolean);
+    constructor(taskId: string, reason: PruneCorruptReason, file?: string | null, attempt?: number | null, published?: boolean, 
+    /** Why the register was not trusted, when the reason alone does not say (e.g. which datum contradicted a commit). */
+    detail?: string | null);
 }
 /** The attempt number would exceed `MAX_PRUNE_ATTEMPTS`. A liveness limit: numbers are never reused or reset. */
 export declare class PruneAttemptLimitError extends DurableError {

@@ -14,4 +14,21 @@ export declare function tombstoneFor(state: TaskState, prunedAt: string): Tombst
  * clock and is not compared.
  */
 export declare function tombstoneProblem(taskId: string, events: readonly TaskEvent[], t: Tombstone): string | null;
+/**
+ * Why a COMMITTED prune must not be rolled forward over the data that is still on disk, or `null` when it may.
+ * `events` are the surviving events with `seq <= t.headSeq`, each verified on its own (`parseEvent`), at most one per seq.
+ * Events beyond the committed head are stragglers of appends that lost against the commit (G2 reports them as pruned but
+ * leaves the file): they are deleted with the rest and are not evidence either way.
+ *
+ * What the data can prove depends on whether the roll-forward has begun. It publishes `tombstone.json` BEFORE its first
+ * unlink, so a log with a part missing and no `tombstone.json` was not removed by a roll-forward:
+ *  - `deletionStarted` is false: nothing may be missing. The whole prefix `1..headSeq` must be there and is judged exactly
+ *    like a prepare (`tombstoneProblem`: a finished task with the tombstone's head). A register forged for an active task,
+ *    or one that names a head the log does not have, is caught here, before the first unlink;
+ *  - `deletionStarted` is true: a roll-forward deletes in directory order, so any part of the log may be gone and no check
+ *    may demand the whole of it. The head slot, if it survives, must be the head the commit names; a complete prefix is
+ *    judged as above; a partial one has nothing that contradicts the commit, and a part cannot prove the rest.
+ * Throws `LogCorruptError` when a complete prefix does not verify.
+ */
+export declare function committedProblem(taskId: string, events: readonly TaskEvent[], t: Tombstone, deletionStarted: boolean): string | null;
 //# sourceMappingURL=prune-check.d.ts.map

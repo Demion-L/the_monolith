@@ -27,6 +27,8 @@ export interface FsStoreSeams {
    * writer wins) over logs that are not prunable. Never a production setting.
    */
   skipPrunePrecondition?: boolean;
+  /** replaces `fs.unlinkSync` in the roll-forward of a committed prune, to stop it after a chosen number of removals. */
+  removeFile?: (abs: string) => void;
   /** simulate an I/O error on reading a file of the store: return an errno code (`'EIO'`) to fail with, or nothing. */
   readFault?: (abs: string) => string | null | undefined;
 }

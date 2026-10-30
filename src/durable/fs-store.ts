@@ -66,7 +66,7 @@ import {
   type Obs,
   type RegisterIO,
 } from './register.js';
-import { tombstoneProblem } from './prune-check.js';
+import { committedProblem, tombstoneProblem } from './prune-check.js';
 import { takeFsSeams, type FsStoreSeams } from './seams.js';
 import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent, verifyChain } from './log.js';
 import { GENESIS_HASH, MAX_PRUNE_ATTEMPTS, type DecisionBy, type PruneOutcome, type PruneState } from './types.js';
@@ -716,7 +716,62 @@ export class FsEventStore implements EventStore {
       }
     }
     if (committed === null) throw new StoreIoError(`the prune state of task "${taskId}" kept changing; try again.`);
+    this.auditCommitted(taskId, committed);
     return this.rollForward(taskId, committed);
+  }
+
+  /**
+   * The events (and covered segment lines) still on disk with `seq <= upTo`, each verified on its own; no gap is an error,
+   * because a roll-forward that was interrupted leaves gaps. A segment wins over a loose copy of the same slot (the reader's
+   * rule). Anything that cannot be read safely or does not verify throws: the audit then refuses instead of guessing.
+   */
+  private survivingEvents(taskId: string, upTo: number): TaskEvent[] {
+    const bySeq = new Map<number, TaskEvent>();
+    const segs: Array<{ name: string; from: number; to: number }> = [];
+    for (const e of this.listDir(this.segmentsDir(taskId)) ?? []) {
+      const m = SEGMENT_NAME.exec(e.name);
+      if (m && e.isFile() && Number(m[1]) <= upTo) segs.push({ name: e.name, from: Number(m[1]), to: Number(m[2]) });
+    }
+    for (const e of this.listDir(this.eventsDir(taskId)) ?? []) {
+      const m = EVENT_NAME.exec(e.name);
+      if (!m || !e.isFile() || Number(m[1]) > upTo) continue; // only regular event files are ever read, and nothing past the head is evidence
+      const seq = Number(m[1]);
+      const content = this.readManaged(join(this.eventsDir(taskId), e.name), `event ${e.name}`, MAX_EVENT_BYTES + 4096, taskId);
+      if (content === null) continue; // removed meanwhile
+      const ev = parseEvent(content.trim(), taskId, seq);
+      if (ev.seq !== seq) throw new LogCorruptError(taskId, seq, `file ${e.name} holds event ${ev.seq}`);
+      bySeq.set(seq, ev);
+    }
+    for (const g of segs) {
+      const content = this.readManaged(join(this.segmentsDir(taskId), g.name), `segment ${g.name}`, MAX_SEGMENT_BYTES, taskId);
+      if (content === null) continue;
+      const lines = content.split('\n').filter((l) => l.length > 0);
+      if (lines.length !== g.to - g.from + 1) throw new LogCorruptError(taskId, g.from, `segment ${g.name} holds ${lines.length} events, its name says ${g.to - g.from + 1}`);
+      lines.forEach((line, i) => {
+        const ev = parseEvent(line, taskId, g.from + i);
+        if (ev.seq !== g.from + i) throw new LogCorruptError(taskId, ev.seq, `segment ${g.name} is not contiguous`);
+        if (ev.seq <= upTo) bySeq.set(ev.seq, ev);
+      });
+    }
+    return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  }
+
+  /**
+   * O-1: a committed register is not self-proving (its checksum is unkeyed), so the data still on disk must not contradict
+   * it before anything is unlinked. See `committedProblem` for what a partly removed log can and cannot prove. Reads only.
+   */
+  private auditCommitted(taskId: string, tombstone: Tombstone): void {
+    const published = this.registerIO(taskId).tombstone();
+    if (published.k === 'ioerr') throw new StoreIoError(`cannot read tombstone.json of task "${taskId}": ${published.reason}; nothing was changed. Try again.`);
+    const deletionStarted = published.k !== 'absent'; // the roll-forward publishes it before its first unlink
+    let problem: string | null;
+    try {
+      problem = committedProblem(taskId, this.survivingEvents(taskId, tombstone.headSeq), tombstone, deletionStarted);
+    } catch (err) {
+      if (err instanceof LogCorruptError) problem = err.message;
+      else throw err;
+    }
+    if (problem !== null) throw new PruneDecisionCorruptError(taskId, 'commit-audit', null, null, false, problem);
   }
 
   /**
@@ -745,7 +800,7 @@ export class FsEventStore implements EventStore {
           continue;
         }
         try {
-          fs.unlinkSync(join(dir, e.name));
+          (this.seams.removeFile ?? fs.unlinkSync)(join(dir, e.name));
           removed++;
         } catch (err) {
           if (errno(err) !== 'ENOENT') throw new StoreIoError(`cannot remove ${e.name}: ${(err as Error).message}`, err);

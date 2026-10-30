@@ -28,4 +28,5 @@ export { createInitialState, CoordinatoriumError, StateCorruptedError, StateSche
 export { SafeWriteError } from './root/index.js';
 export type { WriteErrorCode, WriteWarning, WriteWarningCode, PublicationState } from './root/index.js';
 export * as durable from './durable/index.js';
+export * as ideas from './ideas/index.js';
 //# sourceMappingURL=index.d.ts.map

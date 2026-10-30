@@ -71,6 +71,7 @@ function buildVars(config) {
 const GITKEEP_DIRS = [
     'memory/working/phases',
     'memory/execution/traces',
+    'memory/long-term/ideas',
     'protocols/engineering',
     'learning/mistakes/architecture',
     'learning/mistakes/dependencies',

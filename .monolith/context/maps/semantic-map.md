@@ -29,6 +29,7 @@ Where authoritative truth lives for each semantic domain.
 | Engineering Gate definition | `memory/long-term/engineering-gate.md` |
 | Execution log          | `memory/long-term/execution-history.md` |
 | Error records          | `memory/errors/ERR-*.md`                |
+| Captured ideas (`IDEA-NNN`) | `memory/long-term/ideas/IDEA-*.md`, written only by `monolith idea add` |
 
 ---
 

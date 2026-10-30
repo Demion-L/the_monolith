@@ -142,6 +142,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/root/write-artifacts.ts`     | Read-only listing of leftover write files (`state.json.tmp.*`, `*.creating.*`, `*.recovery`); used by `brief` and `validate` as a warning, never deletes (DEC-B2-02) |
 | `src/root/safe-write.ts`          | The safe-write primitive (SEC-001B.2, ADR-012): write boundary, `createFile`/`replaceFile` (publication of files), publication states, identity-checked cleanup of its own temp files. Lock release and stale-lock recovery (`lock.ts`) are separate, path-based `unlink`s |
 | `src/durable/`                    | **Durable State** (ADR-017, DURABLE-001): domain-neutral, crash-safe execution record for long-running agentic tasks — hash-chained event log per task (`log.ts`), pure projection (`projection.ts`), `DurableTasks` API (`runtime.ts`), resume assessment (`assess.ts`), retention (`retention.ts`), backends `fs-store.ts` / `memory-store.ts`, `cli.ts` |
+| `src/ideas/`                      | **Manual Idea Capture** (IDEA-001A): `store.ts` (ids by exclusive create, safe read/write), `format.ts` (Markdown + frontmatter), `cli.ts` (`monolith idea add\|list\|show`), `types.ts` |
 | `src/scripts/durable-demo.ts`     | Multi-process demonstration: a task survives SIGKILL of its first process and is continued days later by another (`direct` / `adaptive` / `recovery`) |
 | `src/validate/index.ts`           | `monolith validate` — static instance checks, never executes project code |
 | `src/index.ts`                    | Package entrypoint — re-exports Scriptorium, Graph, Coordinatorium   |
@@ -401,6 +402,30 @@ file reads/writes are bounded and checked (SEC-001B.1 / .1-R / .2), but
 check-then-use races remain (SEC-001B.3, OPEN — see
 `.monolith/memory/long-term/tech-debt.md`);
 `monolith context <topic>` and JSON output do not exist.
+
+---
+
+## Idea Capture (IDEA-001A)
+
+```
+monolith idea add --title "..." --description "..." [--context "..."]
+monolith idea list
+monolith idea show <id>
+```
+
+Saves a deferred thought as `<monolithRoot>/memory/long-term/ideas/IDEA-NNN.md` (status
+`inbox | planned | archived`, set to `inbox` on creation) without touching the
+current task, `active.md` or `state.json`. Not a task, not a hypothesis, not part
+of Durable State; no LLM. Ids are allocated by exclusive file creation, so
+concurrent `add` runs cannot collide or overwrite. Reads and writes use the
+`src/root/` safe-file primitives (symlinks refused); a concurrent directory swap
+is not defended against (SEC-001B.3). Details: `docs/reference/cli.md` →
+`monolith idea`. Routing: intent `CAPTURE_IDEA` (`routing-map.md`, Table 8) — an
+explicit user request to save an idea permits `monolith idea add`; an assistant
+uses only the CLI (never picks a path, never writes or edits idea files by hand)
+and capturing changes no story, mission, roadmap or focus. Open follow-ups:
+`IDEA-STATUS-001` (no status command), `IDEA-ID-001` (an id can be reissued
+after its highest-numbered file is deleted) — `tech-debt.md`.
 
 ---
 

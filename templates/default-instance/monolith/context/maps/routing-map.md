@@ -145,3 +145,20 @@ Privacy rules: `{{MONOLITH_ROOT}}/context/models/privacy-classification.md`
 | Multiple task types applicable | Use the most restrictive cognitive mode.      |
 | No matching skill              | Execute task inline without a skill template. |
 | Sensitive data in context      | Override to local model tier.                 |
+
+---
+
+## Table 8 — Knowledge Intent → Canonical Destination
+
+Declarative contract for saving knowledge. It points at existing stores only; it
+creates no directory, template or registry. Where truth lives is defined by
+`semantic-map.md`.
+
+| Knowledge Intent | Canonical Destination | Required Context | Index |
+| ---------------- | --------------------- | ---------------- | ----- |
+| `CAPTURE_IDEA`   | The MONOLITH CLI only: `monolith idea add --title "..." --description "..." [--context "..."]`, which stores `{{MONOLITH_ROOT}}/memory/long-term/ideas/IDEA-NNN.md`. An assistant never chooses the path, never writes or edits an idea file by hand and creates no alternative idea file. An explicit user request to save an idea authorizes the call; the assistant does not capture ideas on its own initiative. Capturing changes no active story, mission, roadmap or focus | none | `monolith idea list` (the CLI is the registry) |
+
+**Rules**
+
+1. An intent not listed here has no route: ask the owner, write nothing, create no directory.
+2. Save only into the destination named above. Do not create a substitute.

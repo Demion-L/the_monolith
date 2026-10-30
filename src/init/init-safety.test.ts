@@ -194,3 +194,52 @@ describe('monolith init — .gitkeep overwrite safety', () => {
     expect(readFileSync(gitkeepPath, 'utf8')).toBe(contentAfterFirstInit);
   });
 });
+
+describe('monolith init — idea storage (IDEA-001A)', () => {
+  it('creates the ideas directory with a .gitkeep', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    expect(readFileSync(join(dir, '.monolith', 'memory', 'long-term', 'ideas', '.gitkeep'), 'utf8')).toBe('');
+  });
+
+  it('a repeated init is refused and leaves an existing idea byte-for-byte unchanged', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const idea = join(dir, '.monolith', 'memory', 'long-term', 'ideas', 'IDEA-001.md');
+    writeFileSync(idea, 'my idea, not to be touched\n', 'utf8');
+    const filesBefore = listAllFiles(dir);
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(readFileSync(idea, 'utf8')).toBe('my idea, not to be touched\n');
+    expect(listAllFiles(dir)).toEqual(filesBefore);
+  });
+
+  it('a fresh instance accepts and returns an idea', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const { ideaStore, addIdea, getIdea } = await import('../ideas/index.js');
+    const { idea } = addIdea(ideaStore(dir), { title: 'after init', description: 'works' });
+    expect(idea.id).toBe('IDEA-001');
+    expect(getIdea(ideaStore(dir), 'IDEA-001').description).toBe('works');
+  });
+});
+
+describe('monolith init — CAPTURE_IDEA routing contract (IDEA-001A-F)', () => {
+  it('ships the intent in routing-map, semantic-map, AGENTS.md and CLAUDE.md, with the path substituted', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const read = (...p: string[]) => readFileSync(join(dir, ...p), 'utf8');
+    const routing = read('.monolith', 'context', 'maps', 'routing-map.md');
+    expect(routing).toContain('Table 8');
+    expect(routing).toContain('`CAPTURE_IDEA`');
+    expect(routing).toContain('.monolith/memory/long-term/ideas/IDEA-NNN.md');
+    expect(routing).toContain('never writes or edits an idea file by hand');
+    expect(read('.monolith', 'context', 'maps', 'semantic-map.md')).toContain('memory/long-term/ideas/IDEA-*.md');
+    expect(read('AGENTS.md')).toContain('.monolith/memory/long-term/ideas/');
+    const claude = read('CLAUDE.md');
+    expect(claude).toContain('CAPTURE_IDEA');
+    for (const f of ['AGENTS.md', 'CLAUDE.md', '.monolith/context/maps/routing-map.md']) expect(read(f)).not.toMatch(/\{\{[A-Z_]+\}\}/);
+    expect(existsSync(join(dir, '.monolith', 'memory', 'ideas'))).toBe(false);
+  });
+});

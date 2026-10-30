@@ -19,6 +19,14 @@ Before starting any task, read in order:
 
 ---
 
+## Capturing Ideas
+
+When the user explicitly asks to save an idea (`CAPTURE_IDEA`, Table 8 in `{{MONOLITH_ROOT}}/context/maps/routing-map.md`), run
+`monolith idea add --title "..." --description "..." [--context "..."]` and continue the current task.
+Use only that command: do not pick a path, and do not create or edit idea files directly. It changes no story, mission or focus.
+
+---
+
 ## Skill Activation
 
 When the user's request matches a trigger phrase, **read the skill file before taking any action**.

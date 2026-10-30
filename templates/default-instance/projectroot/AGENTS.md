@@ -100,6 +100,24 @@ finished mission's history regardless.
 
 ---
 
+## Idea Capture
+
+```
+monolith idea add --title "..." --description "..." [--context "..."]
+monolith idea list
+monolith idea show <id>
+```
+
+When a thought comes up that does not belong to the current task, save it with
+`monolith idea add` and keep working. Ideas are Markdown files in
+`{{MONOLITH_ROOT}}/memory/long-term/ideas/` (status `inbox`, `planned` or `archived`). They
+change neither the active story nor any mission, and need never become a task.
+An AI assistant saves an idea only when the user explicitly asks, and only through
+`monolith idea add` (intent `CAPTURE_IDEA`, routing-map Table 8): it never chooses a
+path and never writes or edits idea files directly.
+
+---
+
 ## Core Rule
 
 One story at a time. Vertical slice first. No autonomous capability expansion.

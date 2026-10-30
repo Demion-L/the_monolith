@@ -28,7 +28,7 @@ beforeEach(() => {
   base = mkdtempSync(join(tmpdir(), 'monolith-idea-'));
   project = join(base, 'project');
   mon = join(project, '.monolith');
-  ideasDir = join(mon, 'memory', 'ideas');
+  ideasDir = join(mon, 'memory', 'long-term', 'ideas');
   outside = join(base, 'outside');
   mkdirSync(mon, { recursive: true });
   mkdirSync(outside);
@@ -320,14 +320,14 @@ describe('corrupt idea files', () => {
 
 describe('path and symlink safety', () => {
   it('refuses to add when the ideas directory is a symlink (outside) and writes nothing outside', () => {
-    mkdirSync(join(mon, 'memory'), { recursive: true });
+    mkdirSync(join(mon, 'memory', 'long-term'), { recursive: true });
     symlinkSync(outside, ideasDir);
     expect(codeOf(() => addIdea(store(), { title: 't', description: 'd' }))).toBe('IDEA_UNSAFE_PATH');
     expect(readdirSync(outside)).toEqual([]);
   });
 
   it('refuses a symlink that stays inside the project, too', () => {
-    mkdirSync(join(mon, 'memory'), { recursive: true });
+    mkdirSync(join(mon, 'memory', 'long-term'), { recursive: true });
     mkdirSync(join(project, 'elsewhere'));
     symlinkSync(join(project, 'elsewhere'), ideasDir);
     expect(codeOf(() => addIdea(store(), { title: 't', description: 'd' }))).toBe('IDEA_UNSAFE_PATH');
@@ -335,7 +335,7 @@ describe('path and symlink safety', () => {
   });
 
   it('refuses to list a symlinked ideas directory', () => {
-    mkdirSync(join(mon, 'memory'), { recursive: true });
+    mkdirSync(join(mon, 'memory', 'long-term'), { recursive: true });
     symlinkSync(outside, ideasDir);
     expect(codeOf(() => listIdeas(store()))).toBe('IDEA_UNSAFE_PATH');
   });
@@ -375,7 +375,7 @@ describe('path and symlink safety', () => {
     mkdirSync(join(project, 'custom'));
     writeFileSync(join(project, 'monolith.config.json'), JSON.stringify({ monolithRoot: 'custom' }));
     addIdea(ideaStore(project), { title: 't', description: 'd' });
-    expect(existsSync(join(project, 'custom', 'memory', 'ideas', 'IDEA-001.md'))).toBe(true);
+    expect(existsSync(join(project, 'custom', 'memory', 'long-term', 'ideas', 'IDEA-001.md'))).toBe(true);
     expect(existsSync(ideasDir)).toBe(false);
   });
 });
@@ -502,5 +502,45 @@ describe('CLI handlers', () => {
 
   it('parseAddArgs accepts a value that merely looks like text starting with dashes', () => {
     expect(parseAddArgs(['--title', '-x', '--description', '--- hr'])).toEqual({ title: '-x', description: '--- hr' });
+  });
+});
+
+describe('canonical location memory/long-term/ideas (IDEA-001A-F)', () => {
+  it('lives under memory/long-term and leaves the sibling long-term documents alone', () => {
+    const lt = join(mon, 'memory', 'long-term');
+    mkdirSync(lt, { recursive: true });
+    for (const n of ['decisions.md', 'tech-debt.md', 'IDEA-007.md']) writeFileSync(join(lt, n), `# ${n}\n`);
+    const before = snapshot(lt);
+    const { path } = addIdea(store(), { title: 't', description: 'd' });
+    expect(path).toBe(join(lt, 'ideas', 'IDEA-001.md'));
+    // a stray IDEA-007.md next to the registry is not part of it
+    expect(listIdeas(store()).map((e) => (e.ok ? e.idea.id : e.id))).toEqual(['IDEA-001']);
+    for (const [p, c] of Object.entries(before)) expect(readFileSync(p, 'utf8')).toBe(c);
+  });
+
+  it('works in an instance that predates the directory (no ideas dir, long-term present)', () => {
+    mkdirSync(join(mon, 'memory', 'long-term'), { recursive: true });
+    expect(listIdeas(store())).toEqual([]);
+    expect(addIdea(store(), { title: 't', description: 'd' }).idea.id).toBe('IDEA-001');
+  });
+
+  it('refuses a symlinked long-term directory', () => {
+    mkdirSync(join(mon, 'memory'), { recursive: true });
+    symlinkSync(outside, join(mon, 'memory', 'long-term'));
+    expect(codeOf(() => addIdea(store(), { title: 't', description: 'd' }))).toBe('IDEA_UNSAFE_PATH');
+    expect(codeOf(() => listIdeas(store()))).toBe('IDEA_UNSAFE_PATH');
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it('does not use the previous location memory/ideas', () => {
+    addIdea(store(), { title: 't', description: 'd' });
+    expect(existsSync(join(mon, 'memory', 'ideas'))).toBe(false);
+  });
+
+  it('IDEA-ID-001 (open): an id is reissued once its highest-numbered file is deleted', () => {
+    addIdea(store(), { title: 'a', description: 'd' });
+    addIdea(store(), { title: 'b', description: 'd' });
+    rmSync(join(ideasDir, 'IDEA-002.md'));
+    expect(addIdea(store(), { title: 'c', description: 'd' }).idea.id).toBe('IDEA-002');
   });
 });

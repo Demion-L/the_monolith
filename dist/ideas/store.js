@@ -1,5 +1,5 @@
 /**
- * Idea store (IDEA-001A): one Markdown file per idea in `<monolithRoot>/memory/ideas/`.
+ * Idea store (IDEA-001A): one Markdown file per idea in `<monolithRoot>/memory/long-term/ideas/`.
  *
  * - Writes go through the safe-write primitive in `src/root/` (PROJECT scope:
  *   a symlink anywhere below the project root is refused; the file is created
@@ -19,7 +19,7 @@ import { join } from 'path';
 import { RootContainmentError, SafeWriteError, assertContainedFile, createFile, openParent, projectBoundary, readBoundedFile, resolveMonolithRoot, } from '../root/index.js';
 import { formatIdeaId, ideaFileName, ideaIdFromFileName, ideaNumber, isIdeaId, parseIdea, serializeIdea, validateNewIdea } from './format.js';
 import { IDEA_LIMITS, IdeaError } from './types.js';
-const IDEAS_REL = 'memory/ideas';
+const IDEAS_REL = 'memory/long-term/ideas';
 const MAX_ALLOCATION_ATTEMPTS = 64;
 /** Resolve (and contain) the ideas directory of the instance rooted at `targetDir`. */
 export function ideaStore(targetDir) {
@@ -64,7 +64,7 @@ function scanIds(store) {
 }
 export function addIdea(store, input, opts = {}) {
     validateNewIdea(input);
-    // `add` only creates `memory/ideas` inside an existing instance; it never invents `.monolith/`.
+    // `add` only creates `memory/long-term/ideas` inside an existing instance; it never invents `.monolith/`.
     let rootStat;
     try {
         rootStat = lstatSync(store.rootAbs);

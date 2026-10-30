@@ -176,7 +176,7 @@ while working on something else, without changing the current task. An idea is
 not a task, not a hypothesis and not a Durable State record; it need not ever
 become anything.
 
-- **Storage:** one Markdown file per idea, `<monolithRoot>/memory/ideas/IDEA-NNN.md`
+- **Storage:** one Markdown file per idea, `<monolithRoot>/memory/long-term/ideas/IDEA-NNN.md`
   (`monolith init` creates the directory; `idea add` creates it in an existing
   instance that predates it). Frontmatter (`type: idea`, `id`, `title`, `status`,
   `createdAt`, optional `context` and `tags`) followed by `## Description` and
@@ -184,14 +184,17 @@ become anything.
   non-ASCII survive; a person can edit a file by hand (a plain unquoted value is
   accepted). Files are meant to be committed.
 - **Status:** `inbox` (set on creation), `planned`, `archived`. There is no
-  status command and nothing changes status automatically; edit the `status:`
-  line. Prefer `archived` to deleting a file.
+  status command yet and nothing changes status automatically (follow-up
+  `IDEA-STATUS-001`, `tech-debt.md`). Until then a *person* may change the
+  `status:` line by hand; an AI assistant must not edit idea files, it only uses
+  `monolith idea add|list|show` (routing intent `CAPTURE_IDEA`, `routing-map.md`
+  Table 8). Prefer `archived` to deleting a file.
 - **Ids:** `IDEA-001`, `IDEA-002`, … (three digits, more when needed). The next
   number is only a candidate: the file is created exclusively (`link()`), and if
   another process took the number first, the next one is tried, so two
   concurrent `idea add` runs never publish the same id and never overwrite each
   other. Ids are not reused while their file exists; deleting the
-  highest-numbered file by hand frees its number.
+  highest-numbered file by hand frees its number (open: `IDEA-ID-001`, `tech-debt.md`).
 - **Input:** `--title` is one line (at most 300 characters, no control
   characters); `--description` at most 100 000 and `--context` at most 20 000
   characters. Empty or whitespace-only values, unknown or repeated flags and

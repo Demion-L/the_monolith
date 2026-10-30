@@ -1,5 +1,5 @@
 /**
- * Idea store (IDEA-001A): one Markdown file per idea in `<monolithRoot>/memory/ideas/`.
+ * Idea store (IDEA-001A): one Markdown file per idea in `<monolithRoot>/memory/long-term/ideas/`.
  *
  * - Writes go through the safe-write primitive in `src/root/` (PROJECT scope:
  *   a symlink anywhere below the project root is refused; the file is created

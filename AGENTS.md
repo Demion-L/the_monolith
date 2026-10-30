@@ -413,15 +413,19 @@ monolith idea list
 monolith idea show <id>
 ```
 
-Saves a deferred thought as `<monolithRoot>/memory/ideas/IDEA-NNN.md` (status
+Saves a deferred thought as `<monolithRoot>/memory/long-term/ideas/IDEA-NNN.md` (status
 `inbox | planned | archived`, set to `inbox` on creation) without touching the
 current task, `active.md` or `state.json`. Not a task, not a hypothesis, not part
 of Durable State; no LLM. Ids are allocated by exclusive file creation, so
 concurrent `add` runs cannot collide or overwrite. Reads and writes use the
 `src/root/` safe-file primitives (symlinks refused); a concurrent directory swap
 is not defended against (SEC-001B.3). Details: `docs/reference/cli.md` →
-`monolith idea`. No Table 8 route exists for ideas in `routing-map.md`; none was
-added.
+`monolith idea`. Routing: intent `CAPTURE_IDEA` (`routing-map.md`, Table 8) — an
+explicit user request to save an idea permits `monolith idea add`; an assistant
+uses only the CLI (never picks a path, never writes or edits idea files by hand)
+and capturing changes no story, mission, roadmap or focus. Open follow-ups:
+`IDEA-STATUS-001` (no status command), `IDEA-ID-001` (an id can be reissued
+after its highest-numbered file is deleted) — `tech-debt.md`.
 
 ---
 

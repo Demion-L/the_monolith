@@ -68,7 +68,7 @@ describe('concurrent idea capture across processes', () => {
     const reported = results.flatMap((r) => JSON.parse(r.out.trim()) as string[]);
     expect(new Set(reported).size).toBe(PROCS * EACH);
 
-    const dir = join(project, '.monolith', 'memory', 'ideas');
+    const dir = join(project, '.monolith', 'memory', 'long-term', 'ideas');
     const files = readdirSync(dir).sort();
     expect(files).toEqual(Array.from({ length: PROCS * EACH }, (_, i) => `IDEA-${String(i + 1).padStart(3, '0')}.md`));
     expect(files.some((f) => f.includes('.tmp.'))).toBe(false);

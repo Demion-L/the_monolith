@@ -3,7 +3,7 @@
  * `monolith idea ...` command handlers (IDEA-001A).
  *
  * Thin layer: strict flag parsing, store calls, output. No LLM, no network;
- * `add` writes exactly one new file under `<monolithRoot>/memory/ideas/` and
+ * `add` writes exactly one new file under `<monolithRoot>/memory/long-term/ideas/` and
  * touches no other state (not `active.md`, not `state.json`); `list` and `show` write nothing.
  */
 import { reportWriteWarning } from '../root/index.js';

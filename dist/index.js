@@ -24,5 +24,5 @@ export { SafeWriteError } from './root/index.js';
 // Namespaced: its error taxonomy deliberately shares names (e.g. ValidationError) with Coordinatorium's.
 // EXPERIMENTAL. Security acceptance pending (see AGENTS.md → Durable State); the API may change in any alpha.
 export * as durable from './durable/index.js';
-// Manual Idea Capture (IDEA-001A) — deferred thoughts saved as Markdown under <monolithRoot>/memory/ideas/.
+// Manual Idea Capture (IDEA-001A) — deferred thoughts saved as Markdown under <monolithRoot>/memory/long-term/ideas/.
 export * as ideas from './ideas/index.js';

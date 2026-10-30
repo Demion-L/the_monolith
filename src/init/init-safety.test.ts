@@ -194,3 +194,33 @@ describe('monolith init — .gitkeep overwrite safety', () => {
     expect(readFileSync(gitkeepPath, 'utf8')).toBe(contentAfterFirstInit);
   });
 });
+
+describe('monolith init — idea storage (IDEA-001A)', () => {
+  it('creates the ideas directory with a .gitkeep', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    expect(readFileSync(join(dir, '.monolith', 'memory', 'ideas', '.gitkeep'), 'utf8')).toBe('');
+  });
+
+  it('a repeated init is refused and leaves an existing idea byte-for-byte unchanged', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const idea = join(dir, '.monolith', 'memory', 'ideas', 'IDEA-001.md');
+    writeFileSync(idea, 'my idea, not to be touched\n', 'utf8');
+    const filesBefore = listAllFiles(dir);
+
+    await expect(runInit({ targetDir: dir, yes: true })).rejects.toThrow(InitConflictError);
+
+    expect(readFileSync(idea, 'utf8')).toBe('my idea, not to be touched\n');
+    expect(listAllFiles(dir)).toEqual(filesBefore);
+  });
+
+  it('a fresh instance accepts and returns an idea', async () => {
+    const dir = makeTempDir();
+    await runInit({ targetDir: dir, yes: true });
+    const { ideaStore, addIdea, getIdea } = await import('../ideas/index.js');
+    const { idea } = addIdea(ideaStore(dir), { title: 'after init', description: 'works' });
+    expect(idea.id).toBe('IDEA-001');
+    expect(getIdea(ideaStore(dir), 'IDEA-001').description).toBe('works');
+  });
+});

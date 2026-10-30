@@ -11,6 +11,7 @@
  *   monolith mission    — manage Tactical Coordinatorium mission lifecycle
  *   monolith brief       — deterministic, bounded project context summary
  *   monolith durable     — inspect/verify/maintain Durable State task logs
+ *   monolith idea        — capture and recall deferred ideas (add/list/show)
  *   monolith ui          — launch Mission Control (read-only dashboard)
  */
 import { MONOLITH_VERSION } from '../version.js';
@@ -38,6 +39,8 @@ Commands:
               accepted ADRs) — read-only, no LLM/network/ERG involved.
   durable     Inspect and maintain Durable State (long-running task logs):
               list | show | assess | packet | verify | retention.
+  idea        Capture a deferred thought without leaving the current task, and
+              recall it later: add | list | show. Plain Markdown files, no LLM.
   ui          Launch Mission Control, the read-only web dashboard, on
               127.0.0.1 (default port 4173). 'ui dev' adds Vite hot reload
               (source checkout only). See 'monolith ui --help'.
@@ -59,6 +62,11 @@ Durable usage:
   monolith durable show|assess|packet <taskId>
   monolith durable verify [taskId]            (exit 2 if a log fails verification)
   monolith durable retention --retain-days N [--compact-after N] [--apply]
+
+Idea usage:
+  monolith idea add --title "..." --description "..." [--context "..."]
+  monolith idea list
+  monolith idea show <id>
 
 UI usage:
   monolith ui [--port N]
@@ -139,6 +147,11 @@ async function main() {
         case 'durable': {
             const { runDurableCommand } = await import('../durable/cli.js');
             await runDurableCommand(args.slice(1));
+            break;
+        }
+        case 'idea': {
+            const { runIdeaCommand } = await import('../ideas/cli.js');
+            await runIdeaCommand(args.slice(1));
             break;
         }
         case 'ui': {

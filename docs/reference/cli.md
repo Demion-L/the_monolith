@@ -21,6 +21,7 @@ monolith init       # scaffold a new instance from templates/ (implemented)
 monolith validate   # check instance integrity (implemented, see below)
 monolith mission    # Tactical Coordinatorium: start|list|show|finish|checkpoint|checkpoints (implemented, experimental, ADR-008)
 monolith brief      # deterministic, read-only project-state summary [--max-chars N] [--strict] [--reconcile] (implemented)
+monolith idea       # capture and recall deferred ideas: add|list|show (implemented, IDEA-001A)
 monolith durable    # Durable State: list|show|assess|packet|verify|retention (implemented; see below)
 monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented)
 monolith ui dev     # Mission Control with Vite hot reload [--port N] (implemented, source checkout only)
@@ -161,6 +162,55 @@ evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Proje
   SEC-001A; TOCTOU tracked as SEC-001B, open). An absent `monolith.config.json`
   means the default `.monolith`.
 - `monolith context <topic>` is not implemented.
+
+## `monolith idea`
+
+```
+monolith idea add --title "..." --description "..." [--context "..."]
+monolith idea list
+monolith idea show <id>
+```
+
+*Capture now. Continue working. Recall later.* Saves a thought that came up
+while working on something else, without changing the current task. An idea is
+not a task, not a hypothesis and not a Durable State record; it need not ever
+become anything.
+
+- **Storage:** one Markdown file per idea, `<monolithRoot>/memory/ideas/IDEA-NNN.md`
+  (`monolith init` creates the directory; `idea add` creates it in an existing
+  instance that predates it). Frontmatter (`type: idea`, `id`, `title`, `status`,
+  `createdAt`, optional `context` and `tags`) followed by `## Description` and
+  the text exactly as given. Strings are JSON-quoted, so quotes, newlines and
+  non-ASCII survive; a person can edit a file by hand (a plain unquoted value is
+  accepted). Files are meant to be committed.
+- **Status:** `inbox` (set on creation), `planned`, `archived`. There is no
+  status command and nothing changes status automatically; edit the `status:`
+  line. Prefer `archived` to deleting a file.
+- **Ids:** `IDEA-001`, `IDEA-002`, … (three digits, more when needed). The next
+  number is only a candidate: the file is created exclusively (`link()`), and if
+  another process took the number first, the next one is tried, so two
+  concurrent `idea add` runs never publish the same id and never overwrite each
+  other. Ids are not reused while their file exists; deleting the
+  highest-numbered file by hand frees its number.
+- **Input:** `--title` is one line (at most 300 characters, no control
+  characters); `--description` at most 100 000 and `--context` at most 20 000
+  characters. Empty or whitespace-only values, unknown or repeated flags and
+  stray arguments are refused before anything is written.
+- **`list`:** ordered by number; shows id, status, title. Prints `No ideas.` when
+  empty. A file that cannot be read as an idea is listed as `[unreadable]` with
+  the reason, left untouched, and makes the command exit 2.
+- **`show <id>`:** prints the full content. Unknown id: `No idea IDEA-NNN.`;
+  malformed id: error; unreadable file: error naming the reason. Exit 1.
+- **Writes:** `add` creates exactly one new file. `list` and `show` write nothing.
+  Neither touches `active.md`, `state.json` or any mission.
+- **Safety:** reads and writes use the same safe-file primitives as `state.json`
+  (`src/root/`): the instance root is contained in the project, a symlink in any
+  component of the path is refused (also one that stays inside the project), an
+  existing file is never overwritten, a hard-linked or special file is not read.
+  A concurrent swap of directories by another local actor is **not** defended
+  against (SEC-001B.3; threat model TM-C is unsupported).
+- No LLM, network, search, reminders or automatic idea detection. Library entry:
+  `import { ideas } from '@latysh-development/monolith'`.
 
 ## `monolith durable`
 

@@ -19,6 +19,7 @@ Available skills for MONOLITH.
 | current-status   | "status", "what are we working on"    | `.monolith/skills/current-status/SKILL.md`   |
 | global-status    | "global overview", "project status"   | `.monolith/skills/global-status/SKILL.md`    |
 | self-improvement | "analyze mistake", "learn from error" | `.monolith/skills/self-improvement/SKILL.md` |
+| idea-capture     | "save an idea", "show my ideas"       | `.monolith/skills/idea-capture/SKILL.md`     |
 
 ---
 

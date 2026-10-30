@@ -145,3 +145,15 @@ Privacy rules: `{{MONOLITH_ROOT}}/context/models/privacy-classification.md`
 | Multiple task types applicable | Use the most restrictive cognitive mode.      |
 | No matching skill              | Execute task inline without a skill template. |
 | Sensitive data in context      | Override to local model tier.                 |
+
+---
+
+## Table 8 — Knowledge Intent → Canonical Destination
+
+Declarative contract for saving long-term knowledge. It points at existing
+stores only; it creates no directory, template or registry. An intent not listed
+here has no route: ask the owner, write nothing.
+
+| Knowledge Intent | Canonical Destination | Required Context | Index | Owner repo |
+| ---------------- | --------------------- | ---------------- | ----- | ---------- |
+| `CAPTURE_IDEA`           | Only through the CLI: `monolith idea add --title … --description … [--context …]`. The CLI owns the storage location; an assistant never names, creates or writes it | `{{MONOLITH_ROOT}}/skills/idea-capture/SKILL.md` | `monolith idea list` | MONOLITH |

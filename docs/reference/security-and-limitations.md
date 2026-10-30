@@ -68,7 +68,11 @@ never deletes them automatically (FS-CLEAN-001).
 ## Durable State
 
 Durable State is merged but **not accepted**: its independent security review
-outcome is unknown and findings F-1/F-2 remain open. See `AGENTS.md` and
+outcome is unknown. Findings F-1/F-2 were remediated in `02701d4` (merged by
+`e72e5f5`) but that fix has not been independently re-reviewed; concurrent
+adversarial mutation (TM-C) remains unsupported. See
+[DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REMEDIATION-REPORT.md),
+`AGENTS.md` and
 [Durable State Retention Safety](../architecture/DURABLE-STATE-RETENTION-SAFETY.md).
 
 ## Coordinatorium

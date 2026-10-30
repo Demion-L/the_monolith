@@ -69,9 +69,11 @@ describe('concurrent idea capture across processes', () => {
     expect(new Set(reported).size).toBe(PROCS * EACH);
 
     const dir = join(project, '.monolith', 'memory', 'long-term', 'ideas');
-    const files = readdirSync(dir).sort();
+    const files = readdirSync(dir).filter((f) => f !== '.ids').sort();
     expect(files).toEqual(Array.from({ length: PROCS * EACH }, (_, i) => `IDEA-${String(i + 1).padStart(3, '0')}.md`));
     expect(files.some((f) => f.includes('.tmp.'))).toBe(false);
+    // One reservation marker per id, no residue next to them.
+    expect(readdirSync(join(dir, '.ids')).sort()).toEqual(files.map((f) => f.replace(/\.md$/, '')));
 
     // Each reported id's file holds exactly that process's text.
     const titles = new Set(files.map((f) => /title: "(.*)"/.exec(readFileSync(join(dir, f), 'utf8'))![1]));

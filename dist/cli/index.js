@@ -64,7 +64,7 @@ Durable usage:
   monolith durable retention --retain-days N [--compact-after N] [--apply]
 
 Idea usage:
-  monolith idea add --title "..." --description "..." [--context "..."]
+  monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]
   monolith idea list
   monolith idea show <id>
 

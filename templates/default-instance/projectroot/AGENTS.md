@@ -103,7 +103,7 @@ finished mission's history regardless.
 ## Idea Capture
 
 ```
-monolith idea add --title "..." --description "..." [--context "..."]
+monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]
 monolith idea list
 monolith idea show <id>
 ```

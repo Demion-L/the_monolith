@@ -7,11 +7,14 @@
  * touches no other state (not `active.md`, not `state.json`); `list` and `show` write nothing.
  */
 
+import type { Readable } from 'stream';
 import { reportWriteWarning } from '../root/index.js';
 import { addIdea, getIdea, ideaStore, listIdeas } from './store.js';
-import { IdeaError, type Idea } from './types.js';
+import { IDEA_LIMITS, IdeaError, type Idea } from './types.js';
 
-const ADD_USAGE = 'Usage: monolith idea add --title "..." --description "..." [--context "..."]';
+const ADD_USAGE = 'Usage: monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]';
+/** UTF-8 needs at most 4 bytes per UTF-16 code unit's worth of text; anything larger cannot fit the description limit. */
+const STDIN_MAX_BYTES = IDEA_LIMITS.description * 4;
 const LIST_USAGE = 'Usage: monolith idea list';
 const SHOW_USAGE = 'Usage: monolith idea show <id>';
 
@@ -25,39 +28,83 @@ interface AddFlags {
   title?: string;
   description?: string;
   context?: string;
+  descriptionStdin?: boolean;
 }
 
 const ADD_FLAGS = ['--title', '--description', '--context'] as const;
+const STDIN_FLAG = '--description-stdin';
+const KNOWN_FLAGS: readonly string[] = [...ADD_FLAGS, STDIN_FLAG];
 
 /** Strict: every flag needs a value, none may repeat, unknown flags and stray arguments are errors. */
 export function parseAddArgs(args: string[]): AddFlags {
   const out: AddFlags = {};
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
-    if (!(ADD_FLAGS as readonly string[]).includes(flag)) {
+    if (!KNOWN_FLAGS.includes(flag)) {
       throw new IdeaError('IDEA_INVALID_INPUT', `Unexpected argument ${JSON.stringify(printable(flag))}.\n${ADD_USAGE}`);
     }
-    const key = flag.slice(2) as keyof AddFlags;
+    if (flag === STDIN_FLAG) {
+      if (out.descriptionStdin) throw new IdeaError('IDEA_INVALID_INPUT', `${flag} was given more than once.\n${ADD_USAGE}`);
+      out.descriptionStdin = true;
+      continue;
+    }
+    const key = flag.slice(2) as 'title' | 'description' | 'context';
     if (key in out) throw new IdeaError('IDEA_INVALID_INPUT', `${flag} was given more than once.\n${ADD_USAGE}`);
     const value = args[i + 1];
-    if (value === undefined || (ADD_FLAGS as readonly string[]).includes(value)) {
+    if (value === undefined || KNOWN_FLAGS.includes(value)) {
       throw new IdeaError('IDEA_INVALID_INPUT', `${flag} needs a value.\n${ADD_USAGE}`);
     }
     out[key] = value;
     i++;
   }
-  if (out.title === undefined || out.description === undefined) {
-    throw new IdeaError('IDEA_INVALID_INPUT', `--title and --description are required.\n${ADD_USAGE}`);
+  if (out.descriptionStdin && out.description !== undefined) {
+    throw new IdeaError('IDEA_INVALID_INPUT', `--description and ${STDIN_FLAG} cannot be combined.\n${ADD_USAGE}`);
+  }
+  if (out.title === undefined || (out.description === undefined && !out.descriptionStdin)) {
+    throw new IdeaError('IDEA_INVALID_INPUT', `--title and --description (or ${STDIN_FLAG}) are required.\n${ADD_USAGE}`);
   }
   return out;
 }
 
-export async function runIdeaAdd(args: string[], targetDir = process.cwd()): Promise<void> {
+/**
+ * Read all of `input` as UTF-8, byte for byte (no trimming, BOM kept). Refuses
+ * more than STDIN_MAX_BYTES, invalid UTF-8 and a read error; nothing is
+ * interpreted. A terminal is refused instead of waiting for typed input.
+ */
+export async function readStdinText(input: Readable & { isTTY?: boolean } = process.stdin): Promise<string> {
+  if (input.isTTY) {
+    throw new IdeaError('IDEA_INVALID_INPUT', `${STDIN_FLAG} needs piped input, but stdin is a terminal.\n${ADD_USAGE}`);
+  }
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of input) {
+      const buf = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : (chunk as Buffer);
+      total += buf.length;
+      if (total > STDIN_MAX_BYTES) {
+        input.destroy();
+        throw new IdeaError('IDEA_INVALID_INPUT', `stdin is too large (more than ${STDIN_MAX_BYTES} bytes); nothing was written.`);
+      }
+      chunks.push(buf);
+    }
+  } catch (err) {
+    if (err instanceof IdeaError) throw err;
+    throw new IdeaError('IDEA_INVALID_INPUT', `could not read stdin: ${(err as Error).message}; nothing was written.`, { cause: err });
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks));
+  } catch (err) {
+    throw new IdeaError('IDEA_INVALID_INPUT', 'stdin is not valid UTF-8; nothing was written.', { cause: err });
+  }
+}
+
+export async function runIdeaAdd(args: string[], targetDir = process.cwd(), stdin: Readable & { isTTY?: boolean } = process.stdin): Promise<void> {
   const flags = parseAddArgs(args);
+  const description = flags.descriptionStdin ? await readStdinText(stdin) : (flags.description as string);
   const store = ideaStore(targetDir);
   const { idea, path } = addIdea(
     store,
-    { title: flags.title as string, description: flags.description as string, context: flags.context },
+    { title: flags.title as string, description, context: flags.context },
     { onWarning: (w) => reportWriteWarning(w) },
   );
   console.log(`Saved ${idea.id} [${idea.status}]: ${printable(idea.title)}`);

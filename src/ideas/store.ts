@@ -9,10 +9,16 @@
  *   next number is only a candidate, and a lost race (`WRITE_TARGET_EXISTS`)
  *   re-scans and tries again. Two processes can therefore never publish the same id.
  *
+ * - Ids are permanently reserved (IDEA-001D): before an idea file is written, an
+ *   empty-ish marker `ideas/.ids/IDEA-NNN` is created exclusively. The next id is
+ *   `max(idea files, markers) + 1`, so deleting an idea file never frees its id.
+ *   A crash between marker and file leaves an orphaned marker: that id is simply
+ *   burned (a gap), never reused. Existing ideas without a marker (created before
+ *   IDEA-001D) get one on the next `add`. No shared counter, no lock.
+ *
  * Not defended: a local actor swapping directories concurrently (SEC-001B.3,
- * TM-C unsupported). Ids are not reused while their file exists; if a person
- * deletes the highest-numbered file, its number can be handed out again
- * (archive an idea with `status: archived` instead of deleting it).
+ * TM-C unsupported). Deleting the `.ids` directory by hand forgets the
+ * reservations of ideas that no longer have a file.
  */
 
 import { lstatSync, readdirSync } from 'fs';
@@ -26,6 +32,7 @@ import {
   projectBoundary,
   readBoundedFile,
   resolveMonolithRoot,
+  type ParentRef,
   type ProjectFileRead,
   type WriteBoundary,
   type WriteWarning,
@@ -35,6 +42,9 @@ import { formatIdeaId, ideaFileName, ideaIdFromFileName, ideaNumber, isIdeaId, p
 import { IDEA_LIMITS, IdeaError, type Idea, type IdeaEntry, type NewIdea } from './types.js';
 
 const IDEAS_REL = 'memory/long-term/ideas';
+const IDS_DIR = '.ids';
+const MARKER_RE = /^(IDEA-\d{3,9})$/;
+const MAX_IDEA_NUMBER = 999_999_999;
 const MAX_ALLOCATION_ATTEMPTS = 64;
 
 export interface IdeaStore {
@@ -97,6 +107,46 @@ function scanIds(store: IdeaStore): string[] {
   return ids.sort((a, b) => ideaNumber(a) - ideaNumber(b) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
+/** Ids with a reservation marker in `ideas/.ids/`. Missing directory -> empty. Names that are not `IDEA-NNN` are ignored. */
+function scanReservedIds(store: IdeaStore): string[] {
+  let names: string[];
+  try {
+    names = readdirSync(join(store.dirAbs, IDS_DIR));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+  const ids: string[] = [];
+  for (const name of names) {
+    const m = MARKER_RE.exec(name);
+    if (m !== null) ids.push(m[1]);
+  }
+  return ids;
+}
+
+/** Highest number that is in use or reserved (0 when none). */
+function highestNumber(ids: string[]): number {
+  return ids.reduce((max, id) => Math.max(max, ideaNumber(id)), 0);
+}
+
+/** Create the marker for `id`. Returns false when it already exists (never overwritten). */
+function reserveId(markers: ParentRef, id: string, createdAt: string, opts: AddIdeaOptions): boolean {
+  try {
+    const outcome = createFile(markers, id, `reserved ${createdAt}\n`, {
+      mode: 0o666,
+      exactMode: false,
+      durability: 'full',
+      maxBytes: 256,
+      ops: opts.ops,
+    });
+    for (const w of outcome.warnings) opts.onWarning?.(w);
+    return true;
+  } catch (err) {
+    if (err instanceof SafeWriteError && err.code === 'WRITE_TARGET_EXISTS') return false;
+    throw err;
+  }
+}
+
 export function addIdea(store: IdeaStore, input: NewIdea, opts: AddIdeaOptions = {}): AddIdeaResult {
   validateNewIdea(input);
 
@@ -119,10 +169,34 @@ export function addIdea(store: IdeaStore, input: NewIdea, opts: AddIdeaOptions =
     throw err;
   }
 
+  let markers;
+  try {
+    markers = openParent(store.boundary, join(store.dirAbs, IDS_DIR), { create: true, ops: opts.ops });
+  } catch (err) {
+    if (err instanceof SafeWriteError) throw unsafe(err);
+    throw err;
+  }
+
   const createdAt = (opts.now ?? (() => new Date()))().toISOString();
+  try {
+    // Ideas created before IDEA-001D have no marker: protect them from now on.
+    for (const existing of scanIds(store)) reserveId(markers, existing, createdAt, opts);
+  } catch (err) {
+    if (err instanceof SafeWriteError) throw unsafe(err);
+    throw err;
+  }
+
   for (let attempt = 0; attempt < MAX_ALLOCATION_ATTEMPTS; attempt++) {
-    const ids = scanIds(store);
-    const id = formatIdeaId(ids.length === 0 ? 1 : ideaNumber(ids[ids.length - 1]) + 1);
+    const next = Math.max(highestNumber(scanIds(store)), highestNumber(scanReservedIds(store))) + 1;
+    if (next > MAX_IDEA_NUMBER) throw new IdeaError('IDEA_ID_EXHAUSTED', 'the idea id space is exhausted; nothing was written.');
+    const id = formatIdeaId(next);
+    // Reserve first: once the marker exists the id is never handed out again, whatever happens next.
+    try {
+      if (!reserveId(markers, id, createdAt, opts)) continue; // lost the race for this number
+    } catch (err) {
+      if (err instanceof SafeWriteError) throw unsafe(err);
+      throw err;
+    }
     const idea: Idea = { id, title: input.title, description: input.description, createdAt, status: 'inbox' };
     if (input.context !== undefined) idea.context = input.context;
     const text = serializeIdea(idea);

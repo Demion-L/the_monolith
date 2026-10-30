@@ -99,7 +99,7 @@ describe('idea-capture skill — content', () => {
       expect(['add', 'list', 'show']).toContain(sub);
       if (sub === 'add' && !cmd.includes('[')) {
         // concrete examples must parse with the real argument parser
-        const argv = shellSplit(cmd).slice(3);
+        const argv = shellSplit(cmd.replace(/\s<<'[A-Za-z0-9_]+'$/, '')).slice(3);
         expect(() => parseAddArgs(argv)).not.toThrow();
       }
     }
@@ -116,6 +116,16 @@ describe('idea-capture skill — content', () => {
     await runInit({ targetDir: dir, yes: true });
     await runIdeaAdd(shellSplit(example as string).slice(3), dir);
     expect(getIdea(ideaStore(dir), 'IDEA-001').description).toBe("don't forget $HOME");
+  });
+
+  it('prefers stdin, fences the here-document, and does not call stdin a guarantee (IDEA-001D)', () => {
+    const text = read(SKILL);
+    expect(text).toContain('--description-stdin');
+    expect(text.indexOf('Best: stdin without a shell')).toBeGreaterThan(-1);
+    expect(text.indexOf('Best: stdin without a shell')).toBeLessThan(text.indexOf('quoted here-document'));
+    expect(text).toMatch(/<<'[A-Za-z0-9_]+'/);
+    expect(text).toMatch(/no form below makes a shell a safe place for\s+untrusted text/);
+    expect(read(SKILL_TEMPLATE)).toBe(text);
   });
 
   it('prescribes single-quote quoting and forbids double quotes / eval', () => {
@@ -207,7 +217,8 @@ describe('routing', () => {
       const row = read(p).split('\n').find((l) => l.startsWith('| `CAPTURE_IDEA`'));
       expect(row, p).toBeDefined();
       expect(row).toContain('monolith idea add');
-      expect(row).toMatch(/never names, creates or writes it/);
+      expect(row).toMatch(/never chooses the path/);
+      expect(row).toContain('idea-capture');
     }
   });
 

@@ -166,7 +166,7 @@ evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Proje
 ## `monolith idea`
 
 ```
-monolith idea add --title "..." --description "..." [--context "..."]
+monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]
 monolith idea list
 monolith idea show <id>
 ```
@@ -193,8 +193,21 @@ become anything.
   number is only a candidate: the file is created exclusively (`link()`), and if
   another process took the number first, the next one is tried, so two
   concurrent `idea add` runs never publish the same id and never overwrite each
-  other. Ids are not reused while their file exists; deleting the
-  highest-numbered file by hand frees its number (open: `IDEA-ID-001`, `tech-debt.md`).
+  other. Ids are **permanently reserved**: before the idea file is written, an
+  exclusive marker `ideas/.ids/IDEA-NNN` is created and the next id is
+  `max(idea files, markers) + 1`. Deleting an idea file therefore never frees its
+  id; a crash between marker and file leaves an orphaned marker, i.e. a gap in the
+  numbering, never a reused id. Ideas created before reservations existed get their
+  marker on the next `add`. There is no shared counter file and no lock. Deleting the
+  `.ids` directory by hand forgets the reservations of already-deleted ideas.
+- **Description from stdin:** `monolith idea add --title "..." --description-stdin`
+  reads the description from standard input instead of the command line, so it
+  never passes through the shell's argument parsing. The text is stored byte for
+  byte (UTF-8; no trimming, BOM and CRLF kept). Refused, with nothing written:
+  more than 400 000 bytes (reading stops there), invalid UTF-8, a read error,
+  empty or whitespace-only input, a terminal as stdin, and combining it with
+  `--description`. The text is never interpreted by MONOLITH; whether the *caller's*
+  shell is safe is the caller's concern (an assistant uses the `idea-capture` skill).
 - **Input:** `--title` is one line (at most 300 characters, no control
   characters); `--description` at most 100 000 and `--context` at most 20 000
   characters. Empty or whitespace-only values, unknown or repeated flags and

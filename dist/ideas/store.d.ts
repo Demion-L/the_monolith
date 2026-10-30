@@ -9,10 +9,16 @@
  *   next number is only a candidate, and a lost race (`WRITE_TARGET_EXISTS`)
  *   re-scans and tries again. Two processes can therefore never publish the same id.
  *
+ * - Ids are permanently reserved (IDEA-001D): before an idea file is written, an
+ *   empty-ish marker `ideas/.ids/IDEA-NNN` is created exclusively. The next id is
+ *   `max(idea files, markers) + 1`, so deleting an idea file never frees its id.
+ *   A crash between marker and file leaves an orphaned marker: that id is simply
+ *   burned (a gap), never reused. Existing ideas without a marker (created before
+ *   IDEA-001D) get one on the next `add`. No shared counter, no lock.
+ *
  * Not defended: a local actor swapping directories concurrently (SEC-001B.3,
- * TM-C unsupported). Ids are not reused while their file exists; if a person
- * deletes the highest-numbered file, its number can be handed out again
- * (archive an idea with `status: archived` instead of deleting it).
+ * TM-C unsupported). Deleting the `.ids` directory by hand forgets the
+ * reservations of ideas that no longer have a file.
  */
 import { type WriteBoundary, type WriteWarning } from '../root/index.js';
 import type { FsOps } from '../root/index.js';

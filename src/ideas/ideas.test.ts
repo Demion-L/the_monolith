@@ -181,7 +181,7 @@ describe('addIdea', () => {
     addIdea(store(), { title: 't', description: 'd' });
     const after = snapshot(mon);
     for (const [p, content] of Object.entries(before)) expect(after[p]).toBe(content);
-    expect(Object.keys(after).filter((p) => !(p in before))).toEqual([join(ideasDir, 'IDEA-001.md')]);
+    expect(Object.keys(after).filter((p) => !(p in before)).sort()).toEqual([join(ideasDir, '.ids', 'IDEA-001'), join(ideasDir, 'IDEA-001.md')]);
   });
 });
 
@@ -206,7 +206,7 @@ describe('id collisions and overwrite protection', () => {
     expect(idea.id).toBe('IDEA-002');
     expect(readFileSync(intruder, 'utf8')).toBe('SOMEONE ELSE');
     expect(getIdea(store(), 'IDEA-002').title).toBe('mine');
-    expect(readdirSync(ideasDir).sort()).toEqual(['IDEA-001.md', 'IDEA-002.md']);
+    expect(readdirSync(ideasDir).filter((n) => n !== '.ids').sort()).toEqual(['IDEA-001.md', 'IDEA-002.md']);
   });
 
   it('skips a number held by a dangling symlink and leaves the link alone', () => {
@@ -264,7 +264,7 @@ describe('getIdea / listIdeas', () => {
     listIdeas(store());
     getIdea(store(), 'IDEA-001');
     expect(snapshot(project)).toEqual(before);
-    expect(readdirSync(ideasDir)).toEqual(['IDEA-001.md']);
+    expect(readdirSync(ideasDir).filter((n) => n !== '.ids')).toEqual(['IDEA-001.md']);
   });
 
   it('list on a fresh instance does not create the ideas directory', () => {
@@ -392,7 +392,7 @@ describe('write failures', () => {
         },
       }),
     ).toThrow(/space|write/i);
-    expect(readdirSync(ideasDir)).toEqual([]);
+    expect(readdirSync(ideasDir).filter((n) => n !== '.ids')).toEqual([]);
     expect(listIdeas(store())).toEqual([]);
   });
 
@@ -416,7 +416,7 @@ describe('write failures', () => {
     chmodSync(ideasDir, 0o500);
     try {
       expect(() => addIdea(store(), { title: 't', description: 'd' })).toThrow();
-      expect(readdirSync(ideasDir)).toEqual([]);
+      expect(readdirSync(ideasDir).filter((n) => n !== '.ids')).toEqual([]);
     } finally {
       chmodSync(ideasDir, 0o700);
     }
@@ -537,10 +537,88 @@ describe('canonical location memory/long-term/ideas (IDEA-001A-F)', () => {
     expect(existsSync(join(mon, 'memory', 'ideas'))).toBe(false);
   });
 
-  it('IDEA-ID-001 (open): an id is reissued once its highest-numbered file is deleted', () => {
-    addIdea(store(), { title: 'a', description: 'd' });
-    addIdea(store(), { title: 'b', description: 'd' });
+});
+
+describe('permanent id reservation (IDEA-001D)', () => {
+  const add = (t = 't') => addIdea(store(), { title: t, description: 'd' }, { now: fixedNow }).idea.id;
+  const markers = () => readdirSync(join(ideasDir, '.ids')).sort();
+
+  it('writes one marker per idea', () => {
+    add();
+    add();
+    expect(markers()).toEqual(['IDEA-001', 'IDEA-002']);
+    expect(readFileSync(join(ideasDir, '.ids', 'IDEA-001'), 'utf8')).toBe('reserved 2026-10-30T12:00:00.000Z\n');
+  });
+
+  it('never reissues the id of a deleted highest-numbered idea', () => {
+    add();
+    add();
     rmSync(join(ideasDir, 'IDEA-002.md'));
-    expect(addIdea(store(), { title: 'c', description: 'd' }).idea.id).toBe('IDEA-002');
+    expect(add()).toBe('IDEA-003');
+    rmSync(join(ideasDir, 'IDEA-003.md'));
+    rmSync(join(ideasDir, 'IDEA-001.md'));
+    expect(add()).toBe('IDEA-004');
+  });
+
+  it('an orphaned marker (crash between reservation and write) burns its id and blocks nothing', () => {
+    add();
+    writeFileSync(join(ideasDir, '.ids', 'IDEA-002'), 'reserved earlier\n');
+    expect(add()).toBe('IDEA-003');
+    expect(listIdeas(store()).map((e) => (e.ok ? e.idea.id : e.id))).toEqual(['IDEA-001', 'IDEA-003']);
+  });
+
+  it('a failed idea write leaves its marker: the id is not handed out again', () => {
+    add();
+    expect(() =>
+      addIdea(store(), { title: 'x', description: 'd' }, {
+        ops: { linkSync: (a: string, b: string) => { if (b.endsWith('IDEA-002.md')) throw Object.assign(new Error('boom'), { code: 'EIO' }); return linkSync(a, b); } },
+      }),
+    ).toThrow();
+    expect(markers()).toHaveLength(2);
+    expect(add()).toBe('IDEA-003');
+  });
+
+  it('ideas created before reservations existed are protected from the next add on', () => {
+    mkdirSync(ideasDir, { recursive: true });
+    for (const id of ['IDEA-001', 'IDEA-002']) {
+      writeFileSync(join(ideasDir, `${id}.md`), serializeIdea({ id, title: 't', description: 'd', createdAt: fixedNow().toISOString(), status: 'inbox' }));
+    }
+    expect(add()).toBe('IDEA-003');
+    expect(markers()).toEqual(['IDEA-001', 'IDEA-002', 'IDEA-003']);
+    rmSync(join(ideasDir, 'IDEA-002.md'));
+    rmSync(join(ideasDir, 'IDEA-003.md'));
+    expect(add()).toBe('IDEA-004');
+  });
+
+  it('a stray non-id entry in .ids is ignored; a directory or symlink named like an id still reserves it', () => {
+    add();
+    writeFileSync(join(ideasDir, '.ids', 'notes.txt'), 'x');
+    mkdirSync(join(ideasDir, '.ids', 'IDEA-002'));
+    symlinkSync(join(outside, 'nowhere'), join(ideasDir, '.ids', 'IDEA-003'));
+    expect(add()).toBe('IDEA-004');
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it('refuses a symlinked .ids directory and writes nothing outside', () => {
+    add();
+    rmSync(join(ideasDir, '.ids'), { recursive: true });
+    symlinkSync(outside, join(ideasDir, '.ids'));
+    expect(codeOf(() => add())).toBe('IDEA_UNSAFE_PATH');
+    expect(readdirSync(outside)).toEqual([]);
+    expect(readdirSync(ideasDir).filter((n) => n.endsWith('.md'))).toEqual(['IDEA-001.md']);
+  });
+
+  it('never overwrites an existing marker', () => {
+    add();
+    const p = join(ideasDir, '.ids', 'IDEA-001');
+    writeFileSync(p, 'mine\n');
+    add();
+    expect(readFileSync(p, 'utf8')).toBe('mine\n');
+  });
+
+  it('a hand-damaged idea file still counts: its id is neither reused nor blocks adding', () => {
+    add();
+    writeFileSync(join(ideasDir, 'IDEA-001.md'), '\u0000garbage');
+    expect(add()).toBe('IDEA-002');
   });
 });

@@ -408,7 +408,7 @@ check-then-use races remain (SEC-001B.3, OPEN — see
 ## Idea Capture (IDEA-001A)
 
 ```
-monolith idea add --title "..." --description "..." [--context "..."]
+monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]
 monolith idea list
 monolith idea show <id>
 ```
@@ -416,8 +416,10 @@ monolith idea show <id>
 Saves a deferred thought as `<monolithRoot>/memory/long-term/ideas/IDEA-NNN.md` (status
 `inbox | planned | archived`, set to `inbox` on creation) without touching the
 current task, `active.md` or `state.json`. Not a task, not a hypothesis, not part
-of Durable State; no LLM. Ids are allocated by exclusive file creation, so
-concurrent `add` runs cannot collide or overwrite. Reads and writes use the
+of Durable State; no LLM. Ids are allocated by exclusive file creation and permanently
+reserved by markers (`ideas/.ids/`), so concurrent `add` runs cannot collide or
+overwrite and a deleted idea's id is never reissued. `--description-stdin` reads
+the description from stdin. Reads and writes use the
 `src/root/` safe-file primitives (symlinks refused); a concurrent directory swap
 is not defended against (SEC-001B.3). Details: `docs/reference/cli.md` →
 `monolith idea`. Routing: intent `CAPTURE_IDEA` (`routing-map.md`, Table 8) — an

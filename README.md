@@ -44,19 +44,13 @@ trust — using mechanisms that are deterministic and testable.
 
 ## Quick Start
 
-Requires Node.js >= 20. MONOLITH is an alpha package that is **not published
-to npm**. Build it from a clone:
+Requires Node.js >= 20. Install the published alpha package from npm:
 
 ```bash
-git clone https://github.com/Demion-L/the_monolith.git
-cd the_monolith
-pnpm install
-pnpm build
-npm link             # exposes the `monolith` command (or run: node dist/cli/index.js)
+npm install -g @latysh-development/monolith@alpha
 ```
 
-Once the first alpha is published, `npm install -g @latysh-development/monolith@alpha`
-becomes the primary install path ([release notes](./docs/release/alpha-installation.md)).
+To build from source instead, see the [installation and release guide](./docs/release/alpha-installation.md).
 
 Then, in a project directory:
 
@@ -114,7 +108,7 @@ listing — not an official partnership, endorsement or certification.
 ## Project Status
 
 **Alpha** (`0.1.0-alpha.0`). The API and CLI are experimental and may change
-without notice. Not published to npm. Durable State and the Coordinatorium
+without notice. Published to npm under the alpha dist-tag. Durable State and the Coordinatorium
 (`monolith durable`, `monolith mission`) are experimental and are not part of
 the Quick Start.
 

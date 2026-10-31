@@ -1151,3 +1151,87 @@ describe('criterion 70 (AC-A2-1, test 49) — two-process filesystem probe', () 
     for (const r of reports) expect(r.violations, `${r.filesystem} at ${r.tempRoot}`).toEqual([]);
   }, 300_000);
 });
+
+// =====================================================================================================================
+// DURABLE-SEC-005 / I-1: concurrent pruners over one COMMITTED prune (real processes)
+// =====================================================================================================================
+
+describe('I-1: concurrent prune() of a committed task, real processes', () => {
+  async function commitFor(run: Run, id: string, n: number): Promise<Tombstone> {
+    const evs = await seed(run, id, n);
+    const tomb = tombstoneOf(evs);
+    const s = run.store();
+    const { attempt } = await s.preparePrune(tomb);
+    expect(await s.decidePrune(id, attempt, 'commit', tomb, 'pruner')).toBe('commit');
+    return tomb;
+  }
+
+  it('the review regression, ordered: B stands after the listing of the events, A completes the prune, B must still succeed', async () => {
+    const run = new Run();
+    const id = 'i1a';
+    const tomb = await commitFor(run, id, 8);
+    const B = run.spawn('pruner-b', [{ op: 'prune', tombstone: tomb, tolerate: true }], [{ op: 'readdir', match: `/tasks/${id}/events$`, phase: 'after', barrier: 'listed', nth: 2 }]); // nth 1 is the classification in derive(); nth 2 is the audit's own listing
+    await B.ready('listed'); // B has read what it will judge, and has not judged it yet
+    const a = await run.spawn('pruner-a', [{ op: 'prune', tombstone: tomb, tolerate: true }]).finish();
+    expect(val(step(a, 'prune')).removedFiles, 'A removed the data').toBeGreaterThan(0);
+    expect(looseSeqs(run, id)).toEqual([]);
+    B.release('listed');
+    const b = await B.finish();
+    expect(val(step(b, 'prune')), 'B must not read the work of A as damage').toEqual({ removedFiles: expect.any(Number) });
+    expect(existsSync(join(taskDir(run, id), 'tombstone.json'))).toBe(true);
+    expect(looseSeqs(run, id)).toEqual([]);
+  });
+
+  it('the same, with A stopped in the middle of its removal (killed after two unlinks) and B finishing the job', async () => {
+    const run = new Run();
+    const id = 'i1b';
+    const tomb = await commitFor(run, id, 8);
+    const A = run.spawn('pruner-a', [{ op: 'prune', tombstone: tomb, tolerate: true }], [{ op: 'unlink', match: '/events/\\d{9}\\.json$', nth: 3, phase: 'before', barrier: 'mid' }]);
+    await A.ready('mid');
+    await A.kill();
+    expect(looseSeqs(run, id)).toHaveLength(6);
+    const b = await run.spawn('pruner-b', [{ op: 'prune', tombstone: tomb, tolerate: true }]).finish();
+    expect(val(step(b, 'prune'))).toEqual({ removedFiles: 6 });
+    expect(looseSeqs(run, id)).toEqual([]);
+  });
+
+  it('3 pruners released together (6 rounds): all succeed, the data is gone once, the tombstone stays', async () => {
+    const tally = { ok: 0, errors: [] as string[] };
+    for (let round = 0; round < 6; round++) {
+      const run = new Run();
+      const id = `i1c${round}`;
+      const tomb = await commitFor(run, id, 60);
+      const ps = [0, 1, 2].map((i) => run.spawn(`p${i}`, [{ op: 'barrier', name: 'go' }, { op: 'prune', tombstone: tomb, tolerate: true }]));
+      await run.rendezvous('go', ps);
+      for (const p of ps) {
+        const r = val(step(await p.finish(), 'prune'));
+        if (typeof r === 'object') tally.ok++;
+        else tally.errors.push(String(r));
+      }
+      expect(looseSeqs(run, id)).toEqual([]);
+      expect(existsSync(join(taskDir(run, id), 'tombstone.json'))).toBe(true);
+      expect(val(step(await observe(run, id, [{ op: 'prune', tombstone: tomb, tolerate: true }]), 'prune', 0))).toEqual({ removedFiles: 0 });
+    }
+    expect({ ok: tally.ok, errors: tally.errors }, `18 prune() calls, 6 rounds`).toEqual({ ok: 18, errors: [] });
+  }, 120_000);
+
+  it('the reviewer\'s stress: 400 events, 4 processes, 8 rounds, 32 calls: every call succeeds', async () => {
+    const tally = { ok: 0, errors: [] as string[] };
+    for (let round = 0; round < 8; round++) {
+      const run = new Run();
+      const id = `i1d${round}`;
+      const tomb = await commitFor(run, id, 400);
+      const ps = [0, 1, 2, 3].map((i) => run.spawn(`p${i}`, [{ op: 'barrier', name: 'go' }, { op: 'prune', tombstone: tomb, tolerate: true }]));
+      await run.rendezvous('go', ps);
+      for (const p of ps) {
+        const r = val(step(await p.finish(), 'prune'));
+        if (typeof r === 'object') tally.ok++;
+        else tally.errors.push(String(r));
+      }
+      expect(looseSeqs(run, id)).toEqual([]);
+    }
+    // eslint-disable-next-line no-console
+    console.log(`I-1 STRESS ${JSON.stringify({ calls: 32, ok: tally.ok, errors: tally.errors })}`);
+    expect({ ok: tally.ok, errors: tally.errors }).toEqual({ ok: 32, errors: [] });
+  }, 300_000);
+});

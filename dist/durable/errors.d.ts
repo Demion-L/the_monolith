@@ -156,7 +156,7 @@ export declare class RetentionRefusedError extends DurableError {
 export type PruneCorruptReason = 'register' | 'gap' | 'unknown-artifact' | 'commit-audit' | 'multiple-commit' | 'history' | 'task-dir-missing' | 'tombstone-without-commit' | 'legacy-tombstone-unmigrated';
 /**
  * The persisted prune decision register of a task is corrupt, or the task directory is missing, or it is an
- * unmigrated legacy tombstone. Fail closed: nothing is deleted and nobody is cancelled; an operator decides.
+ * unmigrated legacy tombstone. Fail closed: the refusal deletes no task data; an operator decides.
  * Never mapped to `TaskOrphanedError`, `RetentionRefusedError` or a quarantine, and never retryable.
  * `published` is true when a write the caller made is already visible (the outcome of that write is unknown).
  */
@@ -166,8 +166,12 @@ export declare class PruneDecisionCorruptError extends DurableError {
     readonly file: string | null;
     readonly attempt: number | null;
     readonly published: boolean;
+    /** Why the register was not trusted, when the reason alone does not say (e.g. which datum contradicted a commit). */
+    readonly detail: string | null;
     readonly retryable = false;
-    constructor(taskId: string, reason: PruneCorruptReason, file?: string | null, attempt?: number | null, published?: boolean);
+    constructor(taskId: string, reason: PruneCorruptReason, file?: string | null, attempt?: number | null, published?: boolean, 
+    /** Why the register was not trusted, when the reason alone does not say (e.g. which datum contradicted a commit). */
+    detail?: string | null);
 }
 /** The attempt number would exceed `MAX_PRUNE_ATTEMPTS`. A liveness limit: numbers are never reused or reset. */
 export declare class PruneAttemptLimitError extends DurableError {

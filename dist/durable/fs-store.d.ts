@@ -161,6 +161,27 @@ export declare class FsEventStore implements EventStore {
         removedFiles: number;
     }>;
     /**
+     * The events (and covered segment lines) still on disk with `seq <= upTo`, each verified on its own; no gap is an error,
+     * because a roll-forward that was interrupted leaves gaps. A segment wins over a loose copy of the same slot (the reader's
+     * rule). Anything that cannot be read safely or does not verify throws: the audit then refuses instead of guessing.
+     */
+    private survivingEvents;
+    /**
+     * O-1: a committed register is not self-proving (its checksum is unkeyed), so the data still on disk must not contradict
+     * it before anything is unlinked. See `committedProblem` for what a partly removed log can and cannot prove. Reads only.
+     *
+     * I-1: the data is read FIRST and `tombstone.json` AFTER it. The roll-forward publishes the tombstone before its first
+     * unlink and nothing ever removes it, so a tombstone that is still absent after the data was read proves that no unlink
+     * had begun when the data was read (it was absent at every earlier moment too): a gap in the data is then not a removal
+     * but a torn observation or real damage. The loose files are read before the segments are listed (see `survivingEvents`), so a
+     * compaction that moves events into a segment meanwhile does not tear the observation. Read the
+     * other way round, a concurrent pruner that publishes the tombstone and removes events between the two reads is taken
+     * for damage. A gap seen without a tombstone is still looked at again a few times before it is refused (a defence in depth,
+     * not what F-1 relies on). No lock: a pruner that races this audit only ever turns the verdict
+     * from "the whole log must be there" into "a part may be gone", and the roll-forward still checks the tombstone it finds.
+     */
+    private auditCommitted;
+    /**
      * Prune cleanup (class C, section 30.3): only for a verified, consistent `COMMITTED`. Publishes `tombstone.json` from the
      * commit, then removes the data of the task. It never touches the register, `tombstone.json` or the task directory,
      * decides nothing, and finishing a half-done run is the same call again.

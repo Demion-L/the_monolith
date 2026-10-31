@@ -270,7 +270,9 @@ export declare class DurableTasks {
      *  - `live`     it exists and carries no tombstone.
      *  - `pending`  a tombstone exists, but the prune is unfinished and may still be rolled back, or cannot be examined.
      *               This is a transient state. It is never a reason to cancel anybody.
-     *  - `gone`     it never existed, or its removal has started or finished: the prune is committed and irreversible.
+     *  - `gone`     its removal has started or finished: the prune is committed and irreversible.
+     *  - `missing`  its directory is not there and no prune accounts for it (ADR-018 D2). Absence is not proof of a
+     *               committed prune, so, like `pending`, it blocks execution and is never a reason to cancel anybody.
      *
      * Why the tombstone alone proves nothing: a pruner publishes it BEFORE it looks for referrers, and a stopped
      * (SIGSTOP) or killed pruner leaves it behind with all data in place. Only the data decides:
@@ -282,8 +284,8 @@ export declare class DurableTasks {
      */
     private requirementState;
     /**
-     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is gone, else the first whose prune is
-     * pending, else `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it
+     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is gone, else the first that is missing,
+     * else the first whose prune is pending, else `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it
      * is safe without any clock: a pruner publishes its tombstone and only then looks for referrers; this check runs
      * after the task's `task.created` is published. So either the tombstone is visible here, or the pruner sees the
      * task and backs off. Once the check has passed, no prune of the required task can succeed while this task is active.

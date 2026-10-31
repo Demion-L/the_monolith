@@ -36,7 +36,7 @@ import { dirname, join } from 'path';
 import { sha256Hex } from './canonical.js';
 import { LogCorruptError, PruneAttemptLimitError, PruneDecisionCorruptError, RetentionRefusedError, StoreIoError, StoreProtocolError, StoreSecurityError, TaskPrunedError, TombstoneCommittedError, } from './errors.js';
 import { MAX_REGISTER_BYTES, MAX_WRITE_RESOLVE, PROTOCOL_MARKER_FILE, STAGING_RE, TOMBSTONE_FILE, decisionFile, derivePruneState, encodeDecision, encodePrepare, encodeTombstone, parseDecision, parsePrepare, parseTombstoneFile, prepareFile, sameTombstone, } from './register.js';
-import { tombstoneProblem } from './prune-check.js';
+import { committedProblem, tombstoneProblem } from './prune-check.js';
 import { takeFsSeams } from './seams.js';
 import { MAX_EVENT_BYTES, ID_PATTERN, parseEvent, serializeEvent } from './log.js';
 import { MAX_PRUNE_ATTEMPTS } from './types.js';
@@ -48,6 +48,8 @@ const SEGMENT_NAME = /^S(\d{9})-(\d{9})\.jsonl$/;
 const REF_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}\.json$/;
 const TMP_NAME = STAGING_RE;
 const TOMBSTONE_NAME = TOMBSTONE_FILE;
+/** how often the audit of a committed prune looks at a log with a gap and no tombstone before it refuses (I-1). */
+const AUDIT_PASSES = 3;
 const MAX_TOMBSTONE_BYTES = 4096;
 const READ_ATTEMPTS = 8;
 export class AppendOutcomeUnknownError extends StoreIoError {
@@ -470,7 +472,7 @@ export class FsEventStore {
             case 'missing':
                 return new PruneDecisionCorruptError(taskId, 'task-dir-missing');
             case 'unreadable':
-                return new StoreIoError(`the prune state of task "${taskId}" cannot be read now (${st.reason ?? 'unknown'}); nothing was changed. Try again.`);
+                return new StoreIoError(`the prune state of task "${taskId}" cannot be read now (${st.reason ?? 'unknown'}); this refusal removes and undoes nothing. Try again.`);
             case 'committed':
                 return new TaskPrunedError(taskId);
             default:
@@ -670,7 +672,105 @@ export class FsEventStore {
         }
         if (committed === null)
             throw new StoreIoError(`the prune state of task "${taskId}" kept changing; try again.`);
+        this.auditCommitted(taskId, committed);
         return this.rollForward(taskId, committed);
+    }
+    /**
+     * The events (and covered segment lines) still on disk with `seq <= upTo`, each verified on its own; no gap is an error,
+     * because a roll-forward that was interrupted leaves gaps. A segment wins over a loose copy of the same slot (the reader's
+     * rule). Anything that cannot be read safely or does not verify throws: the audit then refuses instead of guessing.
+     */
+    survivingEvents(taskId, upTo) {
+        const bySeq = new Map();
+        // ORDER MATTERS (F-1), the same as in `readLogImpl`: loose files first, segments second. Compaction publishes a segment
+        // BEFORE it removes the loose files it covers and nothing but the roll-forward of a prune ever removes a segment (and that
+        // publishes the tombstone first, which `auditCommitted` reads afterwards). So a slot that is missing from the loose
+        // files, or whose file vanishes before it is read, was removed after its segment was published, and the segment is in
+        // the listing taken afterwards. The other order cannot see a segment that is published between the two listings.
+        const eventEntries = this.listDir(this.eventsDir(taskId)) ?? [];
+        this.seams.auditHook?.('listed');
+        for (const e of eventEntries) {
+            const m = EVENT_NAME.exec(e.name);
+            if (!m || !e.isFile() || Number(m[1]) > upTo)
+                continue; // only regular event files are ever read, and nothing past the head is evidence
+            const seq = Number(m[1]);
+            const content = this.readManaged(join(this.eventsDir(taskId), e.name), `event ${e.name}`, MAX_EVENT_BYTES + 4096, taskId);
+            if (content === null)
+                continue; // removed meanwhile: a compaction published its segment first, and it is listed below
+            const ev = parseEvent(content.trim(), taskId, seq);
+            if (ev.seq !== seq)
+                throw new LogCorruptError(taskId, seq, `file ${e.name} holds event ${ev.seq}`);
+            bySeq.set(seq, ev);
+        }
+        const segs = [];
+        for (const e of this.listDir(this.segmentsDir(taskId)) ?? []) {
+            const m = SEGMENT_NAME.exec(e.name);
+            if (m && e.isFile() && Number(m[1]) <= upTo)
+                segs.push({ name: e.name, from: Number(m[1]), to: Number(m[2]) });
+        }
+        for (const g of segs) {
+            const content = this.readManaged(join(this.segmentsDir(taskId), g.name), `segment ${g.name}`, MAX_SEGMENT_BYTES, taskId);
+            if (content === null)
+                continue;
+            const lines = content.split('\n').filter((l) => l.length > 0);
+            if (lines.length !== g.to - g.from + 1)
+                throw new LogCorruptError(taskId, g.from, `segment ${g.name} holds ${lines.length} events, its name says ${g.to - g.from + 1}`);
+            lines.forEach((line, i) => {
+                const ev = parseEvent(line, taskId, g.from + i);
+                if (ev.seq !== g.from + i)
+                    throw new LogCorruptError(taskId, ev.seq, `segment ${g.name} is not contiguous`);
+                if (ev.seq <= upTo)
+                    bySeq.set(ev.seq, ev);
+            });
+        }
+        return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+    }
+    /**
+     * O-1: a committed register is not self-proving (its checksum is unkeyed), so the data still on disk must not contradict
+     * it before anything is unlinked. See `committedProblem` for what a partly removed log can and cannot prove. Reads only.
+     *
+     * I-1: the data is read FIRST and `tombstone.json` AFTER it. The roll-forward publishes the tombstone before its first
+     * unlink and nothing ever removes it, so a tombstone that is still absent after the data was read proves that no unlink
+     * had begun when the data was read (it was absent at every earlier moment too): a gap in the data is then not a removal
+     * but a torn observation or real damage. The loose files are read before the segments are listed (see `survivingEvents`), so a
+     * compaction that moves events into a segment meanwhile does not tear the observation. Read the
+     * other way round, a concurrent pruner that publishes the tombstone and removes events between the two reads is taken
+     * for damage. A gap seen without a tombstone is still looked at again a few times before it is refused (a defence in depth,
+     * not what F-1 relies on). No lock: a pruner that races this audit only ever turns the verdict
+     * from "the whole log must be there" into "a part may be gone", and the roll-forward still checks the tombstone it finds.
+     */
+    auditCommitted(taskId, tombstone) {
+        let problem = null;
+        for (let pass = 0; pass < AUDIT_PASSES; pass++) {
+            let events = null;
+            try {
+                events = this.survivingEvents(taskId, tombstone.headSeq);
+            }
+            catch (err) {
+                if (!(err instanceof LogCorruptError))
+                    throw err;
+                problem = err.message; // an event that does not verify on its own does not heal
+                break;
+            }
+            this.seams.auditHook?.('surveyed');
+            const published = this.registerIO(taskId).tombstone();
+            if (published.k === 'ioerr')
+                throw new StoreIoError(`cannot read tombstone.json of task "${taskId}": ${published.reason}; this call removed no task data. Try again.`);
+            const deletionStarted = published.k !== 'absent'; // the roll-forward publishes it before its first unlink
+            try {
+                problem = committedProblem(taskId, events, tombstone, deletionStarted);
+            }
+            catch (err) {
+                if (!(err instanceof LogCorruptError))
+                    throw err;
+                problem = err.message;
+                break;
+            }
+            if (problem === null || deletionStarted)
+                break; // with a tombstone the verdict is already the lenient one
+        }
+        if (problem !== null)
+            throw new PruneDecisionCorruptError(taskId, 'commit-audit', null, null, false, problem);
     }
     /**
      * Prune cleanup (class C, section 30.3): only for a verified, consistent `COMMITTED`. Publishes `tombstone.json` from the
@@ -703,7 +803,7 @@ export class FsEventStore {
                     continue;
                 }
                 try {
-                    fs.unlinkSync(join(dir, e.name));
+                    (this.seams.removeFile ?? fs.unlinkSync)(join(dir, e.name));
                     removed++;
                 }
                 catch (err) {

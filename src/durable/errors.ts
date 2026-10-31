@@ -257,7 +257,7 @@ export type PruneCorruptReason =
 
 /**
  * The persisted prune decision register of a task is corrupt, or the task directory is missing, or it is an
- * unmigrated legacy tombstone. Fail closed: nothing is deleted and nobody is cancelled; an operator decides.
+ * unmigrated legacy tombstone. Fail closed: the refusal deletes no task data; an operator decides.
  * Never mapped to `TaskOrphanedError`, `RetentionRefusedError` or a quarantine, and never retryable.
  * `published` is true when a write the caller made is already visible (the outcome of that write is unknown).
  */
@@ -269,10 +269,16 @@ export class PruneDecisionCorruptError extends DurableError {
     readonly file: string | null = null,
     readonly attempt: number | null = null,
     readonly published = false,
+    /** Why the register was not trusted, when the reason alone does not say (e.g. which datum contradicted a commit). */
+    readonly detail: string | null = null,
   ) {
     super(
       'PRUNE_DECISION_CORRUPT',
-      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}); nothing was deleted or cancelled.`,
+      `the prune decision register of task "${taskId}" cannot be trusted (${reason}${file ? `: ${file}` : ''}${detail ? `; ${detail}` : ''}); ${
+        published
+          ? 'this call had already made a write visible and does not take it back (a compaction may also have removed loose copies of the events it packed); another process may have changed the task too.'
+          : 'this call removed no task data, but it may have recorded a prune-register entry; another process may have changed the task.'
+      }`,
     );
     this.name = 'PruneDecisionCorruptError';
   }

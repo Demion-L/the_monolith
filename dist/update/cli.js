@@ -19,8 +19,9 @@ What is written, and what is not:
   - MONOLITH text goes only into checksummed managed blocks
     (<!-- monolith:begin ... -->). Appending leaves every existing byte in place;
     refreshing replaces only an unedited block.
-  - A block you edited, a malformed block, a clashing section of yours or an
-    unreadable file is CONFLICT: nothing is written there and the plan says how
+  - A block you edited, a malformed block, a clashing section of yours, an
+    unclosed code fence (backticks or tildes) that would hide the block, a file that is not
+    valid UTF-8 (no encoding is converted) or an unreadable file is CONFLICT: nothing is written there and the plan says how
     to resolve it. SKIP means left alone on purpose (e.g. your own skill).
   - Your existing skills, memory, state.json, ideas and text are never overwritten.
     Nothing is executed.
@@ -63,7 +64,7 @@ function verdict(plan, stale = []) {
     const manual = plan.items.filter((i) => i.action === 'CONFLICT').length;
     const broken = plan.chain.filter((c) => !c.ok).length;
     if (pending === 0 && manual === 0 && broken === 0 && stale.length === 0)
-        return 'Idea Capture integration: COMPLETE (every link of the chain is in place and consistent).';
+        return 'Idea Capture integration: COMPLETE (the managed components are installed and pass the structural check; how an AI assistant behaves is not verified).';
     const parts = [];
     if (pending > 0)
         parts.push(`${pending} change(s) to apply`);

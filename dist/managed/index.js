@@ -44,25 +44,48 @@ export function renderBlock(id, body, eol = '\n') {
     return lines.join(eol) + eol;
 }
 const MARKER = /^<!-- monolith:(begin|end) ([a-z-]+)(?: sha256=([0-9a-f]{16}))? -->$/;
-const FENCE = /^ {0,3}(```|~~~)/;
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 function splitLines(text) {
     return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 }
+/**
+ * Per line: is it a fence line or inside a fenced code block? Same rules as
+ * CommonMark for the cases that matter here: a fence is 3+ backticks or tildes
+ * (at most 3 spaces of indent), it closes on the same character with at least
+ * the same length and nothing after it, and a block left open runs to the end
+ * of the file. `open` tells whether the text ends inside such a block.
+ */
+function scanFences(lines) {
+    const hidden = [];
+    let fence = null;
+    for (const l of lines) {
+        const t = l.replace(/\r?\n$/, '');
+        if (fence === null) {
+            const o = FENCE_OPEN.exec(t);
+            if (o && !(o[1][0] === '`' && o[2].includes('`'))) {
+                fence = { ch: o[1][0], len: o[1].length };
+                hidden.push(true);
+            }
+            else
+                hidden.push(false);
+        }
+        else {
+            const c = FENCE_CLOSE.exec(t);
+            if (c && c[1][0] === fence.ch && c[1].length >= fence.len)
+                fence = null;
+            hidden.push(true);
+        }
+    }
+    return { hidden, open: fence !== null };
+}
 function markers(lines) {
     const out = [];
-    let fence = null;
+    const { hidden } = scanFences(lines);
     lines.forEach((l, i) => {
+        if (hidden[i])
+            return;
         const t = l.replace(/\r?\n$/, '');
-        const f = FENCE.exec(t);
-        if (f) {
-            if (fence === null)
-                fence = f[1];
-            else if (fence === f[1])
-                fence = null;
-            return;
-        }
-        if (fence !== null)
-            return;
         const m = MARKER.exec(t.trim());
         if (m)
             out.push({ kind: m[1], id: m[2], hash: m[3], line: i });
@@ -114,21 +137,40 @@ export function refreshBlock(text, state, id, body) {
     const block = unterminated ? rendered.slice(0, -eol.length) : rendered;
     return state.lines.slice(0, state.from).join('') + block + state.lines.slice(state.to + 1).join('');
 }
+/**
+ * `text` with the block appended, or the reason that is not safe. Safe means the
+ * result, read back by `inspectBlock`, shows exactly one well-formed, unedited
+ * block that equals the template, and every original byte is still in place.
+ * An unclosed code fence in `text` swallows the new markers (the next run would
+ * not see the block and append another), so it is refused up front.
+ */
+export function planAppend(text, id, body) {
+    if (scanFences(splitLines(text)).open) {
+        return { ok: false, detail: 'the file ends inside an unclosed fenced code block (``` or ~~~), which would hide the new block' };
+    }
+    const content = appendBlock(text, id, body);
+    if (!content.startsWith(text))
+        return { ok: false, detail: 'the append would not keep the existing bytes in place' };
+    return verified(content, id, body);
+}
+/** `text` with the block refreshed in place, or the reason that is not safe (see `planAppend`). */
+export function planRefresh(text, state, id, body) {
+    const content = refreshBlock(text, state, id, body);
+    const head = state.lines.slice(0, state.from).join('');
+    const tail = state.lines.slice(state.to + 1).join('');
+    if (!content.startsWith(head) || !content.endsWith(tail))
+        return { ok: false, detail: 'the refresh would change text outside the block' };
+    return verified(content, id, body);
+}
+function verified(content, id, body) {
+    const st = inspectBlock(content, id, body);
+    if (st.state === 'pristine' && st.current)
+        return { ok: true, content };
+    return { ok: false, detail: `the written block would not be recognised as current (${st.state === 'pristine' ? 'stale' : st.state})` };
+}
 /** Text with fenced code blocks and HTML comments removed: what an assistant reads as instructions. */
 export function prose(text) {
-    const out = [];
-    let fence = null;
-    for (const l of splitLines(text)) {
-        const f = FENCE.exec(l.replace(/\r?\n$/, ''));
-        if (f) {
-            if (fence === null)
-                fence = f[1];
-            else if (fence === f[1])
-                fence = null;
-            continue;
-        }
-        if (fence === null)
-            out.push(l);
-    }
-    return out.join('').replace(/<!--[\s\S]*?-->/g, '');
+    const lines = splitLines(text);
+    const { hidden } = scanFences(lines);
+    return lines.filter((_, i) => !hidden[i]).join('').replace(/<!--[\s\S]*?-->/g, '');
 }

@@ -49,6 +49,25 @@ export declare function appendBlock(text: string, id: BlockId, body: string): st
 export declare function refreshBlock(text: string, state: Extract<BlockState, {
     state: 'pristine';
 }>, id: BlockId, body: string): string;
+export type Planned = {
+    ok: true;
+    content: string;
+} | {
+    ok: false;
+    detail: string;
+};
+/**
+ * `text` with the block appended, or the reason that is not safe. Safe means the
+ * result, read back by `inspectBlock`, shows exactly one well-formed, unedited
+ * block that equals the template, and every original byte is still in place.
+ * An unclosed code fence in `text` swallows the new markers (the next run would
+ * not see the block and append another), so it is refused up front.
+ */
+export declare function planAppend(text: string, id: BlockId, body: string): Planned;
+/** `text` with the block refreshed in place, or the reason that is not safe (see `planAppend`). */
+export declare function planRefresh(text: string, state: Extract<BlockState, {
+    state: 'pristine';
+}>, id: BlockId, body: string): Planned;
 /** Text with fenced code blocks and HTML comments removed: what an assistant reads as instructions. */
 export declare function prose(text: string): string;
 //# sourceMappingURL=index.d.ts.map

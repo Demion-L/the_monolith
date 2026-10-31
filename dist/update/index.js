@@ -28,15 +28,16 @@ import { dirname, join, basename, resolve } from 'path';
 import { SafeWriteError, RootContainmentError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, replaceFile, resolveMonolithRoot, } from '../root/index.js';
 import { TEMPLATES_ROOT, substitute } from '../init/scaffold.js';
 import { listIdeas, ideaStore } from '../ideas/store.js';
-import { appendBlock, blockBody, inspectBlock, prose, refreshBlock, renderBlock } from '../managed/index.js';
+import { blockBody, inspectBlock, planAppend, planRefresh, prose, renderBlock } from '../managed/index.js';
 const INSTRUCTION_FILES = ['CLAUDE.md', '.cursorrules', '.windsurfrules'];
 const AI_TOOL_FILE = { claude: 'CLAUDE.md', cursor: '.cursorrules', windsurf: '.windsurfrules' };
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 function readTemplate(rel, vars) {
     return substitute(readFileSync(join(TEMPLATES_ROOT, rel), 'utf8'), vars);
 }
-function readInstanceFile(projectRoot, rel) {
-    const r = readProjectFile(projectRoot, rel, { allowEmpty: true });
+/** `strict`: the text will be written back, so anything but valid UTF-8 is refused instead of being decoded lossily. */
+function readInstanceFile(projectRoot, rel, strict = false) {
+    const r = readProjectFile(projectRoot, rel, { allowEmpty: true, strictUtf8: strict });
     if (r.ok)
         return { kind: 'ok', content: r.content };
     if (r.code === 'FILE_MISSING')
@@ -51,7 +52,7 @@ function blockItem(projectRoot, root, spec) {
     const { id, rel, what } = spec;
     const body = blockBody(id, root);
     const manual = manualBlock(id, root);
-    const read = readInstanceFile(projectRoot, rel);
+    const read = readInstanceFile(projectRoot, rel, true);
     if (read.kind === 'unsafe')
         return { path: rel, action: 'CONFLICT', reason: `cannot be read safely (${read.detail}); not inspected or changed` };
     if (read.kind === 'missing') {
@@ -68,10 +69,14 @@ function blockItem(projectRoot, root, spec) {
             return conflict(`managed block "${id}" is malformed (${st.detail}); not changed. Fix or remove the markers, then re-run`);
         case 'edited':
             return conflict(`${st.detail}; your edit is kept and the block is not refreshed. Restore the block text, or delete the whole block (markers included) and re-run`);
-        case 'pristine':
+        case 'pristine': {
             if (st.current)
                 return { path: rel, action: 'UNCHANGED', reason: `${what} present and current` };
-            return { path: rel, action: 'UPDATE', reason: `refresh the unedited managed ${what} to the current text`, content: refreshBlock(text, st, id, body), before: sha(text), effect: spec.effect };
+            const next = planRefresh(text, st, id, body);
+            if (!next.ok)
+                return conflict(`cannot refresh managed block "${id}" safely: ${next.detail}; not changed`);
+            return { path: rel, action: 'UPDATE', reason: `refresh the unedited managed ${what} to the current text`, content: next.content, before: sha(text), effect: spec.effect };
+        }
         case 'absent': {
             const visible = prose(text);
             if (spec.legacy && spec.legacy.every((re) => re.test(visible)))
@@ -81,7 +86,10 @@ function blockItem(projectRoot, root, spec) {
             if (spec.whenMissing === 'create') {
                 return conflict(`exists but is not managed by MONOLITH; update does not take over your file. Add the managed ${what} by hand or rename it`);
             }
-            return { path: rel, action: 'UPDATE', reason: `append the managed ${what}; the ${Buffer.byteLength(text)} bytes already in the file stay as they are`, content: appendBlock(text, id, body), before: sha(text), effect: spec.effect };
+            const next = planAppend(text, id, body);
+            if (!next.ok)
+                return conflict(`cannot add the managed ${what} safely: ${next.detail}; not changed. Close the fence (or add the block by hand) and re-run`);
+            return { path: rel, action: 'UPDATE', reason: `append the managed ${what}; the ${Buffer.byteLength(text)} bytes already in the file stay as they are`, content: next.content, before: sha(text), effect: spec.effect };
         }
     }
 }
@@ -140,14 +148,14 @@ export function planUpdate(target) {
         rel: `${r}/skills/INDEX.md`,
         what: 'idea-capture skills-index row',
         effect: 'the idea-capture trigger is listed in the skills index',
-        legacy: [/idea-capture\/SKILL\.md/],
+        legacy: [/^\|\s*idea-capture\s*\|[^\n]*idea-capture\/SKILL\.md/m],
         whenMissing: 'conflict',
     }), blockItem(pr, r, {
         id: 'routing-idea',
         rel: `${r}/context/maps/routing-map.md`,
         what: 'CAPTURE_IDEA route (Table 8)',
         effect: 'the CAPTURE_IDEA intent has a canonical destination',
-        legacy: [/CAPTURE_IDEA/],
+        legacy: [/^\|\s*`CAPTURE_IDEA`\s*\|[^\n]*monolith idea add/m],
         clash: { re: /^##\s+Table 8\b/m, why: 'has its own "Table 8" without the CAPTURE_IDEA route; appending a second one would duplicate the heading. Add the CAPTURE_IDEA row to your Table 8 by hand' },
         whenMissing: 'conflict',
     }));
@@ -208,7 +216,10 @@ function chainChecks(projectRoot, r, items, skillText) {
     add('CLI → storage', storage === '', 'the ideas store is usable (it is created on the first `idea add`)', `the ideas store cannot be used safely: ${storage}`);
     return checks;
 }
-/** Integration is complete only when nothing is left to add, change or resolve AND every link of the chain checks out. */
+/**
+ * "Complete" is a structural statement: every managed component is installed,
+ * unedited-or-current, and the static chain checks out. It says nothing about
+ * what an AI model will do with the text. Integration is complete only when nothing is left to add, change or resolve AND every link of the chain checks out. */
 export function integrationComplete(plan) {
     return plan.items.every((i) => i.action !== 'ADD' && i.action !== 'UPDATE' && i.action !== 'CONFLICT') && plan.chain.every((c) => c.ok);
 }
@@ -252,7 +263,7 @@ export function applyPlan(target, plan) {
             }
             else {
                 // Last look: the file must still be the one planned against (narrows, does not close, the TOCTOU window).
-                const cur = readInstanceFile(targetDir, item.path);
+                const cur = readInstanceFile(targetDir, item.path, true);
                 if (cur.kind !== 'ok' || sha(cur.content) !== item.before) {
                     out.stale.push(item.path);
                     continue;

@@ -55,7 +55,10 @@ export interface UpdatePlan {
  * `Error` when the directory is not a MONOLITH instance.
  */
 export declare function planUpdate(target: string): UpdatePlan;
-/** Integration is complete only when nothing is left to add, change or resolve AND every link of the chain checks out. */
+/**
+ * "Complete" is a structural statement: every managed component is installed,
+ * unedited-or-current, and the static chain checks out. It says nothing about
+ * what an AI model will do with the text. Integration is complete only when nothing is left to add, change or resolve AND every link of the chain checks out. */
 export declare function integrationComplete(plan: UpdatePlan): boolean;
 export interface ApplyResult {
     created: string[];

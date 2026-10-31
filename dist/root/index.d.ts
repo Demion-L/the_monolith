@@ -91,6 +91,13 @@ export interface ProjectFileOptions {
     maxBytes?: number;
     /** Accept a zero-byte file. Defaults to false. */
     allowEmpty?: boolean;
+    /**
+     * Refuse (FILE_UNREADABLE) content that is not strictly valid UTF-8 or that
+     * contains a NUL byte (UTF-16 without BOM), instead of replacing bad bytes
+     * with U+FFFD. For callers that write the text back: a lossy read would
+     * corrupt the file. A UTF-8 BOM is kept in the string. Defaults to false.
+     */
+    strictUtf8?: boolean;
 }
 /**
  * Options of the unified reader. `boundary` is mandatory and explicit: an

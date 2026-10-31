@@ -43,8 +43,10 @@ Commands:
   idea        Capture a deferred thought without leaving the current task, and
               recall it later: add | list | show. Plain Markdown files, no LLM.
   update      Bring an existing instance up to Idea Capture & Recall. Preview by
-              default; --apply only creates missing files and never edits or
-              overwrites yours (see 'monolith update --help').
+              default (changes nothing). --apply creates MONOLITH-managed files
+              and may add or refresh managed sections inside your existing
+              files; your text outside those sections is kept, and conflicting
+              edits are never overwritten (see 'monolith update --help').
   ui          Launch Mission Control, the read-only web dashboard, on
               127.0.0.1 (default port 4173). 'ui dev' adds Vite hot reload
               (source checkout only). See 'monolith ui --help'.

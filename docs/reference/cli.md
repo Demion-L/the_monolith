@@ -280,17 +280,30 @@ version. Markers inside fenced code are examples, not blocks.
 | `ADD` | A MONOLITH-owned file is missing (`AGENT.md`, `skills/idea-capture/SKILL.md`); created exclusively. |
 | `UPDATE` | A managed block is appended to your file (every existing byte stays in place) or an **unedited** block is refreshed in place. Verified before writing; the file is re-checked just before the atomic replace. |
 | `UNCHANGED` | Already installed and current (an older unmanaged routing/index entry also counts). |
-| `CONFLICT` | Block edited by you, malformed/duplicated markers, your own `AGENT.md` without markers, your own `Table 8` without `CAPTURE_IDEA`, a missing user file, or a file that cannot be read safely. Nothing is written there; the plan says how to resolve it and prints the block to add by hand. |
+| `CONFLICT` | Block edited by you, malformed/duplicated markers, your own `AGENT.md` without markers, your own `Table 8` without `CAPTURE_IDEA`, a missing user file, a file that cannot be read safely, a file that is not valid UTF-8 (no encoding is converted; UTF-16 and binary files are refused too), or a file that ends inside an unclosed ``` / ~~~ fence that would hide the new block. Nothing is written there; the plan says how to resolve it and prints the block to add by hand. |
 | `SKIP` | Left alone on purpose (an existing differing `idea-capture` skill; the optional semantic-map rows). |
 
-`COMPLETE` is reported only when nothing is left to add, change or resolve **and** the static
-consistency check passes: instructions → `AGENT.md` → skills index → routing → skill → CLI call →
-ideas store. Nothing is executed. `--apply` exits `0` when complete, `2` when it is not
+`COMPLETE` is a structural statement, not a promise about an AI model: it is reported only when
+nothing is left to add, change or resolve **and** the static consistency check passes: instructions → `AGENT.md` → skills index → routing → skill → CLI call →
+ideas store. Nothing is executed, and what an assistant does with the text is not verified. Older unmanaged
+routing/index entries count as installed only when they are the known historic table rows, not a
+mere mention of `CAPTURE_IDEA`. `--apply` exits `0` when complete, `2` when it is not
 (conflicts, or a change skipped because its file changed after planning), `1` on an error.
 
 Apply order: skill and `AGENT.md` first, the pointer in root instruction files last, so an
 interrupted run never points at something missing; a re-run finishes it. It re-plans before
 writing and skips any item whose file differs from what was previewed.
+
+Known limitations (documented, not fixed here):
+- Instances created at `6bb4045` carry an older Table 8 `CAPTURE_IDEA` row whose `|` inside the
+  command is not escaped (`\|`), so GitHub-flavored Markdown renders it with extra cells. Current
+  templates (and new instances) escape it. `update` recognises the old row as installed and does not
+  rewrite it, because it lies outside a managed block; fix it by hand by writing `\|`.
+- Unmanaged text is matched structurally (the known table rows), not by meaning. A file that
+  contradicts the managed text elsewhere (for example another rule for saving ideas) is not detected.
+- Only strict UTF-8 is supported for files `update` may write; no encoding is detected or converted.
+- Fences are recognised for ``` and ~~~ (up to 3 spaces of indent); fences nested in lists or
+  block quotes are not tracked, and the post-write check refuses any result it cannot read back.
 
 What it will not do: overwrite your files or skills, edit text outside a managed block, touch
 `active.md`, `decisions.md`, `state.json`, roadmap, stories, idea files or `ideas/.ids/`, follow

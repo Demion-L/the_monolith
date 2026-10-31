@@ -191,7 +191,7 @@ describe('monolith update — instance from the Idea Capture release (inline tex
     const d = await oldInstance();
     edit(d, 'CLAUDE.md', (t) => t + '\n## Capturing Ideas\nrun `monolith idea add` per `.monolith/skills/idea-capture/SKILL.md`\n');
     edit(d, INDEX, (t) => t + '\n| idea-capture | "save an idea" | `.monolith/skills/idea-capture/SKILL.md` |\n');
-    edit(d, ROUTING, (t) => t + '\n## Table 8 — x\n| `CAPTURE_IDEA` | cli | - | - |\n');
+    edit(d, ROUTING, (t) => t + '\n## Table 8 — x\n| `CAPTURE_IDEA` | The MONOLITH CLI only: `monolith idea add --title "..."` | - | - |\n');
     return d;
   }
 
@@ -534,5 +534,204 @@ describe('monolith update — CLI surface', () => {
     expect(UPDATE_USAGE).toContain('--apply');
     expect(UPDATE_USAGE).toContain('managed blocks');
     expect(UPDATE_USAGE).toContain('never overwritten');
+  });
+});
+
+// DX-UPDATE-005 -------------------------------------------------------------
+
+const bytes = (d: string, rel: string): Buffer => readFileSync(join(d, rel));
+
+describe('monolith update — F-1 strict UTF-8 (files stay byte-identical)', () => {
+  const utf16le = (s: string): Buffer => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(s, 'utf16le')]);
+  const utf16be = (s: string): Buffer => {
+    const le = Buffer.from(s, 'utf16le');
+    for (let i = 0; i < le.length; i += 2) [le[i], le[i + 1]] = [le[i + 1], le[i]];
+    return Buffer.concat([Buffer.from([0xfe, 0xff]), le]);
+  };
+  const unsupported: Record<string, Buffer> = {
+    cp1251: Buffer.from([0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2, 0x0a]),
+    'utf-16 le': utf16le('# Привіт\n'),
+    'utf-16 be': utf16be('# Привіт\n'),
+    'utf-16 without BOM': Buffer.from('# Hi\n', 'utf16le'),
+    'invalid sequence': Buffer.concat([Buffer.from('# ok\n'), Buffer.from([0xc3, 0x28, 0xff, 0xfe]), Buffer.from('\n')]),
+    truncated: Buffer.concat([Buffer.from('# ok\n'), Buffer.from([0xd0])]),
+  };
+
+  for (const [name, content] of Object.entries(unsupported)) {
+    it(`${name}: CONFLICT in preview and apply, file byte-identical, nothing else touched`, async () => {
+      const d = await oldInstance();
+      writeFileSync(join(d, 'CLAUDE.md'), content);
+      const before = snapshot(d);
+      expect(planUpdate(d).items.find((i) => i.path === 'CLAUDE.md')?.action).toBe('CONFLICT');
+      expect(Buffer.compare(bytes(d, 'CLAUDE.md'), content)).toBe(0);
+      quiet();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      expect(await runUpdate(['--apply'], d)).toBe(2);
+      expect(Buffer.compare(bytes(d, 'CLAUDE.md'), content)).toBe(0);
+      const after = snapshot(d);
+      delete after['CLAUDE.md'];
+      delete before['CLAUDE.md'];
+      // Only MONOLITH-owned / other files may differ; CLAUDE.md is the one under test.
+      expect(after['.monolith/memory/working/active.md']).toBe(before['.monolith/memory/working/active.md']);
+    });
+  }
+
+  it('a non-UTF-8 AGENTS.md is refused while a valid CLAUDE.md is still updated', async () => {
+    const d = await oldInstance();
+    const cp = Buffer.from([0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2]);
+    writeFileSync(join(d, 'AGENTS.md'), cp);
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(2);
+    expect(Buffer.compare(bytes(d, 'AGENTS.md'), cp)).toBe(0);
+    expect(read(d, 'CLAUDE.md')).toContain('monolith:begin bootstrap');
+  });
+
+  const supported: Record<string, Buffer> = {
+    'Russian and Ukrainian': Buffer.from('# Правила\nЄдиний стандарт: їжак, ґанок, ёлка.\n', 'utf8'),
+    'UTF-8 BOM': Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('# Rules\n')]),
+    'mixed Unicode': Buffer.from('# 日本語 ✓ 😀 é\n', 'utf8'),
+    'no final newline': Buffer.from('# Rules\nlast line', 'utf8'),
+    CRLF: Buffer.from('# Rules\r\nbe nice\r\n', 'utf8'),
+  };
+  for (const [name, content] of Object.entries(supported)) {
+    it(`${name}: updated by appending only; original bytes stay a prefix; re-apply changes nothing`, async () => {
+      const d = await oldInstance();
+      writeFileSync(join(d, 'CLAUDE.md'), content);
+      expect(planUpdate(d).items.find((i) => i.path === 'CLAUDE.md')?.action).toBe('UPDATE');
+      quiet();
+      expect(await runUpdate(['--apply'], d)).toBe(0);
+      const once = bytes(d, 'CLAUDE.md');
+      expect(once.subarray(0, content.length).equals(content)).toBe(true);
+      expect(once.length).toBeGreaterThan(content.length);
+      if (name === 'CRLF') expect(once.toString('utf8')).not.toMatch(/[^\r]\n/);
+      expect(await runUpdate(['--apply'], d)).toBe(0);
+      expect(bytes(d, 'CLAUDE.md').equals(once)).toBe(true);
+    });
+  }
+
+  it('an edited managed block in a non-UTF-8 file is not refreshed either', async () => {
+    const d = await newInstance();
+    const orig = bytes(d, 'CLAUDE.md');
+    const bad = Buffer.concat([orig, Buffer.from([0xcf, 0xf0])]);
+    writeFileSync(join(d, 'CLAUDE.md'), bad);
+    expect(planUpdate(d).items.find((i) => i.path === 'CLAUDE.md')?.action).toBe('CONFLICT');
+  });
+});
+
+describe('monolith update — F-2 managed block idempotency with fences', () => {
+  const OPEN = ['```\nunclosed code\n', '~~~\nunclosed tilde\n', '````md\nfour ticks, closed by only three:\n```\n', '~~~~\nfour tildes\n~~~\n', '```js\nopen with info\n'];
+  for (const tail of OPEN) {
+    it(`unclosed fence at the end (${JSON.stringify(tail.slice(0, 12))}): CONFLICT, bytes unchanged, no block accumulates`, async () => {
+      const d = await oldInstance();
+      edit(d, 'CLAUDE.md', (t) => t + '\n' + tail);
+      const before = bytes(d, 'CLAUDE.md');
+      quiet();
+      for (let i = 0; i < 4; i++) {
+        expect(planUpdate(d).items.find((x) => x.path === 'CLAUDE.md')?.action).toBe('CONFLICT');
+        expect(await runUpdate(['--apply'], d)).toBe(2);
+        expect(bytes(d, 'CLAUDE.md').equals(before)).toBe(true);
+      }
+      expect(read(d, 'CLAUDE.md')).not.toContain('monolith:begin bootstrap');
+    });
+  }
+
+  it('an unclosed fence before an existing managed block hides it: CONFLICT, nothing appended', async () => {
+    const d = await newInstance();
+    edit(d, 'CLAUDE.md', (t) => '```\nopen\n' + t);
+    const before = bytes(d, 'CLAUDE.md');
+    expect(planUpdate(d).items.find((x) => x.path === 'CLAUDE.md')?.action).toBe('CONFLICT');
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(2);
+    expect(bytes(d, 'CLAUDE.md').equals(before)).toBe(true);
+  });
+
+  it('properly closed fences (any length, either character) allow insertion, idempotently, 5 runs', async () => {
+    const d = await oldInstance();
+    edit(d, 'CLAUDE.md', (t) => t + '\n```ts\ncode\n```\n\n~~~\nx\n~~~~~\n\n`````\nlong\n``````\n');
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(0);
+    const once = bytes(d, 'CLAUDE.md');
+    for (let i = 0; i < 4; i++) {
+      expect(await runUpdate(['--apply'], d)).toBe(0);
+      expect(bytes(d, 'CLAUDE.md').equals(once)).toBe(true);
+    }
+    expect((once.toString('utf8').match(/monolith:begin bootstrap/g) ?? []).length).toBe(1);
+  });
+
+  it('managed markers shown inside fenced code are examples; the real block is still appended once', async () => {
+    const d = await oldInstance();
+    const ex = '```md\n<!-- monolith:begin bootstrap sha256=0123456789abcdef -->\nx\n<!-- monolith:end bootstrap -->\n```\n';
+    edit(d, 'CLAUDE.md', (t) => t + '\n' + ex);
+    quiet();
+    for (let i = 0; i < 3; i++) expect(await runUpdate(['--apply'], d)).toBe(0);
+    const text = read(d, 'CLAUDE.md');
+    expect(text.startsWith(read(d, 'CLAUDE.md').slice(0, 10))).toBe(true);
+    expect(inspectBlock(text, 'bootstrap', blockBody('bootstrap', '.monolith')).state).toBe('pristine');
+    expect((text.match(/monolith:end bootstrap/g) ?? []).length).toBe(2);
+  });
+
+  it('an existing pristine block followed by an unclosed fence is still recognised', async () => {
+    const d = await newInstance();
+    edit(d, 'CLAUDE.md', (t) => t + '\n```\ntrailing open fence\n');
+    const text = read(d, 'CLAUDE.md');
+    const body = blockBody('bootstrap', '.monolith');
+    const st = inspectBlock(text, 'bootstrap', body);
+    expect(st.state).toBe('pristine');
+  });
+
+  it('a fence line with trailing text does not close a fence, and an inline ``` run does not open one', async () => {
+    const d = await oldInstance();
+    // "``` x" cannot close; so the fence stays open to the end of file -> CONFLICT.
+    edit(d, 'CLAUDE.md', (t) => t + '\n```\ncode\n``` not a closer\n');
+    expect(planUpdate(d).items.find((x) => x.path === 'CLAUDE.md')?.action).toBe('CONFLICT');
+    const e = await oldInstance();
+    edit(e, 'CLAUDE.md', (t) => t + '\nuse ```inline``` here\n');
+    expect(planUpdate(e).items.find((x) => x.path === 'CLAUDE.md')?.action).toBe('UPDATE');
+  });
+});
+
+describe('monolith update — F-3 legacy detection is not a mere mention', () => {
+  it('a routing-map that only mentions CAPTURE_IDEA does not count as routed', async () => {
+    const d = await oldInstance();
+    edit(d, ROUTING, (t) => t.replace(/\s*$/, '\n') + '\nNote: CAPTURE_IDEA means write to TODO.md\n');
+    expect(actions(d)[ROUTING]).not.toBe('UNCHANGED');
+  });
+
+  it('the historic Table 8 row (unescaped pipe) and skills-index row are still recognised', async () => {
+    const d = await oldInstance();
+    edit(d, ROUTING, (t) => t.replace(/\s*$/, '\n') + '\n| `CAPTURE_IDEA`   | The MONOLITH CLI only: `monolith idea add --title "..." (--description "..." | --description-stdin)`, stores x | s | i |\n');
+    edit(d, INDEX, (t) => t.replace('<!-- Add project-specific', '| idea-capture     | "save an idea" | `.monolith/skills/idea-capture/SKILL.md` |\n<!-- Add project-specific'));
+    expect(actions(d)[ROUTING]).toBe('UNCHANGED');
+    expect(actions(d)[INDEX]).toBe('UNCHANGED');
+  });
+
+  it('a mention of the skill path in prose is not an index entry', async () => {
+    const d = await oldInstance();
+    edit(d, INDEX, (t) => t + '\nDo not use idea-capture/SKILL.md.\n');
+    expect(actions(d)[INDEX]).not.toBe('UNCHANGED');
+  });
+
+  it('COMPLETE is worded as a structural statement', async () => {
+    const d = await newInstance();
+    const logs = quiet();
+    await runUpdate([], d);
+    expect(logs.join('\n')).toContain('structural check');
+  });
+});
+
+describe('monolith update — F-4 help and F-6 template', () => {
+  it('update --help states preview, managed sections, preserved text and conflicts', () => {
+    expect(UPDATE_USAGE).toMatch(/Preview: shows the plan, writes nothing/);
+    expect(UPDATE_USAGE).toContain('refreshes');
+    expect(UPDATE_USAGE).toContain('valid UTF-8');
+    expect(UPDATE_USAGE).toContain('fence');
+  });
+
+  it('the Table 8 CAPTURE_IDEA row written by the current template escapes the pipe', () => {
+    const body = blockBody('routing-idea', '.monolith');
+    const row = body.split('\n').find((l) => l.startsWith('| `CAPTURE_IDEA`')) as string;
+    expect(row).toContain('\\|');
+    // 4 columns = 5 unescaped pipes
+    expect(row.replace(/\\\|/g, '').match(/\|/g)?.length).toBe(5);
   });
 });

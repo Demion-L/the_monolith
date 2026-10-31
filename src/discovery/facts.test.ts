@@ -583,6 +583,26 @@ describe('limits', () => {
     expect(cut.diagnostics.find((x) => x.code === 'LIMIT_MANIFEST_FACTS')?.count).toBe(1);
   });
 
+  it('makes the result PARTIAL when more package.json files exist than may be read', () => {
+    const max = DEFAULT_DISCOVERY_LIMITS.maxManifestReads;
+    expect(max).toBe(20);
+    const entries = Array.from({ length: max + 1 }, (_, i) => f(`pkg${String(i).padStart(2, '0')}/package.json`));
+    const reads: string[] = [];
+    const reader: ManifestReader = (_r, rel) => (reads.push(rel), { ok: true, path: '', size: 2, content: '{}' });
+    const r = extractProjectFacts(ROOT, fakeTraversal(entries), { readManifest: reader });
+    expect(reads).toHaveLength(max);
+    expect(reads).not.toContain(entries[max].path);
+    expect(r.stats).toMatchObject({ manifestsFound: max + 1, manifestsRead: max });
+    expect(kinds(r, 'MANIFEST_PRESENT')).toHaveLength(max + 1);
+    expect(r.diagnostics.filter((x) => x.code === 'LIMIT_MANIFEST_READS')).toEqual([expect.objectContaining({ count: 1 })]);
+    expect(r.completeness).toBe('PARTIAL');
+    // at the limit nothing is cut: the same tree with one manifest fewer is COMPLETE
+    const at = extractProjectFacts(ROOT, fakeTraversal(entries.slice(0, max)), { readManifest: reader });
+    expect(at.diagnostics.some((x) => x.code === 'LIMIT_MANIFEST_READS')).toBe(false);
+    expect(at.completeness).toBe('COMPLETE');
+    expect(extractProjectFacts(ROOT, fakeTraversal([...entries].reverse()), { readManifest: reader })).toEqual(r);
+  });
+
   it('caps language facts', () => {
     const r = extractProjectFacts(ROOT, fakeTraversal([f('a.ts'), f('b.py'), f('c.go')]), { limits: { maxLanguageFacts: 2 } });
     expect(kinds(r, 'LANGUAGE_BY_EXTENSION').map((x) => x.subject)).toEqual(['Go', 'Python']);

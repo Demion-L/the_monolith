@@ -83,16 +83,41 @@ acceptance criterion 23 has not been finished, and no full security acceptance i
   register *and* delete the store's own files directly; that is outside the supported models. If the audit refuses, it
   reports `PruneDecisionCorruptError` (`commit-audit`) and this call removes nothing; an operator must decide. The audit
   reads the data first and `tombstone.json` after it, so a concurrent legitimate pruner is not mistaken for damage
-  (DURABLE-SEC-004 I-1, fixed by DURABLE-SEC-005).
+  (DURABLE-SEC-004 I-1, fixed by DURABLE-SEC-005), and it lists the loose events before the segments, so a concurrent
+  compaction is not mistaken for damage either (DURABLE-SEC-006 F-1, fixed by DURABLE-SEC-006A). The refusal message says
+  only what is guaranteed: that the refusing call removed no task data; it does not claim that nothing at all changed.
 - **I-2 (known limit): committed + part of the log gone + no `tombstone.json`.** A roll-forward publishes `tombstone.json`
-  before its first unlink, so this state is not produced by a crashed process (SIGKILL). It is possible after a power loss
-  when `durability` is `'file'` or `'none'` (the directory entry of the tombstone is not forced, the unlinks may be). It
-  cannot be told from a forged register over a damaged log (the checksum is unkeyed), so `prune()` refuses it and
-  changes nothing; the task stays unreadable/gone. Keep `durability: 'full'` (the default) where this matters. There is no
-  recovery command. An operator who has established outside the store that the commit is genuine can restore the missing
-  events from a backup (the whole log then passes the audit) or publish `tombstone.json` for that commit with the store's own
-  encoder (`encodeTombstone`) and run `prune()` again. Follow-up task proposed: an explicit, logged operator recovery
-  command; it needs a decision on what the operator authenticates against, and is not part of this fix.
+  before its first unlink, so a process crash (SIGKILL) does not produce this state: after a crash the kernel still holds
+  every completed call, in order. A power loss (or OS crash) is different: it keeps only what reached the disk, and the
+  directory entry of the tombstone may be lost while later unlinks are kept. Whether that can happen depends on what the
+  write of the tombstone *confirmed*:
+  - `durability: 'full'` (default) and `fsync(file)` **and** `fsync(directory)` both succeeded: the tombstone's content and
+    its directory entry were forced to disk before the first unlink. This is the only case in which the state is not
+    expected after a power loss.
+  - `durability: 'file'` or `'none'`: the directory entry is not forced (`'none'` forces nothing). The state is possible.
+  - `durability: 'full'` but `fsync(directory)` did not succeed: the write is still *successful* and the roll-forward
+    **continues**; the only signal is the warning `DIR_FSYNC_FAILED` (the write is published, its durability is unknown) or
+    `DIR_FSYNC_UNSUPPORTED` (the filesystem cannot fsync a directory; the file is durable, the entry may not be), delivered
+    through `onWarning`. Durability is then *not confirmed*, and the state is possible after a power loss exactly as in
+    `'file'`. This does not mean that the tombstone *is* lost, only that it is not guaranteed to survive. A caller that needs
+    the guarantee must treat these warnings as "not durable" (for example, stop before relying on the prune having completed).
+
+  Do not read "successful" as "durable", and do not read a missing confirmation as "lost": the first is about the call, the
+  second about what was proven to the disk, and neither says that the store is damaged. Damage of the storage itself (bit
+  rot, files edited or removed by hand) is a different cause with the same symptom, and the store cannot tell them apart.
+  The state cannot be told from a forged register over a damaged log (the checksum is unkeyed), so `prune()` refuses it
+  (`PruneDecisionCorruptError`, `commit-audit`) and removes no task data; the task stays unreadable/gone. There is no
+  recovery command and none is added by this fix.
+
+  *Operator recovery, only if the operator chooses to act.* Before publishing `tombstone.json` by hand (with the store's own
+  encoder, `encodeTombstone`) and running `prune()` again, the operator must establish **independently of the store directory
+  being repaired** that the commit is genuine: (1) the committed decision is authentic (for example, from a backup or from
+  the system that requested the prune), (2) the task was finished, (3) the head named by the commit matches the head of the
+  log as it was, (4) the outcome digest matches the outcome of that task, and (5) nothing in the data available contradicts
+  the commit. If the available data cannot confirm all of these, the operator must **not** continue the deletion; the
+  alternative is to restore the missing events from a backup, after which the whole log passes the audit. A forged commit and
+  a genuine one with a lost tombstone look the same to the store, so publishing the tombstone by hand on a guess can destroy
+  a live task.
 - Not claimed: durability across OS crash or power loss, network filesystems.
 
 See the [DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REMEDIATION-REPORT.md),

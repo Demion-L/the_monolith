@@ -261,6 +261,7 @@ describe('I-1: the security properties of O-1 hold under every order of the read
     const t = await forgedForActive(dir);
     const err = await refused(openStore(dir).prune(t));
     expect(err.message).not.toMatch(/nothing was deleted/);
-    expect(err.message).toMatch(/this call deleted and cancelled nothing/);
+    expect(err.message).not.toMatch(/cancelled nothing|deleted nothing|changed nothing/);
+    expect(err.message).toMatch(/this call removed no task data/);
   });
 });

@@ -97,8 +97,9 @@ three pruners, torn observation, persistent gap, forged/damaged/mismatching tomb
 reviewer's 400 events x 4 processes x 8 rounds). The ordered and stress tests fail on `f619062` and pass on the fix.
 
 **I-2 (documented, not weakened).** State: committed, part of the log gone, no `tombstone.json`. The roll-forward cannot
-produce it (the tombstone is linked, and with `durability: 'full'` the directory is fsynced, before the first unlink). With
-`durability: 'file'` or `'none'` the directory entry is not forced, and after a power loss the unlinks (other directory) may be
+produce it (the tombstone is linked, and with `durability: 'full'` the directory is fsynced, before the first unlink; if that
+directory fsync fails or is unsupported the write only warns, `DIR_FSYNC_FAILED` / `DIR_FSYNC_UNSUPPORTED`, the roll-forward continues
+and durability is unconfirmed, see DURABLE-SEC-006A). With `durability: 'file'` or `'none'` the directory entry is not forced, and after a power loss the unlinks (other directory) may be
 on disk while the tombstone's entry is not. A crash of the process alone (SIGKILL) cannot do it. The same bytes are what a
 forged commit over a damaged log looks like, and the register has no key, so the audit cannot tell them apart; it refuses and
 leaves everything as it is (the task stays gone for readers). Recovery needs a trust the store does not have. No format,
@@ -106,7 +107,9 @@ authentication or weakening of the audit was added. Operator procedure and the f
 `docs/reference/security-and-limitations.md`; the state is pinned by a test in `pending-prune.test.ts`.
 
 **I-3 (fixed).** `PruneDecisionCorruptError` said "nothing was deleted or cancelled", which a concurrent pruner can make
-untrue. It now says that *this call* deleted and cancelled nothing, and that another process may have changed the task; the
-tombstone read error says "this call changed nothing".
+untrue. It then said that *this call* deleted and cancelled nothing; DURABLE-SEC-006A (F-3) replaced that with statements about
+`published` that hold on every path: a refusal with `published=false` says the call removed no task data (it may have recorded a
+prune-register entry), one with `published=true` says a write was already made visible and is not taken back. The tombstone
+read error says "this call removed no task data".
 
 Not claimed: TM-C, criterion 23, full security acceptance.

@@ -156,7 +156,7 @@ export declare class RetentionRefusedError extends DurableError {
 export type PruneCorruptReason = 'register' | 'gap' | 'unknown-artifact' | 'commit-audit' | 'multiple-commit' | 'history' | 'task-dir-missing' | 'tombstone-without-commit' | 'legacy-tombstone-unmigrated';
 /**
  * The persisted prune decision register of a task is corrupt, or the task directory is missing, or it is an
- * unmigrated legacy tombstone. Fail closed: nothing is deleted and nobody is cancelled; an operator decides.
+ * unmigrated legacy tombstone. Fail closed: the refusal deletes no task data; an operator decides.
  * Never mapped to `TaskOrphanedError`, `RetentionRefusedError` or a quarantine, and never retryable.
  * `published` is true when a write the caller made is already visible (the outcome of that write is unknown).
  */

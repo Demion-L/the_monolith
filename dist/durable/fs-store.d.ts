@@ -173,10 +173,11 @@ export declare class FsEventStore implements EventStore {
      * I-1: the data is read FIRST and `tombstone.json` AFTER it. The roll-forward publishes the tombstone before its first
      * unlink and nothing ever removes it, so a tombstone that is still absent after the data was read proves that no unlink
      * had begun when the data was read (it was absent at every earlier moment too): a gap in the data is then not a removal
-     * but a torn observation (a compaction moving events into a segment between the two listings) or real damage. Read the
+     * but a torn observation or real damage. The loose files are read before the segments are listed (see `survivingEvents`), so a
+     * compaction that moves events into a segment meanwhile does not tear the observation. Read the
      * other way round, a concurrent pruner that publishes the tombstone and removes events between the two reads is taken
-     * for damage. A gap seen without a tombstone is therefore looked at again a few times before it is refused, so that a
-     * torn observation is not taken for damage either. No lock: a pruner that races this audit only ever turns the verdict
+     * for damage. A gap seen without a tombstone is still looked at again a few times before it is refused (a defence in depth,
+     * not what F-1 relies on). No lock: a pruner that races this audit only ever turns the verdict
      * from "the whole log must be there" into "a part may be gone", and the roll-forward still checks the tombstone it finds.
      */
     private auditCommitted;

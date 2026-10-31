@@ -472,7 +472,7 @@ export class FsEventStore {
             case 'missing':
                 return new PruneDecisionCorruptError(taskId, 'task-dir-missing');
             case 'unreadable':
-                return new StoreIoError(`the prune state of task "${taskId}" cannot be read now (${st.reason ?? 'unknown'}); nothing was changed. Try again.`);
+                return new StoreIoError(`the prune state of task "${taskId}" cannot be read now (${st.reason ?? 'unknown'}); this refusal removes and undoes nothing. Try again.`);
             case 'committed':
                 return new TaskPrunedError(taskId);
             default:
@@ -682,12 +682,11 @@ export class FsEventStore {
      */
     survivingEvents(taskId, upTo) {
         const bySeq = new Map();
-        const segs = [];
-        for (const e of this.listDir(this.segmentsDir(taskId)) ?? []) {
-            const m = SEGMENT_NAME.exec(e.name);
-            if (m && e.isFile() && Number(m[1]) <= upTo)
-                segs.push({ name: e.name, from: Number(m[1]), to: Number(m[2]) });
-        }
+        // ORDER MATTERS (F-1), the same as in `readLogImpl`: loose files first, segments second. Compaction publishes a segment
+        // BEFORE it removes the loose files it covers and nothing but the roll-forward of a prune ever removes a segment (and that
+        // publishes the tombstone first, which `auditCommitted` reads afterwards). So a slot that is missing from the loose
+        // files, or whose file vanishes before it is read, was removed after its segment was published, and the segment is in
+        // the listing taken afterwards. The other order cannot see a segment that is published between the two listings.
         const eventEntries = this.listDir(this.eventsDir(taskId)) ?? [];
         this.seams.auditHook?.('listed');
         for (const e of eventEntries) {
@@ -697,11 +696,17 @@ export class FsEventStore {
             const seq = Number(m[1]);
             const content = this.readManaged(join(this.eventsDir(taskId), e.name), `event ${e.name}`, MAX_EVENT_BYTES + 4096, taskId);
             if (content === null)
-                continue; // removed meanwhile
+                continue; // removed meanwhile: a compaction published its segment first, and it is listed below
             const ev = parseEvent(content.trim(), taskId, seq);
             if (ev.seq !== seq)
                 throw new LogCorruptError(taskId, seq, `file ${e.name} holds event ${ev.seq}`);
             bySeq.set(seq, ev);
+        }
+        const segs = [];
+        for (const e of this.listDir(this.segmentsDir(taskId)) ?? []) {
+            const m = SEGMENT_NAME.exec(e.name);
+            if (m && e.isFile() && Number(m[1]) <= upTo)
+                segs.push({ name: e.name, from: Number(m[1]), to: Number(m[2]) });
         }
         for (const g of segs) {
             const content = this.readManaged(join(this.segmentsDir(taskId), g.name), `segment ${g.name}`, MAX_SEGMENT_BYTES, taskId);
@@ -727,10 +732,11 @@ export class FsEventStore {
      * I-1: the data is read FIRST and `tombstone.json` AFTER it. The roll-forward publishes the tombstone before its first
      * unlink and nothing ever removes it, so a tombstone that is still absent after the data was read proves that no unlink
      * had begun when the data was read (it was absent at every earlier moment too): a gap in the data is then not a removal
-     * but a torn observation (a compaction moving events into a segment between the two listings) or real damage. Read the
+     * but a torn observation or real damage. The loose files are read before the segments are listed (see `survivingEvents`), so a
+     * compaction that moves events into a segment meanwhile does not tear the observation. Read the
      * other way round, a concurrent pruner that publishes the tombstone and removes events between the two reads is taken
-     * for damage. A gap seen without a tombstone is therefore looked at again a few times before it is refused, so that a
-     * torn observation is not taken for damage either. No lock: a pruner that races this audit only ever turns the verdict
+     * for damage. A gap seen without a tombstone is still looked at again a few times before it is refused (a defence in depth,
+     * not what F-1 relies on). No lock: a pruner that races this audit only ever turns the verdict
      * from "the whole log must be there" into "a part may be gone", and the roll-forward still checks the tombstone it finds.
      */
     auditCommitted(taskId, tombstone) {
@@ -749,7 +755,7 @@ export class FsEventStore {
             this.seams.auditHook?.('surveyed');
             const published = this.registerIO(taskId).tombstone();
             if (published.k === 'ioerr')
-                throw new StoreIoError(`cannot read tombstone.json of task "${taskId}": ${published.reason}; this call changed nothing. Try again.`);
+                throw new StoreIoError(`cannot read tombstone.json of task "${taskId}": ${published.reason}; this call removed no task data. Try again.`);
             const deletionStarted = published.k !== 'absent'; // the roll-forward publishes it before its first unlink
             try {
                 problem = committedProblem(taskId, events, tombstone, deletionStarted);

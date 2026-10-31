@@ -70,6 +70,25 @@ never deletes them automatically (FS-CLEAN-001).
 Durable State is merged but **not accepted**. Its independent security review is incomplete: the targeted review of
 acceptance criterion 23 has not been finished, and no full security acceptance is claimed.
 
+- **Support boundary and deployment probe (owner decision A2-R, Option A).** Durable State is supported only on the
+  local Linux filesystem configurations that DESIGN-004 §43 does not exclude (network, caching-FUSE and similar
+  filesystems stay unsupported). Before production use, run the filesystem-conformance probe (criterion 70 / AC-A2-1)
+  on the target storage root's filesystem and record the filesystem type, kernel version, date, root (or a safe
+  identifier) and result. `PASS` means *not refuted*, not proven; `FAIL` or *cannot run* means unsupported. A run on
+  `/tmp` does not stand in for the target root. There is no automatic `statfs` gate when a store is opened. See
+  DESIGN-004 §48.
+- **Review standard.** The current limited feature freeze relies on an independent AI-assisted targeted security
+  review. It is not an external human security audit and not formal verification.
+- **Known limits recorded by DURABLE-SEC-007A.** A well-formed register file with a very large attempt number
+  (`prune-<n>.prepare.json`, up to 9 digits) written into a task directory by someone with write access to the store can
+  make the register lookup loop run for a very long time or exhaust memory (denial of service; no deletion was observed);
+  this is outside the supported threat model. `DIR_FSYNC_UNSUPPORTED` is emitted only when a directory fsync was
+  attempted and failed with one of the "unsupported" errors; a platform that reports no directory fsync capability gets
+  no such warning, so do not rely on it as a platform check. An externally deleted task directory currently still lets
+  the runtime cancel an active child (open finding; see the closure record), contrary to ADR-018 D2.
+- Closure state: [Criterion 23 closure record](../architecture/DURABLE-CRITERION-23-CLOSURE-RECORD.md) — decisions are
+  recorded, criterion 23 stays open.
+
 - **Threat models** (ADR-013): TM-A (trusted local project) is supported with limitations; TM-B (static hostile content)
   is supported only partially; TM-C (concurrent adversarial mutation of directories, symlinks or file names while a
   command runs) is **not supported**. Roll-forward and residue repair unlink by path after a boundary check, so a

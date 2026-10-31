@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
-import { DiscoveryError, computeFactId, validateDiscoveryResult, type DiscoveryResult } from './contracts.js';
+import { DiscoveryError, computeFactId, sourceCoverage, validateDiscoveryResult, type DiscoveryResult } from './contracts.js';
 import { DEFAULT_DISCOVERY_LIMITS, extractProjectFacts, type ManifestReader } from './facts.js';
 import { traverseProject, type TraversalEntry, type TraversalResult } from './traverse.js';
 
@@ -649,5 +649,306 @@ describe('end to end on a real traversal', () => {
     expect(kinds(result, 'DIRECTORY').map((x) => x.subject)).toEqual(['src', 'src/api']);
     expect(kinds(result, 'ENTRYPOINT_CANDIDATE').map((x) => x.subject)).toEqual(['app.py', 'src/index.ts']);
     expect(result.diagnostics.map((x) => x.code)).toEqual(['MANIFEST_CONTENT_NOT_ANALYZED']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DISCOVERY-001B-2-F: provenance of aggregates, validator, determinism, reader codes
+// ---------------------------------------------------------------------------
+
+const tsFiles = (n: number): TraversalEntry[] => Array.from({ length: n }, (_, i) => f(`src/f${String(i).padStart(3, '0')}.ts`));
+const tsFact = (r: DiscoveryResult) => kinds(r, 'LANGUAGE_BY_EXTENSION').find((x) => x.object === '.ts')!;
+
+describe('aggregate provenance (F-01)', () => {
+  const lim = DEFAULT_DISCOVERY_LIMITS.maxSourcesPerFact; // 3
+  for (const [name, n, sources, coverage] of [
+    ['one file', 1, 1, 'FULL'],
+    ['fewer files than the sample size', 2, 2, 'FULL'],
+    ['exactly the sample size', lim, lim, 'FULL'],
+    ['one above the sample size', lim + 1, lim, 'SAMPLE'],
+    ['many files', 120, lim, 'SAMPLE'],
+  ] as const) {
+    it(`${name}: count covers every file, sources are min(count, limit), coverage is ${coverage}`, () => {
+      const r = extractProjectFacts(ROOT, fakeTraversal(tsFiles(n)));
+      const fact = tsFact(r);
+      expect(fact.value).toBe(String(n));
+      expect(fact.sources).toHaveLength(sources);
+      expect(fact.sources.every((x) => x.observation === 'extension' && !x.path.startsWith('/'))).toBe(true);
+      expect(sourceCoverage(fact)).toBe(coverage);
+      expect(validateDiscoveryResult(r)).toEqual([]);
+    });
+  }
+
+  it('takes the sample from the lexically first files whatever the input order', () => {
+    const entries = tsFiles(10);
+    const expected = ['src/f000.ts', 'src/f001.ts', 'src/f002.ts'];
+    for (const order of [entries, [...entries].reverse(), [...entries.slice(5), ...entries.slice(0, 5)]]) {
+      expect(tsFact(extractProjectFacts(ROOT, fakeTraversal(order))).sources.map((x) => x.path)).toEqual(expected);
+    }
+  });
+
+  it('respects a custom sample size and still counts every file', () => {
+    const r = extractProjectFacts(ROOT, fakeTraversal(tsFiles(7)), { limits: { maxSourcesPerFact: 5 } });
+    expect(tsFact(r).sources).toHaveLength(5);
+    expect(tsFact(r).value).toBe('7');
+    expect(sourceCoverage(tsFact(r))).toBe('SAMPLE');
+  });
+
+  it('treats every non-aggregate fact as fully covered by its sources', () => {
+    const r = extractProjectFacts(ROOT, fakeTraversal([d('src'), f('src/index.ts')]));
+    for (const fact of r.facts.filter((x) => x.kind !== 'LANGUAGE_BY_EXTENSION')) expect(sourceCoverage(fact)).toBe('FULL');
+  });
+
+  it('keeps a PARTIAL traversal visible: the count is over the listed files and the result says PARTIAL', () => {
+    const r = extractProjectFacts(ROOT, fakeTraversal(tsFiles(5), { completeness: 'PARTIAL' }));
+    expect(r.completeness).toBe('PARTIAL');
+    expect(r.traversal.completeness).toBe('PARTIAL');
+    expect(tsFact(r).value).toBe('5');
+  });
+
+  it('rejects a false declaration of coverage: a count that its sources cannot support', () => {
+    const r = extractProjectFacts(ROOT, fakeTraversal(tsFiles(2)));
+    const fact = tsFact(r);
+    const withCount = (value: string, sources = fact.sources) => {
+      const forged = { ...fact, value, id: computeFactId(fact.kind, fact.subject, fact.object, value), sources };
+      return validateDiscoveryResult({ ...r, facts: [forged] }).join();
+    };
+    expect(withCount('5')).toContain('source count is not min(count');
+    expect(withCount('1')).toContain('source count is not min(count');
+    expect(withCount('abc')).toContain('value is not a positive count');
+    expect(withCount('02')).toContain('value is not a positive count');
+    expect(withCount('2', [{ path: 'src/f000.ts', observation: 'extension' }, { path: 'src/f001.py', observation: 'extension' }])).toContain('source extension differs');
+    expect(withCount('2', [fact.sources[0], fact.sources[0]])).toContain('duplicate source');
+  });
+});
+
+describe('validateDiscoveryResult is a contract check (F-02)', () => {
+  // Hand-built, independent of the producer.
+  const limits = { ...DEFAULT_DISCOVERY_LIMITS };
+  const stats = (facts = 0) => ({ inputEntries: 0, excludedEntries: 0, filesWithoutKnownLanguage: 0, manifestsFound: 0, manifestsRead: 0, facts });
+  const valid = (): any => ({
+    schemaVersion: 1,
+    limits: { ...limits },
+    completeness: 'COMPLETE',
+    reproducible: true,
+    traversal: { completeness: 'COMPLETE', reproducible: true },
+    stats: stats(),
+    facts: [],
+    diagnostics: [],
+  });
+  const fact = (o: any = {}): any => {
+    const x = { kind: 'DIRECTORY', level: 'DETECTED', subject: 'src', rule: 'walk-directory', sources: [{ path: 'src', observation: 'directory-entry' }], ...o };
+    return { ...x, id: o.id ?? computeFactId(x.kind, x.subject, x.object, x.value) };
+  };
+  const withFacts = (facts: any[]): any => ({ ...valid(), facts, stats: stats(facts.length) });
+  const dep = (o: any = {}) =>
+    fact({ kind: 'DEPENDENCY_DECLARED', subject: 'package.json', object: 'a', value: 'dependencies', rule: 'package-json-dependencies', sources: [{ path: 'package.json', observation: 'manifest-field', field: '/dependencies/a' }], ...o });
+
+  it('accepts an empty result and a small valid one', () => {
+    expect(validateDiscoveryResult(valid())).toEqual([]);
+    expect(validateDiscoveryResult(withFacts([fact(), dep()].sort((a, b) => (a.kind < b.kind ? -1 : 1))))).toEqual([]);
+  });
+
+  it('accepts the output of a JSON round trip', () => {
+    const r = scan({ 'src/index.ts': 'x', 'package.json': pkg({ scripts: { a: 'x' }, dependencies: { b: '1' } }) }).result;
+    expect(validateDiscoveryResult(JSON.parse(JSON.stringify(r)))).toEqual([]);
+  });
+
+  it('returns violations instead of throwing on non-object and null input', () => {
+    for (const v of [null, undefined, 42, 'x', [], true]) expect(validateDiscoveryResult(v)).toEqual(['result: not an object']);
+    for (const key of ['limits', 'traversal', 'stats', 'facts', 'diagnostics', 'completeness']) {
+      const r = valid();
+      r[key] = null;
+      expect(() => validateDiscoveryResult(r)).not.toThrow();
+      expect(validateDiscoveryResult(r).length).toBeGreaterThan(0);
+    }
+    const missing = valid();
+    delete missing.facts;
+    delete missing.diagnostics;
+    expect(validateDiscoveryResult(missing).join()).toContain('facts: not an array');
+  });
+
+  const hostile: [string, (r: any) => void, string][] = [
+    ['unknown schema version', (r) => (r.schemaVersion = 2), 'schemaVersion'],
+    ['completeness outside the enum', (r) => (r.completeness = 'WHATEVER'), 'completeness: not COMPLETE or PARTIAL'],
+    ['reproducible not a boolean', (r) => (r.reproducible = 'yes'), 'reproducible: not a boolean'],
+    ['traversal verdict outside the enum', (r) => (r.traversal.completeness = 'MAYBE'), 'traversal.completeness'],
+    ['unknown top-level property', (r) => (r.evil = 1), 'unknown property'],
+    ['limit that is not an integer', (r) => (r.limits.maxFacts = 1.5), 'limits.maxFacts'],
+    ['negative stat', (r) => (r.stats.inputEntries = -1), 'stats.inputEntries'],
+    ['NaN stat', (r) => (r.stats.manifestsFound = NaN), 'stats.manifestsFound'],
+    ['Infinity stat', (r) => (r.stats.excludedEntries = Infinity), 'stats.excludedEntries'],
+    ['stats.facts different from the facts', (r) => (r.stats.facts = 3), 'stats.facts'],
+    ['null inside facts', (r) => (r.facts = [null]), 'facts[0]: not an object'],
+    ['more facts than limits.maxFacts', (r) => { r.limits.maxFacts = 1; r.facts = [fact({ subject: 'a', sources: [{ path: 'a', observation: 'directory-entry' }] }), fact({ subject: 'b', sources: [{ path: 'b', observation: 'directory-entry' }] })]; r.stats.facts = 2; }, 'more than limits.maxFacts'],
+    ['unknown fact kind', (r) => (r.facts = [fact({ kind: 'PROPHECY' })]), 'kind'],
+    ['level not the level of the kind', (r) => (r.facts = [fact({ level: 'INTERPRETED' })]), 'level'],
+    ['malformed id', (r) => (r.facts = [fact({ id: 'XYZ' })]), 'id'],
+    ['id that does not match the content', (r) => (r.facts = [fact({ id: '0123456789abcdef' })]), 'id does not match'],
+    ['duplicate ids', (r) => { const a = fact(); r.facts = [a, { ...a }]; r.stats.facts = 2; }, 'duplicate id'],
+    ['facts out of order', (r) => { r.facts = [fact({ subject: 'b', sources: [{ path: 'b', observation: 'directory-entry' }] }), fact({ subject: 'a', sources: [{ path: 'a', observation: 'directory-entry' }] })]; r.stats.facts = 2; }, 'facts order'],
+    ['unknown fact property', (r) => (r.facts = [fact({ evil: '<script>' })]), 'unknown property'],
+    ['sources null', (r) => (r.facts = [fact({ sources: null })]), 'sources: not an array'],
+    ['no sources', (r) => (r.facts = [fact({ sources: [] })]), 'no source'],
+    ['null source', (r) => (r.facts = [fact({ sources: [null] })]), 'sources[0]: not an object'],
+    ['absolute source path', (r) => (r.facts = [fact({ sources: [{ path: '/etc/passwd', observation: 'directory-entry' }] })]), 'unsafe source path'],
+    ['traversing source path', (r) => (r.facts = [fact({ sources: [{ path: 'a/../../b', observation: 'directory-entry' }] })]), 'unsafe source path'],
+    ['source path of another subject', (r) => (r.facts = [fact({ sources: [{ path: 'elsewhere', observation: 'directory-entry' }] })]), 'differs from the subject'],
+    ['unknown observation', (r) => (r.facts = [fact({ sources: [{ path: 'src', observation: 'telepathy' }] })]), 'unknown observation'],
+    ['observation of another kind', (r) => (r.facts = [fact({ sources: [{ path: 'src', observation: 'extension' }] })]), 'does not match the kind'],
+    ['manifest-field source without a field', (r) => (r.facts = [dep({ sources: [{ path: 'package.json', observation: 'manifest-field' }] })]), 'without a JSON Pointer'],
+    ['field naming another dependency', (r) => (r.facts = [dep({ sources: [{ path: 'package.json', observation: 'manifest-field', field: '/dependencies/zzz' }] })]), 'does not point at the declared dependency'],
+    ['absolute path in field of a plain source', (r) => (r.facts = [fact({ sources: [{ path: 'src', observation: 'directory-entry', field: '/home/x' }] })]), 'only belongs to a manifest-field'],
+    ['sources out of order', (r) => (r.facts = [fact({ kind: 'LANGUAGE_BY_EXTENSION', subject: 'TypeScript', object: '.ts', value: '2', sources: [{ path: 'b.ts', observation: 'extension' }, { path: 'a.ts', observation: 'extension' }] })]), 'sources order'],
+    ['dependency in an unknown section', (r) => (r.facts = [dep({ value: 'bogus' })]), 'not a dependency section'],
+    ['dependency name with a control character', (r) => (r.facts = [dep({ object: 'a\u0000b' })]), 'object'],
+    ['directory with a value', (r) => (r.facts = [fact({ value: 'x' })]), 'value not allowed'],
+    ['entrypoint candidate without a basis', (r) => (r.facts = [fact({ kind: 'ENTRYPOINT_CANDIDATE', level: 'INTERPRETED', subject: 'index.js', value: 'candidate', sources: [{ path: 'index.js', observation: 'file-name' }] })]), 'interpreted without basis'],
+    ['dangling basis', (r) => (r.facts = [fact({ kind: 'ENTRYPOINT_CANDIDATE', level: 'INTERPRETED', subject: 'index.js', value: 'candidate', basis: ['0000000000000000'], sources: [{ path: 'index.js', observation: 'file-name' }] })]), 'basis refers to no fact'],
+    ['basis on a DETECTED fact', (r) => (r.facts = [fact({ basis: ['0000000000000000'] })]), 'basis on a DETECTED fact'],
+    ['more directory facts than limits.maxDirectoryFacts', (r) => { r.limits.maxDirectoryFacts = 1; r.facts = [fact({ subject: 'a', sources: [{ path: 'a', observation: 'directory-entry' }] }), fact({ subject: 'b', sources: [{ path: 'b', observation: 'directory-entry' }] })]; r.stats.facts = 2; }, 'more DIRECTORY facts'],
+    ['directory deeper than limits.maxDirectoryDepth', (r) => (r.facts = [fact({ subject: 'a/b/c', sources: [{ path: 'a/b/c', observation: 'directory-entry' }] })]), 'maxDirectoryDepth'],
+    ['diagnostic that is not an object', (r) => (r.diagnostics = [null]), 'diagnostics[0]: not an object'],
+    ['unknown diagnostic code', (r) => (r.diagnostics = [{ code: 'X', message: 'm' }]), 'unknown code'],
+    ['diagnostic with an absolute path in the message', (r) => (r.diagnostics = [{ code: 'MANIFEST_READ_FAILED', message: 'failed at /home/demion/.ssh/id_rsa' }]), 'absolute path'],
+    ['diagnostic with a Windows path in the message', (r) => (r.diagnostics = [{ code: 'MANIFEST_READ_FAILED', message: 'failed at C:\\Users\\x' }]), 'absolute path'],
+    ['diagnostic with a control character', (r) => (r.diagnostics = [{ code: 'MANIFEST_EMPTY', message: 'a\u001b[31mb' }]), 'not plain text'],
+    ['diagnostic with an unsafe path', (r) => (r.diagnostics = [{ code: 'MANIFEST_EMPTY', path: '../x', message: 'm' }]), 'unsafe path'],
+    ['diagnostic with a bad count', (r) => (r.diagnostics = [{ code: 'MANIFEST_EMPTY', count: -2, message: 'm' }]), 'count'],
+    ['diagnostics out of order', (r) => (r.diagnostics = [{ code: 'MANIFEST_PARSE_ERROR', message: 'm' }, { code: 'MANIFEST_FIELD_INVALID', message: 'm' }]), 'order'],
+    ['more diagnostics than limits.maxDiagnostics', (r) => { r.limits.maxDiagnostics = 1; r.completeness = 'PARTIAL'; r.diagnostics = [{ code: 'MANIFEST_PARSE_ERROR', message: 'm' }, { code: 'MANIFEST_READ_FAILED', message: 'm' }]; r.reproducible = false; }, 'more than limits.maxDiagnostics'],
+    ['COMPLETE although a diagnostic says PARTIAL', (r) => (r.diagnostics = [{ code: 'LIMIT_FACTS', message: 'm' }]), 'COMPLETE although'],
+    ['COMPLETE over a PARTIAL traversal', (r) => (r.traversal.completeness = 'PARTIAL'), 'COMPLETE although'],
+    ['reproducible over an unreproducible traversal', (r) => (r.traversal.reproducible = false), 'reproducible: true although'],
+  ];
+  for (const [name, mutate, expected] of hostile) {
+    it(`rejects: ${name}`, () => {
+      const r = valid();
+      mutate(r);
+      let violations: string[] = [];
+      expect(() => (violations = validateDiscoveryResult(r))).not.toThrow();
+      expect(violations.join('\n')).toContain(expected);
+    });
+  }
+
+  it('never repeats an untrusted value in a violation and bounds their number', () => {
+    const r = valid();
+    r.facts = Array.from({ length: 400 }, () => fact({ id: '/home/victim/secret', subject: '/home/victim/secret', sources: [{ path: '/home/victim/secret', observation: 'telepathy' }] }));
+    r.limits.maxFacts = 1000;
+    r.diagnostics = [{ code: '/home/victim/secret', message: '/home/victim/secret' }];
+    const out = validateDiscoveryResult(r);
+    expect(out.length).toBeLessThanOrEqual(100);
+    expect(out.join('\n')).not.toContain('victim');
+  });
+
+  it('refuses an oversized facts array without walking it', () => {
+    const r = valid();
+    r.facts = Array.from({ length: limits.maxFacts + 1 }, () => fact());
+    expect(validateDiscoveryResult(r)).toEqual(['facts: more than limits.maxFacts']);
+  });
+});
+
+describe('determinism under permutation of the whole result (F-03)', () => {
+  // A deterministic Fisher-Yates so the permutations are reproducible.
+  const permute = <T>(list: T[], seed: number): T[] => {
+    const a = list.slice();
+    let s = seed;
+    for (let i = a.length - 1; i > 0; i--) {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const j = Math.floor((s / 2 ** 32) * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+
+  it('returns an identical whole result for every permutation of the entries (samples, caps, diagnostics)', () => {
+    const entries: TraversalEntry[] = [d('src'), d('docs')];
+    for (let i = 0; i < 12; i++) entries.push(f(`d${i}/f${i}.ts`), f(`src/m${i}.py`));
+    for (let i = 0; i < 9; i++) entries.push(f(`pkg${String(i).padStart(2, '0')}/package.json`));
+    entries.push(f('package.json'), f('Cargo.toml'), f('go.mod'), f('main.py'), f('src/index.ts'), { path: 'bad/../x', kind: 'file' }, { path: 'link', kind: 'symlink' });
+    // Caps that fire: manifest reads and facts, dependency names per manifest, language examples.
+    const limits = { maxManifestReads: 4, maxManifestFacts: 7, maxDependenciesPerManifest: 2, maxSourcesPerFact: 3 };
+    const reader: ManifestReader = () => ({ ok: true, path: '', size: 2, content: pkg({ dependencies: { c: '1', a: '1', b: '1' }, devDependencies: { z: '1', y: '1' }, scripts: { t: 'x', a: 'y' } }) });
+    const run = (list: TraversalEntry[]) => extractProjectFacts(ROOT, fakeTraversal(list, { diagnostics: [{ code: 'DIRECTORY_UNREADABLE', path: 'x', message: 'm' } as never] }), { limits, readManifest: reader });
+    const base = run(entries);
+    expect(base.completeness).toBe('PARTIAL');
+    expect(base.diagnostics.map((x) => x.code)).toEqual(expect.arrayContaining(['LIMIT_MANIFEST_FACTS', 'LIMIT_MANIFEST_READS', 'LIMIT_DEPENDENCIES', 'INPUT_PATH_REJECTED']));
+    const text = JSON.stringify(base);
+    for (let seed = 1; seed <= 25; seed++) {
+      const other = run(permute(entries, seed));
+      expect(other).toEqual(base);
+      expect(JSON.stringify(other)).toBe(text);
+    }
+    expect(JSON.stringify(run([...entries].reverse()))).toBe(text);
+  });
+});
+
+describe('determinism under key order of a manifest (F-03)', () => {
+  it('keeps the same dependencies and scripts at the cap whatever the order of keys in package.json', () => {
+    const text = (keys: string[]) => `{"dependencies":{${keys.map((k) => `"${k}":"1"`).join(',')}},"scripts":{${keys.map((k) => `"${k}":"x"`).join(',')}}}`;
+    const run = (keys: string[]) =>
+      extractProjectFacts(ROOT, fakeTraversal([f('package.json')]), {
+        limits: { maxDependenciesPerManifest: 2, maxScriptsPerManifest: 2 },
+        readManifest: () => ({ ok: true, path: '', size: 1, content: text(keys) }),
+      });
+    const base = run(['d', 'a', 'c', 'b']);
+    expect(kinds(base, 'DEPENDENCY_DECLARED').map((x) => x.object)).toEqual(['a', 'b']);
+    expect(kinds(base, 'SCRIPT_DECLARED').map((x) => x.object)).toEqual(['a', 'b']);
+    expect(run(['b', 'c', 'a', 'd'])).toEqual(base);
+    expect(run(['a', 'b', 'c', 'd'])).toEqual(base);
+  });
+});
+
+describe('diagnostic order is total (F-04)', () => {
+  it('breaks a tie of code, path and message by count', () => {
+    const diagnostics = [
+      { code: 'DIRECTORY_UNREADABLE', path: 'x', message: 'm', count: 5 },
+      { code: 'DIRECTORY_UNREADABLE', path: 'x', message: 'm', count: 2 },
+    ] as never[];
+    const a = extractProjectFacts(ROOT, fakeTraversal([], { diagnostics }));
+    const b = extractProjectFacts(ROOT, fakeTraversal([], { diagnostics: [...diagnostics].reverse() }));
+    expect(a).toEqual(b);
+    expect(a.diagnostics.map((x) => x.count)).toEqual([2, 5]);
+  });
+});
+
+describe('reader error codes (F-05)', () => {
+  const run = (read: ManifestReader) => extractProjectFacts(ROOT, fakeTraversal([f('package.json')]), { readManifest: read });
+  const codes = (r: DiscoveryResult) => r.diagnostics.filter((x) => x.code === 'MANIFEST_READ_FAILED').map((x) => x.message);
+
+  it('passes a real closed code through', () => {
+    expect(codes(run(() => ({ ok: false, code: 'FILE_MISSING', detail: '' })))).toEqual(['the manifest was refused or could not be read (FILE_MISSING).']);
+  });
+
+  const hostileCodes: [string, unknown][] = [
+    ['an errno-like code', 'ENOENT'],
+    ['a missing code', undefined],
+    ['a Unix path', '/home/victim/secret'],
+    ['a Windows path', 'C:\\Users\\victim\\secret'],
+    ['control characters', 'FILE_MISSING\u001b[31m\n'],
+    ['a long string', 'X'.repeat(100_000)],
+    ['a number', 42],
+    ['an object', { toString: () => '/home/victim/secret' }],
+  ];
+  for (const [name, code] of hostileCodes) {
+    it(`reports ${name} as UNKNOWN and leaks nothing into the serialised result`, () => {
+      const r = run(() => ({ ok: false, code, detail: '/home/victim/detail' }) as never);
+      const text = JSON.stringify(r);
+      expect(text).not.toContain('victim');
+      expect(text).not.toContain('ENOENT');
+      expect(text.length).toBeLessThan(20_000);
+      expect(codes(r)).toEqual(['the manifest was refused or could not be read (UNKNOWN).']);
+      expect(r.completeness).toBe('PARTIAL');
+    });
+  }
+
+  it('survives a code getter that throws, a reader result that is not an object and a non-string content', () => {
+    const throwing = { ok: false, detail: '' };
+    Object.defineProperty(throwing, 'code', { get: () => { throw new Error('/home/victim/secret'); } });
+    for (const read of [() => throwing, () => undefined, () => null, () => ({ ok: true, path: '', size: 1, content: 42 })]) {
+      const r = run(read as never);
+      expect(JSON.stringify(r)).not.toContain('victim');
+      expect(codes(r)).toEqual(['the manifest could not be read (unexpected failure).']);
+    }
   });
 });

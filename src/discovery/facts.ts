@@ -29,19 +29,23 @@
  */
 
 import { isAbsolute } from 'path';
-import { readProjectFile, type ProjectFileRead } from '../root/index.js';
+import { readProjectFile, type ProjectFileErrorCode, type ProjectFileRead } from '../root/index.js';
 import type { TraversalEntry, TraversalResult } from './traverse.js';
 import {
+  DEPENDENCY_SECTIONS,
   DISCOVERY_SCHEMA_VERSION,
   DiscoveryError,
   EXTRACTION_DIAGNOSTIC_AFFECTS_COMPLETENESS,
   EXTRACTION_DIAGNOSTIC_IS_STABLE,
   FACT_LEVEL_BY_KIND,
+  compareDiagnostics,
   compareFacts,
   compareSources,
   compareUtf16,
   computeFactId,
+  isKeepableName,
   isSafeRelativePath,
+  pointerToken,
   validateDiscoveryResult,
   type DiscoveryDiagnostic,
   type DiscoveryFact,
@@ -104,8 +108,6 @@ export const KNOWN_MANIFESTS: Readonly<Record<string, string>> = Object.freeze({
   'Cargo.toml': 'cargo',
   'go.mod': 'go',
 });
-
-const DEPENDENCY_SECTIONS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'] as const;
 
 /** Project-relative file names that may start a program. Only candidates, ever. */
 export const ENTRYPOINT_CANDIDATE_PATHS: readonly string[] = [
@@ -251,17 +253,6 @@ function compareDepthThenPath(a: string, b: string): number {
   return depthOf(a) - depthOf(b) || compareUtf16(a, b);
 }
 
-/** RFC 6901 token escaping. */
-const pointerToken = (s: string): string => s.replace(/~/g, '~0').replace(/\//g, '~1');
-
-// Control, bidirectional and replacement characters and lone surrogates: not kept in a fact.
-// eslint-disable-next-line no-control-regex
-const UNSAFE_NAME = /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩�]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
-
-function isKeepableName(name: string, max: number): boolean {
-  return name.length > 0 && name.length <= max && !UNSAFE_NAME.test(name);
-}
-
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -277,6 +268,24 @@ interface ParsedManifest {
   scripts: string[];
 }
 
+/** Every code `readProjectFile` can return; anything else is reported as `UNKNOWN`. Exhaustive by type. */
+const READ_ERROR_CODES: ReadonlySet<unknown> = new Set(
+  Object.keys({
+    FILE_MISSING: 0,
+    FILE_OUTSIDE_PROJECT: 0,
+    FILE_UNRESOLVABLE: 0,
+    FILE_NOT_REGULAR: 0,
+    FILE_EMPTY: 0,
+    FILE_TOO_LARGE: 0,
+    FILE_CHANGED: 0,
+    FILE_UNREADABLE: 0,
+    FILE_SYMLINK: 0,
+    FILE_HARDLINKED: 0,
+    READ_BOUNDARY_INVALID: 0,
+    READ_UNSUPPORTED_PLATFORM: 0,
+  } satisfies Record<ProjectFileErrorCode, 0>),
+);
+
 function parsePackageJson(
   projectRoot: string,
   path: string,
@@ -284,25 +293,31 @@ function parsePackageJson(
   read: ManifestReader,
   diag: Diagnostics,
 ): ParsedManifest | undefined {
-  let r: ProjectFileRead;
+  // The reader is a seam: whatever it returns or throws is untrusted. Only a code from the closed
+  // list below, a size-checked string and a fixed message can come out of this block.
+  let content: string;
   try {
-    r = read(projectRoot, path, { maxBytes: limits.maxManifestBytes });
+    const r = read(projectRoot, path, { maxBytes: limits.maxManifestBytes });
+    if (r.ok) {
+      if (typeof r.content !== 'string') throw new TypeError('content');
+      content = r.content;
+    } else {
+      // `detail` may carry an absolute path or a system message: never read.
+      const code = READ_ERROR_CODES.has(r.code) ? r.code : 'UNKNOWN';
+      if (code === 'FILE_EMPTY') diag.add('MANIFEST_EMPTY', 'the manifest is empty; nothing was extracted.', path);
+      else if (code === 'FILE_TOO_LARGE') diag.add('MANIFEST_TOO_LARGE', `the manifest exceeds ${limits.maxManifestBytes} bytes and was not read.`, path);
+      else diag.add('MANIFEST_READ_FAILED', `the manifest was refused or could not be read (${code}).`, path);
+      return undefined;
+    }
   } catch {
     diag.add('MANIFEST_READ_FAILED', 'the manifest could not be read (unexpected failure).', path);
-    return undefined;
-  }
-  if (!r.ok) {
-    // Only the closed error code is reported: `detail` may carry an absolute path or a system message.
-    if (r.code === 'FILE_EMPTY') diag.add('MANIFEST_EMPTY', 'the manifest is empty; nothing was extracted.', path);
-    else if (r.code === 'FILE_TOO_LARGE') diag.add('MANIFEST_TOO_LARGE', `the manifest exceeds ${limits.maxManifestBytes} bytes and was not read.`, path);
-    else diag.add('MANIFEST_READ_FAILED', `the manifest was refused or could not be read (${String(r.code)}).`, path);
     return undefined;
   }
 
   let doc: unknown;
   try {
     // JSON.parse only: no reviver, no evaluation. Its error text can quote the input, so it is dropped.
-    doc = JSON.parse(r.content.charCodeAt(0) === 0xfeff ? r.content.slice(1) : r.content);
+    doc = JSON.parse(content.charCodeAt(0) === 0xfeff ? content.slice(1) : content);
   } catch {
     diag.add('MANIFEST_PARSE_ERROR', 'the manifest is not valid JSON; nothing was extracted.', path);
     return undefined;
@@ -505,6 +520,7 @@ export function extractProjectFacts(projectRoot: string, traversal: TraversalRes
       languageDropped++;
       return;
     }
+    // `value` counts every file of the group; the sources are the first few in UTF-16 order (a sample).
     const example = g.paths.slice(0, limits.maxSourcesPerFact);
     sink.addAll([
       {
@@ -542,11 +558,7 @@ export function extractProjectFacts(projectRoot: string, traversal: TraversalRes
     if (d.count !== undefined) out.count = d.count;
     return out;
   });
-  const rank = (d: DiscoveryDiagnostic): number =>
-    d.code.startsWith('TRAVERSAL_') ? 1 : EXTRACTION_DIAGNOSTIC_AFFECTS_COMPLETENESS[d.code as ExtractionDiagnosticCode] ? 0 : 2;
-  let diagnostics: DiscoveryDiagnostic[] = [...diag.all(), ...fromTraversal].sort(
-    (a, b) => rank(a) - rank(b) || compareUtf16(a.code, b.code) || compareUtf16(a.path ?? '', b.path ?? '') || compareUtf16(a.message, b.message),
-  );
+  let diagnostics: DiscoveryDiagnostic[] = [...diag.all(), ...fromTraversal].sort(compareDiagnostics);
   let diagnosticsDropped = 0;
   if (diagnostics.length > limits.maxDiagnostics) {
     diagnosticsDropped = diagnostics.length - (limits.maxDiagnostics - 1);

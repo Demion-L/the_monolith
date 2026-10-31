@@ -447,6 +447,23 @@ Check-then-use races remain open (SEC-001B.3).
 
 ---
 
+## Repository Hygiene & Worktree Lifecycle
+
+1. New worktrees are created only inside `/home/demion/projects/AI/MONOLITH/worktrees/`.
+2. A worktree is created only for a specific active task.
+3. When the task is finished, its results are integrated or stored separately.
+4. Before removing a worktree, check its tracked, untracked and ignored files.
+5. Verify that no unique commits are lost (tip reachable from `main` or another kept branch).
+6. Finished worktrees and temporary branches are removed with the owner's permission.
+7. Research documents are not kept only inside temporary worktrees.
+8. Reproducible build artifacts are not archived without need.
+9. Temporary files and experiment environments are removed when the work is done.
+10. Do not modify or remove worktrees, branches or files that belong to other tasks.
+11. Do not create extra directories, reports or work environments "just in case".
+12. Unknown user data is kept until the owner decides explicitly.
+
+---
+
 ## Out of Scope (current)
 
 The following are explicitly deferred. Do not implement without a finalized story:

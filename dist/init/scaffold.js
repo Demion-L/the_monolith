@@ -11,8 +11,8 @@ const INSTRUCTION_FILE_MAP = {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 // Works both from dist/init/ (compiled) and src/init/ (tsx)
-const TEMPLATES_ROOT = resolve(__dirname, '..', '..', 'templates', 'default-instance');
-function substitute(content, vars) {
+export const TEMPLATES_ROOT = resolve(__dirname, '..', '..', 'templates', 'default-instance');
+export function substitute(content, vars) {
     return content.replace(/\{\{([A-Z_]+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
 function stripTemplateSuffix(p) {

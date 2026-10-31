@@ -22,6 +22,7 @@ monolith validate   # check instance integrity (implemented, see below)
 monolith mission    # Tactical Coordinatorium: start|list|show|finish|checkpoint|checkpoints (implemented, experimental, ADR-008)
 monolith brief      # deterministic, read-only project-state summary [--max-chars N] [--strict] [--reconcile] (implemented)
 monolith idea       # capture and recall deferred ideas: add|list|show (implemented, IDEA-001A)
+monolith update     # add missing Idea Capture infrastructure to an existing instance [--apply] (implemented, DX-UPDATE-001)
 monolith durable    # Durable State: list|show|assess|packet|verify|retention (implemented; see below)
 monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented)
 monolith ui dev     # Mission Control with Vite hot reload [--port N] (implemented, source checkout only)
@@ -249,6 +250,38 @@ become anything.
   against (SEC-001B.3; threat model TM-C is unsupported).
 - No LLM, network, search, reminders or automatic idea detection. Library entry:
   `import { ideas } from '@latysh-development/monolith'`.
+
+## `monolith update`
+
+```
+monolith update            # preview: shows the plan, writes nothing
+monolith update --apply    # creates the files marked ADD
+monolith update --help
+```
+
+Brings an **existing** instance up to Idea Capture & Recall (DX-UPDATE-001). It does not
+initialise a project (`monolith init` does) and is not a migration system.
+
+Instances record no template version, so each component is detected **by content**. Every
+component gets one verdict:
+
+| Verdict | Meaning |
+| --- | --- |
+| `ADD` | A MONOLITH-owned file is missing; `--apply` creates it (only `skills/idea-capture/SKILL.md`). |
+| `UNCHANGED` | Already installed. |
+| `CONFLICT` | A file that belongs to you (`CLAUDE.md`/`.cursorrules`/`.windsurfrules`, `AGENTS.md`, `routing-map.md`, `skills/INDEX.md`) lacks the Idea Capture wiring, or cannot be read safely. It is **never edited**; the plan prints the exact text to add by hand. |
+| `SKIP` | Optional or already yours (e.g. an existing `idea-capture` skill that differs from the template; the semantic-map rows, which are documentation only). |
+
+A skill without its routing and instructions is not active, so the result is reported
+`COMPLETE` only when nothing is left to add and nothing is in `CONFLICT`. `--apply` exits
+`0` when complete, `2` when manual actions remain, `1` on an error.
+
+What it will not do: overwrite, append to or rewrite any existing file; touch `active.md`,
+`decisions.md`, `tech-debt.md`, `state.json`, roadmap, project map, stories, your own skills,
+idea files or `ideas/.ids/`; follow symlinks or hardlinked files; write outside the project
+root. Writes use the safe-write primitive (exclusive create, project boundary). It is not
+transactional and not coordinated between simultaneous runs (SEC-001B.3): a re-run finishes
+an interrupted update, and a file that appeared meanwhile is never replaced.
 
 ## `monolith durable`
 

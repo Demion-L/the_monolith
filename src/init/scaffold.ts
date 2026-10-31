@@ -24,11 +24,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Works both from dist/init/ (compiled) and src/init/ (tsx)
-const TEMPLATES_ROOT = resolve(__dirname, '..', '..', 'templates', 'default-instance');
+export const TEMPLATES_ROOT = resolve(__dirname, '..', '..', 'templates', 'default-instance');
 
 type Vars = Record<string, string>;
 
-function substitute(content: string, vars: Vars): string {
+export function substitute(content: string, vars: Vars): string {
   return content.replace(/\{\{([A-Z_]+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
 }
 

@@ -1,5 +1,8 @@
 import type { ProjectConfig } from './types.js';
 import { type WriteWarning } from '../root/index.js';
+export declare const TEMPLATES_ROOT: string;
+type Vars = Record<string, string>;
+export declare function substitute(content: string, vars: Vars): string;
 export interface ScaffoldResult {
     filesCreated: number;
     dirsCreated: string[];
@@ -22,4 +25,5 @@ export interface ScaffoldResult {
  */
 export declare function planScaffoldConflicts(targetDir: string, config: ProjectConfig): string[];
 export declare function scaffoldInstance(targetDir: string, config: ProjectConfig): Promise<ScaffoldResult>;
+export {};
 //# sourceMappingURL=scaffold.d.ts.map

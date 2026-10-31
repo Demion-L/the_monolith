@@ -38,6 +38,11 @@ MONOLITH has no research layer; research of Webway's program is owned by Webway.
 
 **ADR-015 / ADR-016:** `proposed` ADRs on the lock foundation and bounded state. Neither is accepted; ADR-016 implementation is gated on ADR-015 (G-LOCK), which is not passed.
 
+**ADR-021 (implementation status, 2026-10-31):** ADR-021 is unchanged; this note only records how its stories were carried out.
+- DISCOVERY-001B-1 (safe traversal): implemented and merged.
+- DISCOVERY-001B-2: manifest analyzer implemented and merged (deterministic fact extraction, `src/discovery/facts.ts`); documentation analyzer **deferred to DISCOVERY-001B-2D** (status `DEFERRED`, owner decision). The "documentation analyzers" wording in "Implementation Boundaries" is therefore not yet fully carried out.
+- DISCOVERY-001B-3: project map proposal generation; it does not implement a documentation analyzer.
+
 **ADR-001:** moved to Webway whole as `webway:ADR-001` (Cognitive Loop Architecture — part of Webway's epistemic architecture). The number is retired in MONOLITH, not reused. **ADR-002** was split: its Semantic Knowledge half is `webway:ADR-002`, the Cognitive Infrastructure half stays here as ADR-002 (see the record).
 
 **ADR-004 … 006:** these numbers are not used in MONOLITH. The decisions belong to

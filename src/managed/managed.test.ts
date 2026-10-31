@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendBlock, blockBody, bodyHash, inspectBlock, prose, refreshBlock, renderBlock } from './index.js';
+import { appendBlock, planAppend, planRefresh, blockBody, bodyHash, inspectBlock, prose, refreshBlock, renderBlock } from './index.js';
 
 const body = blockBody('bootstrap', '.monolith');
 const pristine = (text: string) => {
@@ -7,6 +7,8 @@ const pristine = (text: string) => {
   if (st.state !== 'pristine') throw new Error(`expected pristine, got ${st.state}`);
   return st;
 };
+
+const block0 = () => renderBlock('bootstrap', body);
 
 describe('managed blocks', () => {
   it('renders a block whose checksum matches its body, with the root substituted', () => {
@@ -81,5 +83,86 @@ describe('managed blocks', () => {
     expect(prose(t)).toContain('keep');
     expect(prose(t)).not.toContain('hidden-fence');
     expect(prose(t)).not.toContain('hidden-comment');
+  });
+
+  describe('HTML comments (N-1)', () => {
+    const block = renderBlock('bootstrap', body);
+
+    it('refuses to append after an unclosed <!--, and says why', () => {
+      const r = planAppend('# T\n<!-- todo\n', 'bootstrap', body);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.detail).toMatch(/unclosed HTML comment/);
+    });
+
+    it('appends after closed comments (several, Unicode, CRLF) and stays outside them', () => {
+      for (const eol of ['\n', '\r\n']) {
+        const text = `# Заметки ✓${eol}<!-- один -->${eol}текст <!-- два${eol}ещё -->${eol}`;
+        const r = planAppend(text, 'bootstrap', body);
+        expect(r.ok).toBe(true);
+        if (r.ok) {
+          expect(r.content.startsWith(text)).toBe(true);
+          expect(inspectBlock(r.content, 'bootstrap', body).state).toBe('pristine');
+        }
+      }
+    });
+
+    it('a block wholly inside a comment is malformed, not installed', () => {
+      const text = '<!--\n' + block + '-->\n';
+      expect(inspectBlock(text, 'bootstrap', body).state).toBe('malformed');
+    });
+
+    it('a block inside a comment is not re-appended around: CONFLICT, never COMPLETE', () => {
+      expect(planAppend('<!--\n' + block + '-->\n', 'bootstrap', body).ok).toBe(false);
+    });
+
+    it('an unclosed comment before an existing block makes it malformed', () => {
+      expect(inspectBlock('<!-- x\n' + block, 'bootstrap', body).state).toBe('malformed');
+    });
+
+    it('an unclosed comment opened inside a fence is just fence text', () => {
+      const text = '```\n<!-- not a comment\n```\n';
+      expect(planAppend(text, 'bootstrap', body).ok).toBe(true);
+    });
+
+    it('re-planning over a correct block stays current (idempotent)', () => {
+      const r = planAppend('# T\n<!-- c -->\n', 'bootstrap', body);
+      if (!r.ok) throw new Error(r.detail);
+      const st = pristine(r.content);
+      const again = planRefresh(r.content, st, 'bootstrap', body);
+      expect(again.ok && again.content).toBe(r.content);
+    });
+  });
+
+  describe('BOM and fences (N-2)', () => {
+    const BOM = '﻿';
+
+    it('BOM + unclosed fence is refused', () => {
+      for (const eol of ['\n', '\r\n']) expect(planAppend(`${BOM}\`\`\`md${eol}x${eol}`, 'bootstrap', body).ok).toBe(false);
+    });
+
+    it('BOM + closed fence appends, keeping the BOM bytes and being idempotent', () => {
+      for (const eol of ['\n', '\r\n']) {
+        const text = `${BOM}\`\`\`${eol}code${eol}\`\`\`${eol}`;
+        const r = planAppend(text, 'bootstrap', body);
+        if (!r.ok) throw new Error(r.detail);
+        expect(Buffer.from(r.content).subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+        expect(r.content.startsWith(text)).toBe(true);
+        const again = planRefresh(r.content, pristine(r.content), 'bootstrap', body);
+        expect(again.ok && again.content).toBe(r.content);
+      }
+    });
+
+    it('BOM + plain text, and a BOM-only file, append', () => {
+      expect(planAppend(`${BOM}# Title\n`, 'bootstrap', body).ok).toBe(true);
+      expect(planAppend(BOM, 'bootstrap', body).ok).toBe(true);
+    });
+
+    it('a BOM-prefixed fence hides the markers inside it', () => {
+      expect(inspectBlock(`${BOM}\`\`\`\n${block0()}\`\`\`\n`, 'bootstrap', body).state).toBe('absent');
+    });
+
+    it('a BOM before an existing begin marker on line 0 still counts as a block', () => {
+      expect(inspectBlock(BOM + block0(), 'bootstrap', body).state).toBe('pristine');
+    });
   });
 });

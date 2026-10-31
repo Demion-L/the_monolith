@@ -49,6 +49,8 @@ const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 function splitLines(text) {
     return text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 }
+/** A leading UTF-8 BOM is not part of the first line's Markdown. */
+const stripBom = (l, i) => (i === 0 ? l.replace(/^\uFEFF/, '') : l);
 /**
  * Per line: is it a fence line or inside a fenced code block? Same rules as
  * CommonMark for the cases that matter here: a fence is 3+ backticks or tildes
@@ -59,8 +61,8 @@ function splitLines(text) {
 function scanFences(lines) {
     const hidden = [];
     let fence = null;
-    for (const l of lines) {
-        const t = l.replace(/\r?\n$/, '');
+    for (const [i, l] of lines.entries()) {
+        const t = stripBom(l, i).replace(/\r?\n$/, '');
         if (fence === null) {
             const o = FENCE_OPEN.exec(t);
             if (o && !(o[1][0] === '`' && o[2].includes('`'))) {
@@ -79,16 +81,53 @@ function scanFences(lines) {
     }
     return { hidden, open: fence !== null };
 }
+/**
+ * Per line (outside fences): does it start inside an HTML comment? `open` tells
+ * whether the text ends inside one. A line that is exactly a marker opens and
+ * closes its own comment and does not change the state. Deliberately naive: a
+ * `<!--` in inline code counts as a comment, which can only make us refuse.
+ */
+function scanComments(lines, hidden) {
+    const inside = [];
+    let open = false;
+    lines.forEach((l, i) => {
+        inside.push(open);
+        if (hidden[i])
+            return;
+        const t = stripBom(l, i).replace(/\r?\n$/, '');
+        if (!open && MARKER.test(t.trim()))
+            return;
+        let at = 0;
+        for (;;) {
+            if (open) {
+                const end = t.indexOf('-->', at);
+                if (end < 0)
+                    break;
+                open = false;
+                at = end + 3;
+            }
+            else {
+                const start = t.indexOf('<!--', at);
+                if (start < 0)
+                    break;
+                open = true;
+                at = start + 4;
+            }
+        }
+    });
+    return { inside, open };
+}
 function markers(lines) {
     const out = [];
     const { hidden } = scanFences(lines);
+    const { inside } = scanComments(lines, hidden);
     lines.forEach((l, i) => {
         if (hidden[i])
             return;
         const t = l.replace(/\r?\n$/, '');
         const m = MARKER.exec(t.trim());
         if (m)
-            out.push({ kind: m[1], id: m[2], hash: m[3], line: i });
+            out.push({ kind: m[1], id: m[2], hash: m[3], line: i, commented: inside[i] });
     });
     return out;
 }
@@ -99,6 +138,9 @@ export function inspectBlock(text, id, desired) {
     const mine = all.filter((m) => m.id === id);
     if (mine.length === 0)
         return { state: 'absent' };
+    if (mine.some((m) => m.commented)) {
+        return { state: 'malformed', detail: `a "${id}" marker sits inside an HTML comment, so the block is not active` };
+    }
     const begins = mine.filter((m) => m.kind === 'begin');
     const ends = mine.filter((m) => m.kind === 'end');
     if (begins.length !== 1 || ends.length !== 1) {
@@ -141,12 +183,16 @@ export function refreshBlock(text, state, id, body) {
  * `text` with the block appended, or the reason that is not safe. Safe means the
  * result, read back by `inspectBlock`, shows exactly one well-formed, unedited
  * block that equals the template, and every original byte is still in place.
- * An unclosed code fence in `text` swallows the new markers (the next run would
+ * An unclosed code fence or HTML comment in `text` swallows the new markers (the next run would
  * not see the block and append another), so it is refused up front.
  */
 export function planAppend(text, id, body) {
     if (scanFences(splitLines(text)).open) {
         return { ok: false, detail: 'the file ends inside an unclosed fenced code block (``` or ~~~), which would hide the new block' };
+    }
+    const lines = splitLines(text);
+    if (scanComments(lines, scanFences(lines).hidden).open) {
+        return { ok: false, detail: 'the file ends inside an unclosed HTML comment (<!--), which would hide the new block' };
     }
     const content = appendBlock(text, id, body);
     if (!content.startsWith(text))

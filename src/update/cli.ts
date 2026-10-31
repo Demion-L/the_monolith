@@ -22,7 +22,7 @@ What is written, and what is not:
     (<!-- monolith:begin ... -->). Appending leaves every existing byte in place;
     refreshing replaces only an unedited block.
   - A block you edited, a malformed block, a clashing section of yours, an
-    unclosed code fence (backticks or tildes) that would hide the block, a file that is not
+    unclosed code fence (backticks or tildes) or HTML comment that would hide the block, a file that is not
     valid UTF-8 (no encoding is converted) or an unreadable file is CONFLICT: nothing is written there and the plan says how
     to resolve it. SKIP means left alone on purpose (e.g. your own skill).
   - Your existing skills, memory, state.json, ideas and text are never overwritten.

@@ -60,7 +60,7 @@ export type Planned = {
  * `text` with the block appended, or the reason that is not safe. Safe means the
  * result, read back by `inspectBlock`, shows exactly one well-formed, unedited
  * block that equals the template, and every original byte is still in place.
- * An unclosed code fence in `text` swallows the new markers (the next run would
+ * An unclosed code fence or HTML comment in `text` swallows the new markers (the next run would
  * not see the block and append another), so it is refused up front.
  */
 export declare function planAppend(text: string, id: BlockId, body: string): Planned;

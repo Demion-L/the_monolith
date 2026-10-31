@@ -144,7 +144,7 @@ function blockItem(projectRoot: string, root: string, spec: BlockSpec): UpdateIt
         return conflict(`exists but is not managed by MONOLITH; update does not take over your file. Add the managed ${what} by hand or rename it`);
       }
       const next = planAppend(text, id, body);
-      if (!next.ok) return conflict(`cannot add the managed ${what} safely: ${next.detail}; not changed. Close the fence (or add the block by hand) and re-run`);
+      if (!next.ok) return conflict(`cannot add the managed ${what} safely: ${next.detail}; not changed. Close the fence or comment (or add the block by hand) and re-run`);
       return { path: rel, action: 'UPDATE', reason: `append the managed ${what}; the ${Buffer.byteLength(text)} bytes already in the file stay as they are`, content: next.content, before: sha(text), effect: spec.effect };
     }
   }

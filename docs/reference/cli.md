@@ -161,8 +161,10 @@ evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Proje
   shown (`idea list` / `idea show` still cover every status). Only ids and titles
   are shown, never descriptions; titles are escaped and cut to 80 characters. It
   is the lowest-priority section: under a small `--max-chars` it lists fewer
-  ideas, then only the count, then a one-line marker, then nothing (each step is
-  reported as INCOMPLETE) and it never displaces another section. An instance
+  ideas, then only the count, then a one-line marker, then nothing. Unlike every
+  other section this degradation does **not** make the brief INCOMPLETE, so saving
+  an idea cannot break `--strict` checks of the project context; it never
+  displaces another section. An instance
   without `inbox` ideas renders exactly as before. The brief reads ideas through
   the Idea Capture reader (bounded; symlinks, hardlinks and special files are
   refused) and writes nothing — no directory, no `.ids` marker, no status change.

@@ -48,6 +48,13 @@
  * two forces INCOMPLETE. P0 is never dropped. All project-controlled
  * strings, provenance pointers included, pass through
  * `sanitizeSingleLine` (N-1).
+ *
+ * Advisory section (IDEA-002B): Parked Ideas is the one data-holding section whose
+ * budget degradation does NOT force INCOMPLETE. It is user-saved side context, not
+ * project state; its degradation stays visible (fewer items, count, or a marker
+ * whenever they fit) but `Completeness` and `--strict` keep describing only the
+ * project context that existed before ideas did. Unreadable idea files are
+ * reported by the `IDEAS_UNREADABLE` warning, which is not an error.
  */
 import { ACTIVE_MD_REL, PARKED_IDEAS_LIMIT } from './constants.js';
 import { sanitizeSingleLine, sanitizeMultiLine } from './sanitize.js';
@@ -362,7 +369,8 @@ function formatParkedIdea(i) {
  * IDEA-002A: Parked Ideas — the lowest-priority section. Nothing at all when there
  * are none (so a project without ideas renders exactly as before). Under budget
  * pressure it first lists fewer ideas, then only the count, then a one-line
- * marker, then nothing; every step down is a loss (Completeness: INCOMPLETE).
+ * marker, then nothing. Each step is flagged in `lossFlag`, but `render` does not
+ * count it towards Completeness (advisory section, see the Completeness contract).
  * Listing at most `PARKED_IDEAS_LIMIT` ideas is the design, not a loss.
  */
 function buildParkedIdeasSection(ideas, remaining) {
@@ -429,12 +437,14 @@ export function render(model, maxChars = DEFAULT_MAX_CHARS) {
         remaining -= finishedSection.consumed;
         budgetLoss = budgetLoss || finishedSection.lossFlag;
         // Parked ideas are optional extra context: they get what is left after everything
-        // else, and never the room the static P3 pointer block would have had.
+        // else, and never the room the static P3 pointer block would have had. Their
+        // budget loss is shown locally (fewer ideas / count / marker) but deliberately does
+        // not feed `budgetLoss`: saving an idea must not flip an unchanged project's brief
+        // to INCOMPLETE and break `--strict` checks of the main project context.
         const p3Fits = P3_TEXT.length <= remaining;
         const ideasSection = buildParkedIdeasSection(model.parkedIdeas, p3Fits ? remaining - P3_TEXT.length : remaining);
         p2 += ideasSection.text;
         remaining -= ideasSection.consumed;
-        budgetLoss = budgetLoss || ideasSection.lossFlag;
         if (P3_TEXT.length <= remaining) {
             p3 = P3_TEXT;
             remaining -= p3.length;

@@ -243,7 +243,7 @@ describe('brief — Parked Ideas under a budget', () => {
     for (let max = required; max < required + 900; max += 7) expect(render(model, max).text.length).toBeLessThanOrEqual(max);
   });
 
-  it('degrades: fewer ideas, then the count, then a marker — and flags the loss', async () => {
+  it('degrades: fewer ideas, then the count, then a marker — without changing Completeness', async () => {
     const model = await modelWithIdeas();
     const withoutIdeas = render({ ...model, parkedIdeas: undefined }, DEFAULT_MAX_CHARS).text;
     const full = render(model, DEFAULT_MAX_CHARS);
@@ -260,10 +260,21 @@ describe('brief — Parked Ideas under a budget', () => {
       const s = section(r.text);
       const shown = s.match(/IDEA-\d+/g)?.length ?? 0;
       seen.add(shown > 0 ? `list${shown}` : s.includes('not listed') ? 'count' : r.text.includes('Parked Ideas (5) omitted') ? 'marker' : 'none');
-      if (extra < fullSection.length) expect(r.completeness).toBe('INCOMPLETE');
+      expect(r.completeness).toBe('COMPLETE');
       expect(r.text.length).toBeLessThanOrEqual(base + extra);
     }
     expect([...seen]).toEqual(expect.arrayContaining(['list3', 'list2', 'list1', 'count', 'marker']));
+  });
+
+  it('a project that is COMPLETE without ideas stays COMPLETE with many ideas at the same budget (--strict stays green)', async () => {
+    const dir = makeProject();
+    const without = await collect(dir);
+    const budget = render(without, DEFAULT_MAX_CHARS).text.length;
+    expect(render(without, budget).completeness).toBe('COMPLETE');
+    for (let i = 0; i < 40; i++) add(dir, `Idea title ${i}`);
+    const withIdeas = render(await collect(dir), budget);
+    expect(withIdeas.completeness).toBe('COMPLETE');
+    expect(withIdeas.text.length).toBeLessThanOrEqual(budget);
   });
 
   it('keeps every other section byte-identical to the render without ideas', async () => {

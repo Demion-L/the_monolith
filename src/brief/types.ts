@@ -38,7 +38,8 @@ export type BriefDiagnosticCode =
   | 'DOC_FILE_UNREADABLE'
   | 'DOC_DIR_OUTSIDE_PROJECT'
   | 'PATH_OUTSIDE_PROJECT'
-  | 'WRITE_ARTIFACTS_PRESENT';
+  | 'WRITE_ARTIFACTS_PRESENT'
+  | 'IDEAS_UNREADABLE';
 
 export interface BriefDiagnostic {
   code: BriefDiagnosticCode;
@@ -118,6 +119,22 @@ export interface ProjectIdentity {
   provenance: Provenance;
 }
 
+/** IDEA-002A: one parked (status `inbox`) idea, as shown by the brief. */
+export interface ParkedIdeaRef {
+  id: string;
+  title: string;
+}
+
+/**
+ * IDEA-002A: the `inbox` ideas, projected from the Idea Capture store (never
+ * re-parsed here). `items` holds at most `PARKED_IDEAS_LIMIT` entries, newest
+ * numeric id first; `total` counts every readable `inbox` idea.
+ */
+export interface ParkedIdeasSummary {
+  total: number;
+  items: ParkedIdeaRef[];
+}
+
 export interface BriefModel {
   identity: ProjectIdentity;
   monolithInitialized: boolean;
@@ -127,6 +144,8 @@ export interface BriefModel {
   story: StorySummary;
   mandatoryProtocols: ProtocolIndex;
   adrs: AdrIndex;
+  /** IDEA-002A: optional so a hand-built model without it renders as before. */
+  parkedIdeas?: ParkedIdeasSummary;
   /** Collect-time diagnostics, in deterministic (collection-order) sequence. */
   diagnostics: BriefDiagnostic[];
   /**

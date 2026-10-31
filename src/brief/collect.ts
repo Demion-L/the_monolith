@@ -40,8 +40,9 @@ import type {
   MissionsSummary,
   CheckpointSummary,
   StorySummary,
+  ParkedIdeasSummary,
 } from './types.js';
-import { ACTIVE_MD_REL, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
+import { ACTIVE_MD_REL, PARKED_IDEAS_LIMIT, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
 import {
   evaluateFreshness,
   parseActiveStoryClaim,
@@ -52,6 +53,8 @@ import {
   type FreshnessEvidence,
 } from './freshness.js';
 import { readGitSignals } from './git-signals.js';
+import { ideaStore, listIdeas } from '../ideas/index.js';
+import { ideaNumber } from '../ideas/format.js';
 
 const RECENT_FINISHED_MISSIONS_LIMIT = 5;
 
@@ -293,6 +296,46 @@ function collectStory(
   };
 }
 
+const IDEAS_UNREADABLE_LISTED = 3;
+
+/**
+ * IDEA-002A: the `inbox` ideas, via the Idea Capture reader (`listIdeas`: bounded,
+ * symlink/hardlink/special-file refusing, never writes). A file that cannot be read
+ * as an idea is not counted and is reported as one warning — it never breaks the
+ * brief. Idea content is untrusted; only ids and titles are kept.
+ */
+function collectParkedIdeas(targetDir: string, diagnostics: BriefDiagnostic[]): ParkedIdeasSummary {
+  const empty: ParkedIdeasSummary = { total: 0, items: [] };
+  let entries;
+  try {
+    entries = listIdeas(ideaStore(targetDir));
+  } catch (err) {
+    const code = err instanceof Error && 'code' in err ? String((err as { code: unknown }).code) : 'ERROR';
+    diagnostics.push({
+      code: 'IDEAS_UNREADABLE',
+      severity: 'warn',
+      message: `The ideas directory was not read (${code}); parked ideas are not shown.`,
+    });
+    return empty;
+  }
+
+  const inbox = entries.flatMap((e) => (e.ok && e.idea.status === 'inbox' ? [e.idea] : []));
+  inbox.sort((a, b) => ideaNumber(b.id) - ideaNumber(a.id));
+
+  const bad = entries.flatMap((e) => (e.ok ? [] : [e]));
+  if (bad.length > 0) {
+    const listed = bad.slice(0, IDEAS_UNREADABLE_LISTED).map((e) => `${e.id} (${e.code})`).join(', ');
+    const more = bad.length > IDEAS_UNREADABLE_LISTED ? `, and ${bad.length - IDEAS_UNREADABLE_LISTED} more` : '';
+    diagnostics.push({
+      code: 'IDEAS_UNREADABLE',
+      severity: 'warn',
+      message: `${bad.length} idea file(s) could not be read and are not counted as parked: ${listed}${more}. Run \`monolith idea show <id>\`.`,
+    });
+  }
+
+  return { total: inbox.length, items: inbox.slice(0, PARKED_IDEAS_LIMIT).map((i) => ({ id: i.id, title: i.title })) };
+}
+
 /**
  * Best-effort read of one state document for the freshness check. A missing,
  * refused or unreadable file simply contributes no evidence — freshness never
@@ -387,6 +430,8 @@ export async function collect(targetDir: string): Promise<BriefModel> {
     provenance: { source: adrDirs.join(', ') },
   };
 
+  const parkedIdeas = monolithInitialized ? collectParkedIdeas(targetDir, diagnostics) : { total: 0, items: [] };
+
   return {
     identity,
     monolithInitialized,
@@ -396,6 +441,7 @@ export async function collect(targetDir: string): Promise<BriefModel> {
     story,
     mandatoryProtocols,
     adrs,
+    parkedIdeas,
     diagnostics,
     freshness,
     freshnessEvidence,

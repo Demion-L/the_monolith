@@ -241,7 +241,9 @@ Protocols (frontmatter `enforcement: mandatory` under `<monolithRoot>/protocols`
 Active Mission Checkpoints (latest per active mission, with "Next steps"),
 Current Story (verbatim excerpt of `## Current Story` in `active.md`),
 Accepted ADR Index (frontmatter `status: accepted`), Recently Finished
-Missions, and a pointer block. Every section names its source.
+Missions, Parked Ideas (up to three newest `status: inbox` ideas, id and title only;
+lowest priority, omitted when there are none — see `docs/reference/cli.md`), and a
+pointer block. Every section names its source.
 
 - **Budget:** `--max-chars` (default 6000). Mandatory content is never
   truncated; if it alone exceeds the budget it is shown in full and the

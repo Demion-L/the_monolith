@@ -154,6 +154,24 @@ evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Proje
   budget); the Diagnostics section says why.
 - `--max-chars N` sets the budget (default 6000). Mandatory content is never
   truncated; if it alone exceeds the budget it is shown in full and flagged.
+- **Parked Ideas:** when the instance has ideas with `status: inbox`, the brief
+  ends with a `Parked Ideas (N)` section: the three newest (highest numeric id
+  first; never by file time) as `IDEA-NNN  title`, `+K more ideas` for the rest,
+  and the pointer `monolith idea list`. `planned` and `archived` ideas are not
+  shown (`idea list` / `idea show` still cover every status). Only ids and titles
+  are shown, never descriptions; titles are escaped and cut to 80 characters. It
+  is the lowest-priority section: under a small `--max-chars` it lists fewer
+  ideas, then only the count, then a one-line marker, then nothing. Unlike every
+  other section this degradation does **not** make the brief INCOMPLETE, so saving
+  an idea cannot break `--strict` checks of the project context; it never
+  displaces another section. An instance
+  without `inbox` ideas renders exactly as before. The brief reads ideas through
+  the Idea Capture reader (bounded; symlinks, hardlinks and special files are
+  refused) and writes nothing — no directory, no `.ids` marker, no status change.
+  An idea file that cannot be read is skipped and reported as an
+  `IDEAS_UNREADABLE` warning (it does not by itself make the brief INCOMPLETE).
+  Idea text is untrusted data: escaping keeps it from forging brief structure, it
+  does not make it safe to obey. Nothing reminds you of ideas anywhere else.
 - Exit codes: `0` brief formed, `1` usage error, `2` `--strict` and INCOMPLETE.
 - Extra ADR directories can be listed in `monolith.config.json` under
   `contextGateway.adrDirs` (relative to the project root; this repository

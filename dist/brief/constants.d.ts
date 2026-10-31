@@ -7,4 +7,6 @@ export declare const PROTOCOLS_DIR = "protocols";
 export declare const ROADMAP_INDEX_REL = "context/maps/roadmap-index.md";
 export declare const STORY_INDEX_REL = "memory/working/story-index.md";
 export declare const HANDOFF_REL = "context/boot/HANDOFF.md";
+/** IDEA-002A: most parked ideas the brief ever lists; the rest is a "+N more" count. */
+export declare const PARKED_IDEAS_LIMIT = 3;
 //# sourceMappingURL=constants.d.ts.map

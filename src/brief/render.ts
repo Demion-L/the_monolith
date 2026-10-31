@@ -48,13 +48,20 @@
  * two forces INCOMPLETE. P0 is never dropped. All project-controlled
  * strings, provenance pointers included, pass through
  * `sanitizeSingleLine` (N-1).
+ *
+ * Advisory section (IDEA-002B): Parked Ideas is the one data-holding section whose
+ * budget degradation does NOT force INCOMPLETE. It is user-saved side context, not
+ * project state; its degradation stays visible (fewer items, count, or a marker
+ * whenever they fit) but `Completeness` and `--strict` keep describing only the
+ * project context that existed before ideas did. Unreadable idea files are
+ * reported by the `IDEAS_UNREADABLE` warning, which is not an error.
  */
 
-import type { BriefModel, BriefDiagnostic, StateKeeperSummary, Provenance, CheckpointSummary } from './types.js';
+import type { BriefModel, BriefDiagnostic, ParkedIdeasSummary, StateKeeperSummary, Provenance, CheckpointSummary } from './types.js';
 import type { FreshnessResult } from './freshness.js';
 import type { Mission } from '../coordinatorium/types.js';
 import type { AdrRef, DocRef } from './types.js';
-import { ACTIVE_MD_REL } from './constants.js';
+import { ACTIVE_MD_REL, PARKED_IDEAS_LIMIT } from './constants.js';
 import { sanitizeSingleLine, sanitizeMultiLine } from './sanitize.js';
 
 // Shorthand for the existing single-line sanitizer — applied to every string
@@ -401,6 +408,45 @@ function fitItemList(
   return { text: '', consumed: 0, lossFlag: true };
 }
 
+const PARKED_IDEA_TITLE_MAX = 80;
+
+function formatParkedIdea(i: { id: string; title: string }): string {
+  const title = san(i.title);
+  const shown = title.length > PARKED_IDEA_TITLE_MAX ? `${title.slice(0, PARKED_IDEA_TITLE_MAX - 1).replace(/[\ud800-\udbff]$/, '')}…` : title;
+  return `  ${san(i.id)}  ${shown}\n`;
+}
+
+/**
+ * IDEA-002A: Parked Ideas — the lowest-priority section. Nothing at all when there
+ * are none (so a project without ideas renders exactly as before). Under budget
+ * pressure it first lists fewer ideas, then only the count, then a one-line
+ * marker, then nothing. Each step is flagged in `lossFlag`, but `render` does not
+ * count it towards Completeness (advisory section, see the Completeness contract).
+ * Listing at most `PARKED_IDEAS_LIMIT` ideas is the design, not a loss.
+ */
+function buildParkedIdeasSection(ideas: ParkedIdeasSummary | undefined, remaining: number): SectionFit {
+  if (!ideas || ideas.total === 0) return { text: '', consumed: 0, lossFlag: false };
+
+  const header = `\n## Parked Ideas (${ideas.total})\n`;
+  const explore = '  Explore: `monolith idea list`\n';
+  const wanted = Math.min(PARKED_IDEAS_LIMIT, ideas.items.length);
+  const noun = (n: number): string => (n === 1 ? 'idea' : 'ideas');
+
+  const candidates: SectionFit[] = [];
+  for (let k = wanted; k >= 1; k--) {
+    const rest = ideas.total - k;
+    const body = ideas.items.slice(0, k).map(formatParkedIdea).join('');
+    const more = rest > 0 ? `\n  +${rest} more ${noun(rest)}\n` : '';
+    const text = header + body + more + explore;
+    candidates.push({ text, consumed: text.length, lossFlag: k < wanted });
+  }
+  const countOnly = `${header}  ${ideas.total} ${noun(ideas.total)}, not listed (budget)\n${explore}`;
+  const marker = `\n[Parked Ideas (${ideas.total}) omitted — budget; \`monolith idea list\`]\n`;
+  for (const text of [countOnly, marker, BARE_OMIT_MARKER]) candidates.push({ text, consumed: text.length, lossFlag: true });
+
+  return candidates.find((c) => c.consumed <= remaining) ?? { text: '', consumed: 0, lossFlag: true };
+}
+
 const P3_TEXT =
   '\n## More\n' +
   '  Full checkpoint history: `monolith mission checkpoints <id>`\n' +
@@ -464,6 +510,16 @@ export function render(model: BriefModel, maxChars: number = DEFAULT_MAX_CHARS):
     p2 += finishedSection.text;
     remaining -= finishedSection.consumed;
     budgetLoss = budgetLoss || finishedSection.lossFlag;
+
+    // Parked ideas are optional extra context: they get what is left after everything
+    // else, and never the room the static P3 pointer block would have had. Their
+    // budget loss is shown locally (fewer ideas / count / marker) but deliberately does
+    // not feed `budgetLoss`: saving an idea must not flip an unchanged project's brief
+    // to INCOMPLETE and break `--strict` checks of the main project context.
+    const p3Fits = P3_TEXT.length <= remaining;
+    const ideasSection = buildParkedIdeasSection(model.parkedIdeas, p3Fits ? remaining - P3_TEXT.length : remaining);
+    p2 += ideasSection.text;
+    remaining -= ideasSection.consumed;
 
     if (P3_TEXT.length <= remaining) {
       p3 = P3_TEXT;

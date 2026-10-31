@@ -48,6 +48,13 @@
  * two forces INCOMPLETE. P0 is never dropped. All project-controlled
  * strings, provenance pointers included, pass through
  * `sanitizeSingleLine` (N-1).
+ *
+ * Advisory section (IDEA-002B): Parked Ideas is the one data-holding section whose
+ * budget degradation does NOT force INCOMPLETE. It is user-saved side context, not
+ * project state; its degradation stays visible (fewer items, count, or a marker
+ * whenever they fit) but `Completeness` and `--strict` keep describing only the
+ * project context that existed before ideas did. Unreadable idea files are
+ * reported by the `IDEAS_UNREADABLE` warning, which is not an error.
  */
 import type { BriefModel } from './types.js';
 export declare const DEFAULT_MAX_CHARS = 6000;

@@ -84,10 +84,18 @@ acceptance criterion 23 has not been finished, and no full security acceptance i
   make the register lookup loop run for a very long time or exhaust memory (denial of service; no deletion was observed);
   this is outside the supported threat model. `DIR_FSYNC_UNSUPPORTED` is emitted only when a directory fsync was
   attempted and failed with one of the "unsupported" errors; a platform that reports no directory fsync capability gets
-  no such warning, so do not rely on it as a platform check. An externally deleted task directory currently still lets
-  the runtime cancel an active child (open finding; see the closure record), contrary to ADR-018 D2.
+  no such warning, so do not rely on it as a platform check.
+- **Missing required task (ADR-018 D2/C-9; fixed in DURABLE-SEC-007B, reviewed in SEC-007C).** If the directory of a
+  task that an active child requires is not there (`MISSING`), the child stays `active`, `claim` refuses with
+  `TaskOrphanedError`, no fence is issued and nothing is cancelled; the decision is the operator's. Only a consistent
+  `COMMITTED` prune permits the irreversible `task.cancelled`. Integrators: the diagnostic code `REQUIRED_TASK_GONE` is
+  reported for both `MISSING` and `COMMITTED`, so it is not evidence of a committed prune and must not on its own
+  trigger an irreversible action; `TaskOrphanedError` likewise means "execution refused", not "cancelled". The `detail`
+  text is not a stable machine discriminant. Also, `createTask` can return a `ValidationError` after it has published
+  the child (the parent vanished meanwhile); the child then exists and stays active, so a caller that sees that error
+  must look the child up rather than assume it was not created.
 - Closure state: [Criterion 23 closure record](../architecture/DURABLE-CRITERION-23-CLOSURE-RECORD.md) — decisions are
-  recorded, criterion 23 stays open.
+  recorded, criterion 23 stays open pending the owner's decision on the remaining evidence gaps.
 
 - **Threat models** (ADR-013): TM-A (trusted local project) is supported with limitations; TM-B (static hostile content)
   is supported only partially; TM-C (concurrent adversarial mutation of directories, symlinks or file names while a

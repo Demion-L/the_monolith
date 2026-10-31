@@ -1,18 +1,22 @@
 ---
 type: architecture
 id: durable-criterion-23-closure-record
-status: decisions-recorded-gaps-remain
+status: evidence-gaps-remain-owner-decision-pending
 authority: record
 related_adrs:
+  - ADR-017
   - ADR-018
   - ADR-019
 ---
 
-# Durable State — Criterion 23: Closure Record (DURABLE-SEC-007A)
+# Durable State — Criterion 23: Closure Record (DURABLE-SEC-007A, обновлён в DURABLE-SEC-007D)
 
-**Статус: решения владельца записаны; Criterion 23 остаётся ОТКРЫТЫМ.** Причина — одна подтверждённая находка
-**SEC-007A-F1** (§10), требующая изменения production-кода, которое вне объёма SEC-007A. Формальное закрытие —
-за владельцем. Этот документ не объявляет критерий закрытым и не использует общий «PASS».
+**Статус: Criterion 23 остаётся ОТКРЫТЫМ.** SEC-007A записал решения владельца и нашёл **SEC-007A-F1**; SEC-007B
+исправил его (`aaa979a`), SEC-007C принял исправление (`DURABLE_SEC_007C_ACCEPTED_WITH_MINOR`). SEC-007D (§16–§22)
+сверил документацию и построил матрицу доказательств: исправление F1 принято, но часть обязательных пунктов
+(004B F-2…F-4, F-6, F-7, F-9…F-11, F-13) не имеет повторных доказательств (`NOT_REREVIEWED`). Формальное закрытие —
+за владельцем. Этот документ не объявляет критерий закрытым, не начинает FREEZE-001 и не использует общий «PASS».
+Разделы §1–§15 — запись SEC-007A на `21dc1a2`; где она устарела, это отмечено (§10.2, §15) и заменено §16–§22.
 
 Словарь статусов: `VERIFIED`, `VERIFIED_WITH_LIMITATIONS`, `ACCEPTED_LIMITATION`, `INSUFFICIENT_EVIDENCE`,
 `OWNER_DECISION_RECORDED`, а также `FINDING` (подтверждённое расхождение с принятым контрактом) и
@@ -152,7 +156,7 @@ Draft `DURABLE-STATE-RETENTION-SAFETY.md` целиком **не утвержда
 | F-9 | структура истории | SEC007_BASIS_NOT_REREVIEWED | `fix004a-register.test.ts` |
 | F-10 | staging | SEC007_BASIS_NOT_REREVIEWED | `fix004a-register.test.ts`, `fix004a-store.test.ts` |
 | F-11 | скан ссылающихся | SEC007_BASIS_NOT_REREVIEWED | `orphan-guard*.test.ts`, `pending-prune*.test.ts` |
-| **F-12** | **`MISSING` fail-closed без карантина** | **FINDING (SEC-007A-F1)** | ниже |
+| **F-12** | **`MISSING` fail-closed без карантина** | **FINDING (SEC-007A-F1) на `21dc1a2`; устранён в `aaa979a`, см. §16, §20** | ниже |
 | F-13 | миграция legacy | SEC007_BASIS_NOT_REREVIEWED | `fix004a-register.test.ts` |
 
 Колонка «Примечание» — это тематическое соответствие по содержимому файлов, а не явные идентификаторы (C23-O2:
@@ -182,8 +186,9 @@ O(число задач) — отдельное принятое огранич�
 подтверждённое расхождение с принятым контрактом: классифицировано как **MAJOR (conformance)**, не BLOCKER.
 **Тесты.** Единственный тест `MISSING` — `fix004c-process.test.ts` (~807, `append`); для `claim`/`findResumable`
 теста нет.
-**Действие.** Не исправлялось (вне объёма). Варианты для владельца: (a) исправить runtime (не карантинить при
-`MISSING`) и добавить тест; (b) явно изменить ADR-018 D2 решением владельца. До выбора критерий 23 открыт.
+**Действие (SEC-007A).** Не исправлялось (вне объёма). **Статус на 2026-10-31: устранён** — вариант (a) выбран
+владельцем, исправление в `aaa979a` (SEC-007B), принято SEC-007C (§16). Текст выше — историческая запись состояния
+`21dc1a2`.
 
 ## 11. A2-R decision (OWNER-DECISION-001, Option A) — `OWNER_DECISION_RECORDED`
 
@@ -220,9 +225,10 @@ ADR-019, DESIGN-004 §43 и `security-and-limitations.md`: противореч�
 окружения**; запуск на `/tmp` его не заменяет. Проба SEC-007A в `/tmp` (scratchpad, tmpfs) подтвердила работоспособность
 процедуры (3 корня: tmpfs, tmpfs, ext4; 0 нарушений), но это свойства проверенных каталогов, а не production-результат.
 
-## 15. Closure verdict
+## 15. Closure verdict (SEC-007A, исторический; актуальный — §21)
 
-**Criterion 23: ОТКРЫТ — `DURABLE_SEC_007A_DECISIONS_RECORDED_GAPS_REMAIN`.**
+**Criterion 23: ОТКРЫТ — `DURABLE_SEC_007A_DECISIONS_RECORDED_GAPS_REMAIN`.** *(Строка «Нет подтверждённых BLOCKER/MAJOR»
+ниже относилась к `21dc1a2`; после `aaa979a` см. §16 и §21.)*
 
 | Условие закрытия | Выполнено |
 |---|---|
@@ -237,3 +243,176 @@ ADR-019, DESIGN-004 §43 и `security-and-limitations.md`: противореч�
 
 Перед закрытием требуются: решение владельца по F1 (§10.2), затем исправление/повторная проверка и независимая
 проверка этого closure record.
+
+---
+
+# SEC-007D: сверка документации и подготовка решения
+
+Область SEC-007D — только документация. Production-код, тесты, `dist/`, ADR-018/019, формат хранилища и API не
+менялись. Повторный прогон тестов в SEC-007D **не выполнялся** (см. §22).
+
+## 16. SEC-007C Acceptance Record
+
+**Ограничение traceability.** Отчёт независимого ревью SEC-007C в репозитории **отсутствует** (поиск по `SEC-007C` в
+рабочем дереве SEC-007D находит только эту запись и сопутствующие правки). Ниже — компактная запись результатов,
+переданных владельцем в постановке SEC-007D. Это **не** отчёт, созданный ревьюером, и не его полный текст; SEC-007D
+самостоятельно ревью не повторял. Всё, что отмечено *reported*, не подтверждено в SEC-007D независимым прогоном.
+
+| Параметр | Значение |
+|---|---|
+| Проверенный диапазон | `7055c55..aaa979a` (один коммит `aaa979a`, `fix(durable): preserve quarantine for missing parent`; `7055c55` — предок `aaa979a`, проверено `git merge-base --is-ancestor`) |
+| Вердикт (reported) | `DURABLE_SEC_007C_ACCEPTED_WITH_MINOR` |
+| Состав диффа (проверено `git diff --stat`) | `src/durable/runtime.ts`, `src/durable/missing-parent.test.ts` (новый), `dist/durable/runtime.{js,d.ts,d.ts.map}` |
+
+**Подтверждено ревью (reported) и перепроверено чтением кода в SEC-007D (code-read, не прогон):**
+
+| Утверждение | Reported | Чтение кода `aaa979a` |
+|---|---|---|
+| `MISSING` не вызывает `task.cancelled` | да | `claim`: ветка `missing` — `throw TaskOrphanedError` без `quarantine`; `withRequirements`: ветка `missing` без `quarantine` |
+| Исполнение ребёнка блокируется | да | `claimable:false` / `TaskOrphanedError`; `findResumable` не предлагает (тест T3) |
+| Новый execution fence не выдаётся | да | до `mutate` в `claim` бросается исключение (тест T1/T2: нет `run.claimed`) |
+| `COMMITTED` — прежнее поведение | да | `state === 'gone'` → `quarantine` + `TaskOrphanedError`, без изменений |
+| `PREPARING` — прежнее поведение | да | `requirementState`: путь `withdrawTombstone`/`pending` не менялся |
+| `UNREADABLE`/`CORRUPT` не маскируются под `MISSING` | да | `missing` возвращается только для `TaskNotFoundError`; прочие ошибки, кроме `TaskPrunedError`, пробрасываются (`throw err`) |
+| Новых BLOCKER/MAJOR нет | да | в SEC-007D новых не обнаружено (повторный аудит не проводился) |
+
+**Validation из отчёта SEC-007C — *reported evidence*, в SEC-007D не подтверждена:** Durable State 810/810; Full
+Core 1920/1920; typecheck PASS; build PASS; `dist` соответствует исходникам. (Для сравнения: SEC-007A на `21dc1a2`
+сообщал 803 теста в `src/durable`; +7 согласуется с 7 тестами `missing-parent.test.ts`, но это арифметика, не проверка.)
+
+### 16.1 Findings SEC-007C (severity не менялась)
+
+| ID | Severity | Содержание | Где закрыто в SEC-007D |
+|---|---|---|---|
+| SEC-007C-F1 | MINOR | Неоднозначность `REQUIRED_TASK_GONE` (`MISSING` и `COMMITTED`) | §18, документация; код не менялся |
+| SEC-007C-F2 | MINOR | Устаревшая документация ADR-017 и RETENTION-SAFETY | ADR-017 (§2.4b, §2.4c), RETENTION-SAFETY (reconciliation note), `security-and-limitations.md` |
+| SEC-007C-F3 | OBSERVATION | Устаревший `detail` для confirmed prune | §19.1, зафиксировано, код не менялся |
+| SEC-007C-F4 | OBSERVATION | `createTask` может вернуть ошибку после публикации ребёнка | §19.2, зафиксировано |
+| SEC-007C-F5 | OBSERVATION | Нет отдельного теста `missing + pending` | §19.3, зафиксировано как ограничение покрытия |
+
+SEC-007A-F1 (§10.2): **устранён** (reported SEC-007C; code-read SEC-007D). Класс MAJOR (conformance) закрыт.
+
+## 17. Reconciliation ADR-017 / ADR-018 / RETENTION-SAFETY
+
+* **ADR-017** (`status: proposed`, статус не менялся): в §2.4b и §2.4c добавлены блоки-уточнения. Историческая
+  формулировка «`GONE` = задачи не было или удаление начато; карантин при `GONE`» сохранена; указано, что в части
+  «задачи не было» она заменена ADR-018 D2/C-9, различаются `MISSING` и `COMMITTED`, ADR-017 в остальном действует и
+  не отменён. Новый ADR не создавался; ADR-018 и ADR-019 не менялись.
+* **RETENTION-SAFETY** (`authority: draft`, статус сохранён, нормативным не объявлен): добавлена reconciliation note
+  с таблицей состояний (ниже), помечены как исторические три утверждения (таблица состояний ссылки, механизм INV-011,
+  строка «Tombstone»). Остальной текст не пересматривался.
+* **`security-and-limitations.md`**: устаревшее предложение «внешне удалённый каталог по-прежнему позволяет отменить
+  ребёнка (open finding)» заменено актуальным описанием; добавлены рекомендации интеграторам (§18, §19.2).
+
+| Состояние | Исполнение | Карантин | Отмена | Основание |
+|---|---|---|---|---|
+| `LIVE` | по обычному контракту | нет | нет | `requirementState` → `live` |
+| `PREPARING` | `claim` закрывает попытку `abort`, затем допускает; иначе `RequiredTaskPendingError`; fence не выдан до этого | нет | нет | `requirementState` (`withdrawTombstone`), DESIGN-004 §27 |
+| `COMMITTED` | заблокировано | допустим | допустима | `gone` → `quarantine` |
+| `MISSING` | заблокировано | нет | нет | ADR-018 D2/C-9; `aaa979a` |
+| `UNREADABLE`/`CORRUPT` | заблокировано (ошибка пробрасывается) | нет | нет | ADR-018 D2; `derivePruneState` |
+
+Таблица соответствует коду `aaa979a`; утверждение «`PREPARING` всегда запрещает `claim`» **не** используется.
+Оговорка: сопоставление `UNREADABLE`/`CORRUPT` взято из ADR-018, §7 и чтения `requirementState`; отдельный тест
+именно `claim` по этим двум состояниям в `missing-parent.test.ts` отсутствует (покрытие — `fix004a-register.test.ts`,
+критерии 57/58, на уровне стора).
+
+## 18. Diagnostic semantics
+
+* **`REQUIRED_TASK_GONE`** выдаётся `assess`/`resumePacket` и для `COMMITTED` (с карантином), и для `MISSING` (без
+  записи). Поэтому: (1) код **не** доказывает committed prune; (2) последствия различаются — при `COMMITTED` записан
+  необратимый `task.cancelled`, при `MISSING` — нет, ребёнок `active`; (3) внешний потребитель не должен выполнять
+  необратимые действия только по этому коду; (4) допустимость исполнения определяется runtime-контрактом (`claim`
+  выдаёт fence или отказывает; `claimable`), а не кодом причины; (5) текст `detail` — не стабильный машинный
+  discriminant: ни `ReasonCode` в `assess.ts` (комментарий: «pruned **or is missing**: the task must not run»), ни
+  документация такой гарантии не дают (поиск `REQUIRED_TASK_GONE` по `src/`, `ui/`, `docs/`). Новый код и изменение
+  публичных типов не вводились. Противоречащего нормативного контракта не найдено. Потребителей кода вне
+  `runtime.ts`/`assess.ts` и тестов в `src/` и `ui/` нет; внешние потребители репозиторию не видны.
+* **`TaskOrphanedError`** (`TASK_ORPHANED`) означает «исполнение отказано»: при `COMMITTED` — после записанной
+  отмены, при `MISSING` — без отмены. Не является доказательством committed prune. Оговорка: doc-comment `RequiredTaskPendingError` (`errors.ts`)
+  называет `TaskOrphanedError` «final»; для `MISSING` это неточно — после появления каталога ребёнок снова claimable
+  (тест T5 `missing-parent.test.ts`). Код не менялся; уточнение — здесь.
+
+## 19. Residual observations
+
+1. **SEC-007C-F3.** `TaskOrphanedError.message`, `errors.ts` (doc-comment) и `detail` ветки `COMMITTED` в
+   `withRequirements` говорят «was pruned or does not exist»; после `aaa979a` ветка `COMMITTED` достигается только при
+   зафиксированном prune, «or does not exist» неточно. Диагностическая неточность, код не менялся.
+2. **SEC-007C-F4.** `createTask` публикует `task.created` ребёнка, затем `assertReferencesSurvived`. Если родитель
+   стал `MISSING` в промежутке, бросается `ValidationError`, ребёнок **остаётся опубликованным и `active`** (при
+   `COMMITTED` — отменённым). Допустимо по контракту (проверка после публикации — обратная связь, не safety:
+   DESIGN-004 §27, E2); автоматического rollback нет и не вводится; API не менялся. Вызывающему при такой ошибке
+   следует проверить существование ребёнка. Отдельного теста этого пути нет.
+3. **SEC-007C-F5.** Приоритет `gone > missing > pending` подтверждён чтением `blockingRequirement`: `gone`
+   возвращается немедленно, `missing` — первый встреченный, иначе первый `pending` (`missing ?? pending`). Отдельного
+   теста сочетания `missing + pending` нет — **ограничение покрытия**; тесты в SEC-007D не добавлялись.
+
+## 20. Матрица Criterion 23 (SEC-007D)
+
+Статусы: `VERIFIED`, `VERIFIED_WITH_LIMITATIONS`, `NOT_REREVIEWED`, `EVIDENCE_NOT_AVAILABLE`; запись другого рода —
+`ACCEPTED_LIMITATION`, `OWNER_DECISION_RECORDED`. «Review» — кто и когда смотрел; «SEC-007A» = повторное чтение кода
+и эксперименты на `21dc1a2`; «SEC-007D» = чтение документов/кода/тестов без прогона.
+
+| ID | Статус | Норматив | Production | Тесты | Review | Остаток / решение владельца |
+|---|---|---|---|---|---|---|
+| G2 (нет rollback-unlink) | VERIFIED_WITH_LIMITATIONS | DESIGN-004 §24, §30 | `fs-store.ts`, `safe-write.ts` (§6) | `fix004c-process.test.ts` (критерий 26: 758–846), `fix004a-store.test.ts` | SEC-007A (статический обзор `unlink` на `21dc1a2`); `aaa979a` не трогал `fs-store`/`safe-write` (diff) | поиск статический; новые `unlink` spy не охватит |
+| `derivePruneState` | VERIFIED_WITH_LIMITATIONS | DESIGN-004 §20.2; ADR-019 | `register.ts:450` | `fix004a-register.test.ts`, `committed-prune*.test.ts` | SEC-007A | C23-O1; модели 004C–004F — bounded |
+| §22 лимит попыток (F-8) | VERIFIED_WITH_LIMITATIONS | DESIGN-004 §22 | `MAX_PRUNE_ATTEMPTS`, `register.ts`, `fs-store.ts` | `fix004a-register.test.ts` 208 («последняя допустимая попытка коммитится»), 222 («за лимитом — отказ, счётчик не сбрасывается») | SEC-007D: прочитаны тела обоих тестов, соответствуют тексту §22 | лимит — живость; abort-источники ускоряют исчерпание (O-5) |
+| §26 sweeper (F-6) | NOT_REREVIEWED | DESIGN-004 §26 (SW-1…SW-6, LV-1) | `fs-store.ts rollForward`, `sweepCompacted` | `fix004c-process.test.ts` 967–1050, 1159–1230; `committed-prune*.test.ts` | SEC-007A смотрел только `unlink`-пути (§6) | LV-1 — живость (ACCEPTED_LIMITATION) |
+| §27 скан ссылающихся (F-11) | NOT_REREVIEWED | DESIGN-004 §27 (RS-1…RS-4) | `runtime.ts activeReferrer`, `blockingRequirement` | `orphan-guard*.test.ts`, `pending-prune*.test.ts`, `fix004c-process.test.ts` | SEC-007A: только поведение `MISSING` (F1); в `aaa979a` изменён вывод `requirementState`, не скан | N-8, R-6, grace (ACCEPTED_LIMITATION) |
+| INV-006 | VERIFIED_WITH_LIMITATIONS | RETENTION-SAFETY (draft) ↔ ADR-019, DESIGN-004 | §8 | `orphan-guard*.test.ts` | SEC-007A (§8) | grace (6b), N-8 |
+| INV-011 | VERIFIED_WITH_LIMITATIONS | то же | `blockingRequirement`, `claim` | `orphan-guard*.test.ts`, `pending-prune*.test.ts`, `missing-parent.test.ts` | SEC-007A (§9); `MISSING` — SEC-007B/C, SEC-007D code-read | R-6, N-8; N-7 (assess при `COMMITTED` пишет карантин) |
+| INV-012 | VERIFIED_WITH_LIMITATIONS | то же | `quarantine` только при `gone` | `pending-prune*.test.ts`, `missing-parent.test.ts` (T1–T9) | SEC-007A (§9); SEC-007B/C; PO-6 теперь не нарушается `MISSING` | grace (6b) |
+| 004B F-1 | VERIFIED_WITH_LIMITATIONS | §24 | см. G2 | `fix004c-process.test.ts` | SEC-007A (§6, §10) | см. G2 |
+| 004B F-2 (DV/Mode A) | NOT_REREVIEWED | §18.2, §20.1 | `fs-store.ts` | `fix004a-store.test.ts` 240–299 (dir fsync, Mode A) — тематическое соответствие | исходный SEC-007 report `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-3 (ветка COMMIT) | NOT_REREVIEWED | §20.1, §28 | `register.ts` | `fix004a-register.test.ts` 337–403 | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-4 (первый append, G1) | NOT_REREVIEWED | §24.6, §31 | `fs-store.ts` | `fix004a-register.test.ts` 290–318; `append-outcome.test.ts` | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-5 (стоимость G2) | VERIFIED_WITH_LIMITATIONS | §24.6 | `register.ts` быстрый путь | отдельного теста нет; эксперимент SEC-007A | SEC-007A (§10.1) | регрессионный тест отсутствует; не safety |
+| 004B F-6 (sweeper) | NOT_REREVIEWED | §26 | см. §26 | см. §26 | `EVIDENCE_NOT_AVAILABLE` | LV-1 |
+| 004B F-7 (исход append) | NOT_REREVIEWED | §24.4 | `fs-store.ts` | `append-outcome.test.ts` 77–150; `fix004a-store.test.ts` 617–635 | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-8 (лимит) | VERIFIED_WITH_LIMITATIONS | §22 | см. §22 | см. §22 | SEC-007D (чтение тестов) | см. §22 |
+| 004B F-9 (структура истории) | NOT_REREVIEWED | §20.3 | `register.ts` | `fix004a-register.test.ts` (тематически) | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-10 (staging) | NOT_REREVIEWED | §20.1 (N1) | `fs-store.ts repairResidue` | `fix004a-register.test.ts` 403; `fs-store.fault.test.ts` | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-11 (скан) | NOT_REREVIEWED | §27 | см. §27 | см. §27 | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| 004B F-12 (`MISSING` fail-closed) | VERIFIED | ADR-018 D2/C-9; DESIGN-004 §21, критерий 37 | `runtime.ts` (`aaa979a`) | `missing-parent.test.ts` (7 тестов) | SEC-007A (находка), SEC-007B (исправление), SEC-007C (reported), SEC-007D (code-read) | пробелы покрытия: §19.3, §19.2; без прогона в SEC-007D |
+| 004B F-13 (legacy) | NOT_REREVIEWED | §13 | `register.ts` | `fix004a-register.test.ts` 367–402 | `EVIDENCE_NOT_AVAILABLE` | см. §21 |
+| SEC-007A-F1 | VERIFIED (fix) | ADR-018 D2/C-9 | `aaa979a` | `missing-parent.test.ts` | SEC-007C (reported) + SEC-007D code-read | тесты — reported evidence |
+| SEC-007B fix | VERIFIED_WITH_LIMITATIONS | то же | `aaa979a`, `dist/` | то же | SEC-007C (reported) | validation 810/1920/typecheck/build — reported, не перепроверена |
+| SEC-007C review | VERIFIED_WITH_LIMITATIONS | OWNER-DECISION-002 | — | — | отчёт вне репозитория (§16) | traceability: нет первичного документа |
+| A2-R | OWNER_DECISION_RECORDED | DESIGN-004 §43, §48 | — | критерий 70 (`fix004c-process.test.ts` 1134) | SEC-007A (§11, §14) | проба — на целевом корне; `NOT_REFUTED` ≠ доказательство |
+| F6B-M1 | ACCEPTED_LIMITATION | — | `safe-write.ts syncDirectory` | — | SEC-007A | предупреждение не на всех платформах |
+| F6B-M2 | ACCEPTED_LIMITATION | — | — | детерминированные process-тесты | SEC-007A | нет вероятностного multi-process теста |
+| C23-O1 | ACCEPTED_LIMITATION | — | `register.ts` ~487–494 | нет (эксперимент) | SEC-007A | DoS при write-доступе к хранилищу; вне модели угроз |
+| C23-O2 | ACCEPTED_LIMITATION (частично закрыт) | — | — | идентификаторов 004B в тестах нет | SEC-007A | тематическая таблица вместо ID |
+| Threat-model limitations | VERIFIED_WITH_LIMITATIONS | ADR-013; `security-and-limitations.md` | — | — | SEC-007D: сверка текстов | Mode B, NFS, TM-B/C — вне заявленного; внешний human audit не проводился |
+
+Замечание о «VERIFIED»: слово применено только к F-12/SEC-007A-F1, где есть прямое доказательство (код + тесты +
+независимое ревью). Строки со статусом `NOT_REREVIEWED` **не закрыты**: у них есть тесты, соответствующие по теме,
+но SEC-007D не читал тела этих тестов и не оценивал их достаточность; исходный отчёт SEC-007 / 004B в репозитории
+отсутствует (`EVIDENCE_NOT_AVAILABLE`). Эти статусы нельзя читать как «проверено ранее».
+
+## 21. Owner Decision Recommendation
+
+**`CRITERION_23_EVIDENCE_GAPS_REMAIN`.**
+
+* Исправление SEC-007A-F1 принято; подтверждённых BLOCKER/MAJOR нет; противоречий с обязательными архитектурными
+  контрактами не найдено (`CRITERION_23_BLOCKED` не применяется).
+* Критерий 23 требует «отдельной проверки F-1…F-13». Девять пунктов (F-2, F-3, F-4, F-6, F-7, F-9, F-10, F-11, F-13)
+  остаются `NOT_REREVIEWED`: тесты по теме есть, исходного отчёта нет, повторная оценка не
+  проводилась (полный аудит вне объёма SEC-007D). Это препятствует закрытию «на основании проверяемых доказательств».
+* Validation SEC-007C (810/1920/typecheck/build) — reported, не подтверждена независимо.
+
+Варианты для владельца (решение не принимается от его имени):
+1. Назначить целевой read-only review F-2, F-3, F-4, F-6, F-7, F-9, F-10, F-11, F-13 (по тестам и коду `aaa979a`) и
+   независимый прогон validation в чистой копии; затем вернуться к закрытию.
+2. Принять эти пункты как `ACCEPTED_LIMITATION` с явной записью, что основание — тесты по теме без повторной оценки.
+3. Дополнительно (необязательно): тесты на `missing + pending` (F5) и путь `createTask` (F4) — отдельной задачей.
+
+Критерий 23 **не закрыт**, FREEZE-001 **не начат**, интеграция в `main` не выполнялась.
+
+## 22. Что не выполнялось в SEC-007D
+
+Не запускались тесты, typecheck и build (в worktree нет `node_modules`; запуск в чужих деревьях запрещён);
+не читался оригинальный отчёт SEC-007C и SEC-007/004B (вне репозитория); не проводился новый security audit;
+внешний human audit не проводился и не заявляется. Формулировка из §4 («independent AI-assisted targeted security
+review») остаётся применимой только после закрытия критерия владельцем.

@@ -1023,7 +1023,113 @@ describe('F-04 an entry whose type cannot be determined is never given a type', 
     const r = traverseProject(project, { fs: probe.fs });
     expect(r.completeness).toBe('PARTIAL');
     expect(JSON.stringify(r)).not.toContain(project);
-    expect(r.diagnostics.find((x) => x.code === 'ENTRY_UNCLASSIFIED')?.message).toContain('unknown error');
+    expect(r.diagnostics.find((x) => x.code === 'ENTRY_UNCLASSIFIED')?.message).toContain('UNKNOWN_ERROR');
+  });
+});
+
+describe('R2-01 untrusted file-system error data never reaches the result or a thrown message', () => {
+  const ABS = '/home/private-user/secrets';
+  const hostile: [string, () => unknown][] = [
+    ['no code, path in message', () => new Error(`Cannot read ${ABS}`)],
+    ['path as code', () => Object.assign(new Error('x'), { code: ABS })],
+    ['code with message text', () => Object.assign(new Error('x'), { code: `ENOENT ${ABS}` })],
+    ['control characters', () => Object.assign(new Error(`bad \u0000 ${ABS} \u001b[31m`), { code: 'line\nbreak\u001b' })],
+    ['100 KB message and code', () => Object.assign(new Error(`${ABS}${'A'.repeat(100_000)}`), { code: `${ABS}${'A'.repeat(100_000)}` })],
+    ['non-string code', () => Object.assign(new Error(ABS), { code: { toString: () => ABS } })],
+    ['thrown string', () => ABS],
+    ['throwing code getter', () => Object.defineProperty(new Error(ABS), 'code', { get: () => { throw new Error(ABS); } })],
+  ];
+
+  /** Everything serializable about a result, plus the one place a thrown error carries text. */
+  const everything = (r: TraversalResult): string => JSON.stringify(r);
+  const clean = (text: string, project: string): void => {
+    expect(text).not.toContain(ABS);
+    expect(text).not.toContain('home/private-user');
+    expect(text).not.toContain(project);
+    expect(text).not.toContain('AAAA');
+    // eslint-disable-next-line no-control-regex
+    expect(text).not.toMatch(/\\u00(0|1)[0-9a-f]|[\u0000-\u001f]/);
+    expect(text.length).toBeLessThan(5_000);
+  };
+  type Fs = Parameters<typeof traverseProject>[1];
+  function scenario(kind: string, bad: () => unknown): { project: string; opts: Fs } {
+    const { project } = sandbox();
+    put(project, 'sub/a');
+    put(project, 'ghost');
+    const base = probedFs({ unknownType: kind === 'unclassified' }).fs;
+    const real = probedFs().fs;
+    const fs: TraversalFs = { ...base };
+    if (kind === 'opendir') fs.opendir = (p) => { if (p.endsWith('/sub')) throw bad(); return real.opendir(p); };
+    if (kind === 'read') fs.opendir = (p) => { const h = real.opendir(p); return p.endsWith('/sub') ? { readSync: () => { throw bad(); }, closeSync: () => h.closeSync() } : h; };
+    if (kind === 'vanished-after') { let n = 0; fs.lstat = (p) => { if (p.endsWith('/sub') && ++n >= 2) throw bad(); return real.lstat(p); }; }
+    if (kind === 'vanished-queue') fs.lstat = (p) => { if (p.endsWith('/sub')) throw bad(); return real.lstat(p); };
+    if (kind === 'unclassified') fs.lstat = (p) => { if (p.endsWith('/ghost')) throw bad(); return real.lstat(p); };
+    return { project, opts: { fs } };
+  }
+  const expectedCode: Record<string, TraversalDiagnosticCode> = {
+    opendir: 'DIR_ERROR',
+    read: 'DIR_ERROR',
+    'vanished-after': 'DIR_VANISHED',
+    'vanished-queue': 'DIR_VANISHED',
+    unclassified: 'ENTRY_UNCLASSIFIED',
+  };
+
+  for (const kind of Object.keys(expectedCode)) {
+    for (const [label, bad] of hostile) {
+      it(`${kind} (${label}): reported as ${expectedCode[kind]} with UNKNOWN_ERROR, nothing untrusted in the result`, () => {
+        const { project, opts } = scenario(kind, bad);
+        const r = traverseProject(project, opts);
+        clean(everything(r), project);
+        const d = r.diagnostics.find((x) => x.code === expectedCode[kind]);
+        expect(d?.message).toContain('UNKNOWN_ERROR');
+        expect(r.completeness).toBe('PARTIAL');
+        expect(r.reproducible).toBe(false);
+      });
+    }
+  }
+
+  it.each(['EACCES', 'EPERM', 'EIO', 'ENOENT', 'ENOTDIR', 'EMFILE'])('the ordinary errno %s survives sanitization', (code) => {
+    const { project, opts } = scenario('opendir', () => Object.assign(new Error(`${ABS} failed`), { code }));
+    const r = traverseProject(project, opts);
+    expect(r.diagnostics.find((x) => x.path === 'sub')?.message).toContain(code);
+    clean(everything(r), project);
+  });
+
+  it('keeps completeness and reproducibility of the typed codes unchanged', () => {
+    const e = (c: string) => () => Object.assign(new Error(ABS), { code: c });
+    const run = (c: string) => {
+      const { project, opts } = scenario('opendir', e(c));
+      const r = traverseProject(project, opts);
+      return [r.diagnostics.find((x) => x.path === 'sub')?.code, r.completeness, r.reproducible];
+    };
+    expect(run('EACCES')).toEqual(['DIR_UNREADABLE', 'PARTIAL', true]);
+    expect(run('ENOENT')).toEqual(['DIR_VANISHED', 'PARTIAL', false]);
+    expect(run('EIO')).toEqual(['DIR_ERROR', 'PARTIAL', false]);
+  });
+
+  for (const [label, bad] of hostile) {
+    it(`ROOT_NOT_DIRECTORY (${label}): the thrown error carries no untrusted text and no cause`, () => {
+      const { project } = sandbox();
+      const fs: TraversalFs = { ...probedFs().fs, stat: () => { throw bad(); } };
+      let thrown: unknown;
+      try {
+        traverseProject(project, { fs });
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(TraversalError);
+      const err = thrown as TraversalError;
+      expect(err.code).toBe('ROOT_NOT_DIRECTORY');
+      expect(err.message).toContain('UNKNOWN_ERROR');
+      expect(err.cause).toBeUndefined();
+      clean(`${err.message}|${err.stack?.split('\n')[0]}|${JSON.stringify(err)}`, project);
+    });
+  }
+
+  it('ROOT_NOT_DIRECTORY keeps a safe errno code', () => {
+    const { project } = sandbox();
+    const fs: TraversalFs = { ...probedFs().fs, stat: () => { throw Object.assign(new Error(ABS), { code: 'EACCES' }); } };
+    expect(() => traverseProject(project, { fs })).toThrowError(/EACCES/);
   });
 });
 

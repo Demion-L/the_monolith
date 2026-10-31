@@ -359,12 +359,23 @@ type ListOutcome =
   | { ok: true; read: number; dirents: { name: string; dirent: Dirent }[] }
   | { ok: false; read: number; reason: 'unreadable' | 'vanished' | 'error' | 'opaque' | 'budget'; detail: string };
 
-function errno(err: unknown): string | undefined {
-  return (err as NodeJS.ErrnoException | undefined)?.code;
-}
+/**
+ * The only way a file-system error reaches a diagnostic or a thrown message: its `code`, and
+ * only when it looks like an errno name. `message`, `stack` and any other property of an
+ * error are untrusted (a seam or exotic file system can put a path or control characters in
+ * them) and are never copied.
+ */
+const SAFE_ERRNO = /^[A-Z][A-Z0-9_]{1,31}$/;
+const UNKNOWN_ERROR = 'UNKNOWN_ERROR';
 
-function errMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+function errno(err: unknown): string {
+  let code: unknown;
+  try {
+    code = (err as NodeJS.ErrnoException | null | undefined)?.code;
+  } catch {
+    return UNKNOWN_ERROR;
+  }
+  return typeof code === 'string' && SAFE_ERRNO.test(code) ? code : UNKNOWN_ERROR;
 }
 
 /**
@@ -414,7 +425,7 @@ function failureOf(err: unknown, read: number): ListOutcome {
   const code = errno(err);
   if (code === 'EACCES' || code === 'EPERM') return { ok: false, read, reason: 'unreadable', detail: `${code}` };
   if (code === 'ENOENT' || code === 'ENOTDIR') return { ok: false, read, reason: 'vanished', detail: `${code}` };
-  return { ok: false, read, reason: 'error', detail: code ?? errMessage(err) };
+  return { ok: false, read, reason: 'error', detail: code };
 }
 
 /** Whether `<abs>/.git` exists (any type, not followed). One `lstat`, no listing; any failure means "not known to exist". */
@@ -469,7 +480,7 @@ export function traverseProject(projectRoot: string, options: TraverseOptions = 
   try {
     rootIdentity = fs.stat(projectRoot);
   } catch (err) {
-    throw new TraversalError('ROOT_NOT_DIRECTORY', `project root is not accessible (${errno(err) ?? errMessage(err)}).`, { cause: err });
+    throw new TraversalError('ROOT_NOT_DIRECTORY', `project root is not accessible (${errno(err)}).`);
   }
   if (!rootIdentity.isDirectory()) throw new TraversalError('ROOT_NOT_DIRECTORY', 'project root is not a directory.');
 
@@ -536,7 +547,7 @@ export function traverseProject(projectRoot: string, options: TraverseOptions = 
     try {
       after = dir.rel === '' ? fs.stat(abs) : fs.lstat(abs);
     } catch (err) {
-      diagnostics.add('DIR_VANISHED', `directory disappeared during the walk (${errno(err) ?? errMessage(err)}); the tree is being modified.`, label);
+      diagnostics.add('DIR_VANISHED', `directory disappeared during the walk (${errno(err)}); the tree is being modified.`, label);
       continue;
     }
     if (after.dev !== dir.identity.dev || after.ino !== dir.identity.ino || (dir.rel !== '' && !after.isDirectory())) {
@@ -570,7 +581,7 @@ export function traverseProject(projectRoot: string, options: TraverseOptions = 
         kind = direntKind(fs, dirent, join(projectRoot, rel));
       } catch (err) {
         // No type was reported and lstat failed: do not state a type, and do not hide the cause.
-        diagnostics.add('ENTRY_UNCLASSIFIED', `entry type could not be determined (${errno(err) ?? 'unknown error'}); not listed.`, rel);
+        diagnostics.add('ENTRY_UNCLASSIFIED', `entry type could not be determined (${errno(err)}); not listed.`, rel);
         continue;
       }
       if (kind === 'directory' && (EXCLUDED_DIR_NAMES.includes(name) || EXCLUDED_DIR_PATHS.includes(rel))) {
@@ -604,7 +615,7 @@ export function traverseProject(projectRoot: string, options: TraverseOptions = 
       try {
         identity = fs.lstat(join(projectRoot, rel));
       } catch (err) {
-        diagnostics.add('DIR_VANISHED', `directory disappeared during the walk (${errno(err) ?? errMessage(err)}); the tree is being modified.`, rel);
+        diagnostics.add('DIR_VANISHED', `directory disappeared during the walk (${errno(err)}); the tree is being modified.`, rel);
         continue;
       }
       if (!identity.isDirectory()) {

@@ -350,7 +350,10 @@ export class DurableTasks {
         if (!this.store.pinReference)
             return;
         for (const r of refs) {
-            if ((await this.requirementState(r, true)) !== 'gone')
+            const st = await this.requirementState(r, true);
+            if (st === 'missing')
+                throw new ValidationError(`referenced task "${r}" was not found while task "${taskId}" was being created; the new task is not run and is not cancelled (ADR-018 D2).`);
+            if (st !== 'gone')
                 continue;
             await this.quarantine(taskId, r);
             throw new ValidationError(`referenced task "${r}" was pruned while task "${taskId}" was being created; the new task was cancelled.`);
@@ -361,7 +364,9 @@ export class DurableTasks {
      *  - `live`     it exists and carries no tombstone.
      *  - `pending`  a tombstone exists, but the prune is unfinished and may still be rolled back, or cannot be examined.
      *               This is a transient state. It is never a reason to cancel anybody.
-     *  - `gone`     it never existed, or its removal has started or finished: the prune is committed and irreversible.
+     *  - `gone`     its removal has started or finished: the prune is committed and irreversible.
+     *  - `missing`  its directory is not there and no prune accounts for it (ADR-018 D2). Absence is not proof of a
+     *               committed prune, so, like `pending`, it blocks execution and is never a reason to cancel anybody.
      *
      * Why the tombstone alone proves nothing: a pruner publishes it BEFORE it looks for referrers, and a stopped
      * (SIGSTOP) or killed pruner leaves it behind with all data in place. Only the data decides:
@@ -379,7 +384,7 @@ export class DurableTasks {
             }
             catch (err) {
                 if (err instanceof TaskNotFoundError)
-                    return 'gone';
+                    return 'missing';
                 if (!(err instanceof TaskPrunedError))
                     throw err;
             }
@@ -405,8 +410,8 @@ export class DurableTasks {
         return 'pending';
     }
     /**
-     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is gone, else the first whose prune is
-     * pending, else `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it
+     * The first task an ACTIVE task requires (`parentTaskId`, `dependsOn`) that is gone, else the first that is missing,
+     * else the first whose prune is pending, else `null`. This — not the presence of `task.created` in the log — is what permits execution. Why it
      * is safe without any clock: a pruner publishes its tombstone and only then looks for referrers; this check runs
      * after the task's `task.created` is published. So either the tombstone is visible here, or the pruner sees the
      * task and backs off. Once the check has passed, no prune of the required task can succeed while this task is active.
@@ -414,15 +419,18 @@ export class DurableTasks {
     async blockingRequirement(s, recover) {
         if (s.status !== 'active')
             return null;
+        let missing = null;
         let pending = null;
         for (const r of [...(s.parentTaskId ? [s.parentTaskId] : []), ...s.dependsOn]) {
             const st = await this.requirementState(r, recover);
             if (st === 'gone')
                 return { id: r, state: 'gone' };
+            if (st === 'missing' && missing === null)
+                missing = { id: r, state: 'missing' };
             if (st === 'pending' && pending === null)
                 pending = { id: r, state: 'pending' };
         }
-        return pending;
+        return missing ?? pending;
     }
     /**
      * Durable, idempotent cleanup of an orphan whose required task is GONE (never for a pending prune):
@@ -542,6 +550,8 @@ export class DurableTasks {
             await this.quarantine(taskId, blocked.id);
             throw new TaskOrphanedError(taskId, blocked.id);
         }
+        if (blocked?.state === 'missing')
+            throw new TaskOrphanedError(taskId, blocked.id); // refused, but nothing is cancelled (ADR-018 D2)
         if (blocked)
             throw new RequiredTaskPendingError(taskId, blocked.id); // fail closed, but not final: nothing is cancelled
         return this.mutate(taskId, (s) => {
@@ -1004,6 +1014,13 @@ export class DurableTasks {
                 ...a,
                 claimable: false,
                 reasons: [...a.reasons, { code: 'REQUIRED_TASK_PRUNE_PENDING', severity: 'recovery', detail: `the prune of required task "${blocked.id}" is not settled; the task is not run now and is not cancelled`, refs: [blocked.id] }],
+            };
+        }
+        if (blocked.state === 'missing') {
+            return {
+                ...a,
+                claimable: false,
+                reasons: [...a.reasons, { code: 'REQUIRED_TASK_GONE', severity: 'recovery', detail: `required task "${blocked.id}" was not found; the task is not run now and is not cancelled`, refs: [blocked.id] }],
             };
         }
         await this.quarantine(state.taskId, blocked.id);

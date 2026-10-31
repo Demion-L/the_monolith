@@ -34,6 +34,7 @@ MONOLITH has no research layer; research of Webway's program is owned by Webway.
 | [ADR-018](ADR-018-durable-state-failure-model.md) | Durable State Mode A Failure Model and Missing-State Semantics (DURABLE-001) — failure model, fail-closed `MISSING`, compatibility; accepted 2026-10-26; partially supersedes ADR-017 §2.4a–§2.4c once ADR-017 is accepted (see ADR-018 "Соотношение с ADR-017") | accepted | — | 2026-10-26 |
 | [ADR-019](ADR-019-persisted-prune-decision-register.md) | Persisted Prune Decision Register (DURABLE-001, Design A) — immutable per-attempt prepare/decision register; accepted 2026-10-26; implementation (FIX-004) not started | accepted | — | 2026-10-26 |
 | [ADR-020](ADR-020-canonical-knowledge-identity.md) | Canonical Knowledge Identity and Deterministic Reference Resolution in the ERG (`KnowledgeObject`, `namespace:localId`, `{#ID}`, resolver, conflicts); supersedes ADR-007 | accepted | — | 2026-10-28 |
+| [ADR-021](ADR-021-project-discovery-native-first-evidence-driven.md) | Project Discovery: Native-first Evidence-driven Architecture (DISCOVERY-001A, reviewed in DISCOVERY-001A-R) — create-only proposal, TM-C unsupported; accepted 2026-10-31; implementation by stories DISCOVERY-001B-1 … 001D | accepted | — | 2026-10-30 |
 
 **ADR-015 / ADR-016:** `proposed` ADRs on the lock foundation and bounded state. Neither is accepted; ADR-016 implementation is gated on ADR-015 (G-LOCK), which is not passed.
 
@@ -100,7 +101,7 @@ Cross-references to research, architecture documents, and related ADRs.
 
 ## Notes on ADR-001 through ADR-003
 
-**Update (2026-10-28, KNOWLEDGE-003):** the paragraph below describes where these records were on 2026-10-20. They are no longer in `.monolith/adr/` (that directory no longer exists): ADR-002 and ADR-003 are in this directory, ADR-001 moved to Webway as `webway:ADR-001`. The "ADR-011 or later" rule below is long past: ADR-007 … 020 are in use, ADR-001, 004 … 006 are retired, and the next free number is ADR-021.
+**Update (2026-10-28, KNOWLEDGE-003):** the paragraph below describes where these records were on 2026-10-20. They are no longer in `.monolith/adr/` (that directory no longer exists): ADR-002 and ADR-003 are in this directory, ADR-001 moved to Webway as `webway:ADR-001`. The "ADR-011 or later" rule below is long past: ADR-007 … 021 are in use, ADR-001, 004 … 006 are retired, and the next free number is ADR-022.
 
 **Correction (2026-10-20):** This section previously described ADR-001
 through ADR-003 as "reserved" slots for retroactively documenting the

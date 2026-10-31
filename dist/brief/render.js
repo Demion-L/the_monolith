@@ -49,7 +49,7 @@
  * strings, provenance pointers included, pass through
  * `sanitizeSingleLine` (N-1).
  */
-import { ACTIVE_MD_REL } from './constants.js';
+import { ACTIVE_MD_REL, PARKED_IDEAS_LIMIT } from './constants.js';
 import { sanitizeSingleLine, sanitizeMultiLine } from './sanitize.js';
 // Shorthand for the existing single-line sanitizer — applied to every string
 // that originates in project files or configuration (N-1), including
@@ -352,6 +352,40 @@ function fitItemList(header, items, footer, remaining, omittedMarkerFn, minimalF
     }
     return { text: '', consumed: 0, lossFlag: true };
 }
+const PARKED_IDEA_TITLE_MAX = 80;
+function formatParkedIdea(i) {
+    const title = san(i.title);
+    const shown = title.length > PARKED_IDEA_TITLE_MAX ? `${title.slice(0, PARKED_IDEA_TITLE_MAX - 1).replace(/[\ud800-\udbff]$/, '')}…` : title;
+    return `  ${san(i.id)}  ${shown}\n`;
+}
+/**
+ * IDEA-002A: Parked Ideas — the lowest-priority section. Nothing at all when there
+ * are none (so a project without ideas renders exactly as before). Under budget
+ * pressure it first lists fewer ideas, then only the count, then a one-line
+ * marker, then nothing; every step down is a loss (Completeness: INCOMPLETE).
+ * Listing at most `PARKED_IDEAS_LIMIT` ideas is the design, not a loss.
+ */
+function buildParkedIdeasSection(ideas, remaining) {
+    if (!ideas || ideas.total === 0)
+        return { text: '', consumed: 0, lossFlag: false };
+    const header = `\n## Parked Ideas (${ideas.total})\n`;
+    const explore = '  Explore: `monolith idea list`\n';
+    const wanted = Math.min(PARKED_IDEAS_LIMIT, ideas.items.length);
+    const noun = (n) => (n === 1 ? 'idea' : 'ideas');
+    const candidates = [];
+    for (let k = wanted; k >= 1; k--) {
+        const rest = ideas.total - k;
+        const body = ideas.items.slice(0, k).map(formatParkedIdea).join('');
+        const more = rest > 0 ? `\n  +${rest} more ${noun(rest)}\n` : '';
+        const text = header + body + more + explore;
+        candidates.push({ text, consumed: text.length, lossFlag: k < wanted });
+    }
+    const countOnly = `${header}  ${ideas.total} ${noun(ideas.total)}, not listed (budget)\n${explore}`;
+    const marker = `\n[Parked Ideas (${ideas.total}) omitted — budget; \`monolith idea list\`]\n`;
+    for (const text of [countOnly, marker, BARE_OMIT_MARKER])
+        candidates.push({ text, consumed: text.length, lossFlag: true });
+    return candidates.find((c) => c.consumed <= remaining) ?? { text: '', consumed: 0, lossFlag: true };
+}
 const P3_TEXT = '\n## More\n' +
     '  Full checkpoint history: `monolith mission checkpoints <id>`\n' +
     '  Mission detail: `monolith mission show <id>`\n' +
@@ -394,6 +428,13 @@ export function render(model, maxChars = DEFAULT_MAX_CHARS) {
         p2 += finishedSection.text;
         remaining -= finishedSection.consumed;
         budgetLoss = budgetLoss || finishedSection.lossFlag;
+        // Parked ideas are optional extra context: they get what is left after everything
+        // else, and never the room the static P3 pointer block would have had.
+        const p3Fits = P3_TEXT.length <= remaining;
+        const ideasSection = buildParkedIdeasSection(model.parkedIdeas, p3Fits ? remaining - P3_TEXT.length : remaining);
+        p2 += ideasSection.text;
+        remaining -= ideasSection.consumed;
+        budgetLoss = budgetLoss || ideasSection.lossFlag;
         if (P3_TEXT.length <= remaining) {
             p3 = P3_TEXT;
             remaining -= p3.length;

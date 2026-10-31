@@ -17,7 +17,7 @@ export type DiagnosticSeverity = 'info' | 'warn' | 'error';
  * budget decision is made, which is what lets render() reserve space for
  * them deterministically (see render.ts's two-phase budget accounting).
  */
-export type BriefDiagnosticCode = 'MONOLITH_NOT_INITIALIZED' | 'STATE_NOT_INITIALIZED' | 'STATE_EMPTY' | 'STATE_UNREADABLE' | 'STATE_LEGACY_SCHEMA_MIGRATED' | 'MULTIPLE_ACTIVE_MISSIONS' | 'CHECKPOINT_ORDER_MISMATCH' | 'ACTIVE_MD_MISSING' | 'ACTIVE_MD_REJECTED' | 'ACTIVE_MD_UNREADABLE' | 'ACTIVE_MD_NO_CURRENT_STORY' | 'CONFIG_UNREADABLE' | 'CONFIG_ADR_DIRS_INVALID' | 'DOC_DIR_UNREADABLE' | 'DOC_FILE_UNREADABLE' | 'DOC_DIR_OUTSIDE_PROJECT' | 'PATH_OUTSIDE_PROJECT' | 'WRITE_ARTIFACTS_PRESENT';
+export type BriefDiagnosticCode = 'MONOLITH_NOT_INITIALIZED' | 'STATE_NOT_INITIALIZED' | 'STATE_EMPTY' | 'STATE_UNREADABLE' | 'STATE_LEGACY_SCHEMA_MIGRATED' | 'MULTIPLE_ACTIVE_MISSIONS' | 'CHECKPOINT_ORDER_MISMATCH' | 'ACTIVE_MD_MISSING' | 'ACTIVE_MD_REJECTED' | 'ACTIVE_MD_UNREADABLE' | 'ACTIVE_MD_NO_CURRENT_STORY' | 'CONFIG_UNREADABLE' | 'CONFIG_ADR_DIRS_INVALID' | 'DOC_DIR_UNREADABLE' | 'DOC_FILE_UNREADABLE' | 'DOC_DIR_OUTSIDE_PROJECT' | 'PATH_OUTSIDE_PROJECT' | 'WRITE_ARTIFACTS_PRESENT' | 'IDEAS_UNREADABLE';
 export interface BriefDiagnostic {
     code: BriefDiagnosticCode;
     severity: DiagnosticSeverity;
@@ -84,6 +84,20 @@ export interface ProjectIdentity {
     monolithRoot: string;
     provenance: Provenance;
 }
+/** IDEA-002A: one parked (status `inbox`) idea, as shown by the brief. */
+export interface ParkedIdeaRef {
+    id: string;
+    title: string;
+}
+/**
+ * IDEA-002A: the `inbox` ideas, projected from the Idea Capture store (never
+ * re-parsed here). `items` holds at most `PARKED_IDEAS_LIMIT` entries, newest
+ * numeric id first; `total` counts every readable `inbox` idea.
+ */
+export interface ParkedIdeasSummary {
+    total: number;
+    items: ParkedIdeaRef[];
+}
 export interface BriefModel {
     identity: ProjectIdentity;
     monolithInitialized: boolean;
@@ -93,6 +107,8 @@ export interface BriefModel {
     story: StorySummary;
     mandatoryProtocols: ProtocolIndex;
     adrs: AdrIndex;
+    /** IDEA-002A: optional so a hand-built model without it renders as before. */
+    parkedIdeas?: ParkedIdeasSummary;
     /** Collect-time diagnostics, in deterministic (collection-order) sequence. */
     diagnostics: BriefDiagnostic[];
     /**

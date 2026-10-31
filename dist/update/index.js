@@ -1,62 +1,39 @@
 /**
- * `monolith update` (DX-UPDATE-001): bring an existing instance up to the
- * Idea Capture & Recall infrastructure without touching project memory.
+ * `monolith update` (DX-UPDATE-001/003): bring an existing instance up to the
+ * current agent integration (stable `AGENT.md` entry point, Idea Capture)
+ * without touching project memory.
  *
- * Contract (see docs/reference/cli.md → `monolith update`):
- *  - No template version is stored in an instance, so components are detected
- *    by content (does the file already carry the Idea Capture wiring?).
- *  - The only thing `--apply` ever does is CREATE a missing, MONOLITH-owned
- *    file (the `idea-capture` skill). Nothing that exists is overwritten,
- *    appended to or rewritten — mixed files (CLAUDE.md, AGENTS.md, routing-map,
- *    skills index) are reported as CONFLICT with the exact text to add.
- *  - Writes go through the safe-write primitive (project boundary, no symlinks,
- *    exclusive create). Reads use the unified bounded safe read. Not
- *    transactional and not coordinated between processes (SEC-001B.3); a
- *    re-run is the recovery.
+ * Ownership model (no template version is stored in an instance, so state is
+ * read from the files themselves):
+ *  - MONOLITH-owned, created when absent: `<root>/AGENT.md`, the `idea-capture`
+ *    skill. An existing skill is never overwritten, whatever it contains.
+ *  - Mixed (user-owned file + MONOLITH text): CLAUDE.md / AGENTS.md /
+ *    .cursorrules / .windsurfrules, routing-map, skills index. MONOLITH text
+ *    lives only in checksummed managed blocks (src/managed). A missing block is
+ *    appended; an unedited block is refreshed in place; an edited, malformed or
+ *    competing one is a CONFLICT and nothing is written. Bytes outside a block
+ *    are never changed (asserted before every write).
+ *  - User memory (state.json, memory/, ideas): never touched.
+ *
+ * Reads use the bounded safe read; writes use the safe-write primitives
+ * (project boundary, no symlinks, exclusive create / atomic replace). Update is
+ * not transactional and not coordinated between processes (SEC-001B.3): apply
+ * re-plans just before writing and refuses a change whose preconditions moved;
+ * a re-run is the recovery. Nothing is executed and no user text is interpreted
+ * as code.
  */
+import { createHash } from 'crypto';
 import { lstatSync, readFileSync } from 'fs';
 import { dirname, join, basename, resolve } from 'path';
-import { SafeWriteError, RootContainmentError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, resolveMonolithRoot, } from '../root/index.js';
+import { SafeWriteError, RootContainmentError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, replaceFile, resolveMonolithRoot, } from '../root/index.js';
 import { TEMPLATES_ROOT, substitute } from '../init/scaffold.js';
+import { listIdeas, ideaStore } from '../ideas/store.js';
+import { appendBlock, blockBody, inspectBlock, prose, refreshBlock, renderBlock } from '../managed/index.js';
 const INSTRUCTION_FILES = ['CLAUDE.md', '.cursorrules', '.windsurfrules'];
 const AI_TOOL_FILE = { claude: 'CLAUDE.md', cursor: '.cursorrules', windsurf: '.windsurfrules' };
+const sha = (s) => createHash('sha256').update(s).digest('hex');
 function readTemplate(rel, vars) {
     return substitute(readFileSync(join(TEMPLATES_ROOT, rel), 'utf8'), vars);
-}
-/** Text from the first line matching `start` up to (excluding) the first later line matching `end`, or the end. */
-function section(text, start, end) {
-    const lines = text.split('\n');
-    const from = lines.findIndex((l) => start.test(l));
-    if (from < 0)
-        return null;
-    let to = lines.length;
-    if (end) {
-        for (let i = from + 1; i < lines.length; i++) {
-            if (end.test(lines[i])) {
-                to = i;
-                break;
-            }
-        }
-    }
-    return lines.slice(from, to).join('\n').replace(/\s+$/, '');
-}
-/** The Idea Capture text an existing instruction file (CLAUDE.md, …) is missing. */
-function instructionProposal(template) {
-    const parts = [
-        section(template, /^## Capturing Ideas/, /^---/),
-        section(template, /idea-capture\/SKILL\.md/, /^(?!\|)/),
-        section(template, /^\*\*Idea Capture\.\*\*/, /^\s*$/),
-    ].filter((p) => p !== null);
-    return parts.join('\n\n');
-}
-function agentsProposal(template) {
-    return section(template, /^## Idea Capture/, /^---/) ?? '';
-}
-function routingProposal(template) {
-    return section(template, /^## Table 8/, null) ?? '';
-}
-function indexProposal(template) {
-    return section(template, /^\| idea-capture/, /^(?!\|)/) ?? '';
 }
 function readInstanceFile(projectRoot, rel) {
     const r = readProjectFile(projectRoot, rel, { allowEmpty: true });
@@ -66,17 +43,47 @@ function readInstanceFile(projectRoot, rel) {
         return { kind: 'missing' };
     return { kind: 'unsafe', detail: `${r.code}: ${r.detail}` };
 }
-/** A mixed (user-owned) file: satisfied when it already carries every marker, otherwise CONFLICT with a proposal. Never ADD, never edited. */
-function mixedItem(projectRoot, rel, markers, proposal, what) {
+function manualBlock(id, root) {
+    return renderBlock(id, blockBody(id, root));
+}
+/** A managed block in a file: ADD / UPDATE / UNCHANGED / CONFLICT, never an overwrite. */
+function blockItem(projectRoot, root, spec) {
+    const { id, rel, what } = spec;
+    const body = blockBody(id, root);
+    const manual = manualBlock(id, root);
     const read = readInstanceFile(projectRoot, rel);
     if (read.kind === 'unsafe')
         return { path: rel, action: 'CONFLICT', reason: `cannot be read safely (${read.detail}); not inspected or changed` };
     if (read.kind === 'missing') {
-        return { path: rel, action: 'CONFLICT', reason: `missing; update does not recreate it. Restore the file, then add ${what}`, proposal };
+        if (spec.whenMissing === 'create') {
+            return { path: rel, action: 'ADD', reason: `new file with the managed ${what}`, content: renderBlock(id, body), effect: spec.effect };
+        }
+        return { path: rel, action: 'CONFLICT', reason: `missing; update does not recreate your file. Restore it, then re-run (or add ${what} by hand)`, proposal: manual };
     }
-    if (markers.every((m) => m.test(read.content)))
-        return { path: rel, action: 'UNCHANGED', reason: `${what} present` };
-    return { path: rel, action: 'CONFLICT', reason: `your file lacks ${what}; it is yours, so update does not edit it. Add the text below`, proposal };
+    const text = read.content;
+    const st = inspectBlock(text, id, body);
+    const conflict = (reason) => ({ path: rel, action: 'CONFLICT', reason, proposal: manual });
+    switch (st.state) {
+        case 'malformed':
+            return conflict(`managed block "${id}" is malformed (${st.detail}); not changed. Fix or remove the markers, then re-run`);
+        case 'edited':
+            return conflict(`${st.detail}; your edit is kept and the block is not refreshed. Restore the block text, or delete the whole block (markers included) and re-run`);
+        case 'pristine':
+            if (st.current)
+                return { path: rel, action: 'UNCHANGED', reason: `${what} present and current` };
+            return { path: rel, action: 'UPDATE', reason: `refresh the unedited managed ${what} to the current text`, content: refreshBlock(text, st, id, body), before: sha(text), effect: spec.effect };
+        case 'absent': {
+            const visible = prose(text);
+            if (spec.legacy && spec.legacy.every((re) => re.test(visible)))
+                return { path: rel, action: 'UNCHANGED', reason: `${what} already present (unmanaged text)` };
+            if (spec.clash && spec.clash.re.test(visible))
+                return conflict(spec.clash.why);
+            if (spec.whenMissing === 'create') {
+                return conflict(`exists but is not managed by MONOLITH; update does not take over your file. Add the managed ${what} by hand or rename it`);
+            }
+            return { path: rel, action: 'UPDATE', reason: `append the managed ${what}; the ${Buffer.byteLength(text)} bytes already in the file stay as they are`, content: appendBlock(text, id, body), before: sha(text), effect: spec.effect };
+        }
+    }
 }
 /**
  * Read-only. Throws RootContainmentError when the root/config is unusable and
@@ -99,66 +106,161 @@ export function planUpdate(target) {
     }
     const vars = { MONOLITH_ROOT: r };
     const items = [];
-    // 1. The skill: a MONOLITH-owned file, created when absent. An existing one is the user's, whatever it contains.
+    const pr = root.projectRoot;
+    // 1. MONOLITH-owned files, created when absent.
     const skillRel = `${r}/skills/idea-capture/SKILL.md`;
     const skillTemplate = readTemplate('monolith/skills/idea-capture/SKILL.md', vars);
-    const skill = readInstanceFile(root.projectRoot, skillRel);
+    const skill = readInstanceFile(pr, skillRel);
+    const skillEffect = 'the idea-capture procedure';
+    let skillText = null;
     if (skill.kind === 'unsafe') {
         items.push({ path: skillRel, action: 'CONFLICT', reason: `cannot be read safely (${skill.detail}); not inspected or changed` });
     }
     else if (skill.kind === 'missing') {
-        items.push({ path: skillRel, action: 'ADD', reason: 'new file from the current template', content: skillTemplate });
+        items.push({ path: skillRel, action: 'ADD', reason: 'new file from the current template', content: skillTemplate, effect: skillEffect });
     }
     else if (skill.content === skillTemplate) {
+        skillText = skill.content;
         items.push({ path: skillRel, action: 'UNCHANGED', reason: 'identical to the current template' });
     }
     else {
+        skillText = skill.content;
         items.push({ path: skillRel, action: 'SKIP', reason: 'exists and differs from the current template (customized or older); not overwritten' });
     }
-    // 2. The wiring that makes an agent use it.
-    items.push(mixedItem(root.projectRoot, `${r}/skills/INDEX.md`, [/idea-capture/], indexProposal(readTemplate('monolith/skills/INDEX.md', vars)), 'the idea-capture row'));
-    items.push(mixedItem(root.projectRoot, `${r}/context/maps/routing-map.md`, [/CAPTURE_IDEA/], routingProposal(readTemplate('monolith/context/maps/routing-map.md', vars)), 'the CAPTURE_IDEA route (Table 8)'));
+    items.push(blockItem(pr, r, {
+        id: 'agent',
+        rel: `${r}/AGENT.md`,
+        what: 'agent entry point',
+        effect: 'one stable place where an assistant finds the skills and the Idea Capture rules',
+        whenMissing: 'create',
+    }));
+    // 2. Routing and skills index (documents the user may have extended).
+    items.push(blockItem(pr, r, {
+        id: 'index-idea',
+        rel: `${r}/skills/INDEX.md`,
+        what: 'idea-capture skills-index row',
+        effect: 'the idea-capture trigger is listed in the skills index',
+        legacy: [/idea-capture\/SKILL\.md/],
+        whenMissing: 'conflict',
+    }), blockItem(pr, r, {
+        id: 'routing-idea',
+        rel: `${r}/context/maps/routing-map.md`,
+        what: 'CAPTURE_IDEA route (Table 8)',
+        effect: 'the CAPTURE_IDEA intent has a canonical destination',
+        legacy: [/CAPTURE_IDEA/],
+        clash: { re: /^##\s+Table 8\b/m, why: 'has its own "Table 8" without the CAPTURE_IDEA route; appending a second one would duplicate the heading. Add the CAPTURE_IDEA row to your Table 8 by hand' },
+        whenMissing: 'conflict',
+    }));
+    // 3. Root instruction files: one managed pointer to AGENT.md, so a new skill never edits them again.
     const aiTool = config.status === 'ok' && typeof config.cfg.project === 'object' && config.cfg.project !== null
         ? config.cfg.project.aiTool
         : undefined;
     const known = typeof aiTool === 'string' ? AI_TOOL_FILE[aiTool] : undefined;
-    const instructionFiles = known
-        ? [known]
-        : INSTRUCTION_FILES.filter((f) => readInstanceFile(root.projectRoot, f).kind !== 'missing');
-    for (const f of instructionFiles.length > 0 ? instructionFiles : [AI_TOOL_FILE.claude]) {
-        // Placeholders other than MONOLITH_ROOT are left as written: the proposal is pasted into an existing file.
-        const tpl = readTemplate(`instruction/${f}`, { ...vars, PROJECT_NAME: basename(root.projectRoot) });
-        items.push(mixedItem(root.projectRoot, f, [/idea-capture\/SKILL\.md/, /monolith idea add/], instructionProposal(tpl), 'the Idea Capture trigger and rules'));
-    }
-    const agentsTpl = readTemplate('projectroot/AGENTS.md', { ...vars, PROJECT_NAME: basename(root.projectRoot), LANGUAGE: 'your language', AI_TOOL: 'your AI tool' });
-    items.push(mixedItem(root.projectRoot, 'AGENTS.md', [/idea-capture\/SKILL\.md/, /monolith idea add/], agentsProposal(agentsTpl), 'the Idea Capture section'));
-    // 3. Optional documentation row: never a reason to call the integration incomplete.
+    const wanted = new Set(['AGENTS.md']);
+    if (known)
+        wanted.add(known);
+    else
+        for (const f of INSTRUCTION_FILES)
+            if (readInstanceFile(pr, f).kind !== 'missing')
+                wanted.add(f);
+    if (wanted.size === 1 && !known)
+        wanted.add(AI_TOOL_FILE.claude);
+    const instruction = [...wanted].map((f) => blockItem(pr, r, {
+        id: 'bootstrap',
+        rel: f,
+        what: 'agent entry-point pointer',
+        effect: 'the assistant is told to read AGENT.md at session start',
+        whenMissing: 'conflict',
+    }));
+    items.push(...instruction);
+    // 4. Optional documentation row: never a reason to call the integration incomplete.
     const semRel = `${r}/context/maps/semantic-map.md`;
-    const sem = readInstanceFile(root.projectRoot, semRel);
+    const sem = readInstanceFile(pr, semRel);
     if (sem.kind === 'ok' && /monolith idea/.test(sem.content))
         items.push({ path: semRel, action: 'UNCHANGED', reason: 'ideas rows present' });
     else
         items.push({ path: semRel, action: 'SKIP', reason: 'optional: ideas rows in the semantic map are documentation only; not required for Idea Capture' });
-    return { monolithRoot: r, items };
+    return { monolithRoot: r, items, chain: chainChecks(pr, r, items, skillText) };
 }
-/** Integration is complete only when nothing is left to add or to resolve by hand. */
+/** Static check of the whole chain. Only files MONOLITH can reason about; nothing is executed. */
+function chainChecks(projectRoot, r, items, skillText) {
+    const state = (path) => items.find((i) => i.path === path);
+    const ok = (i) => i?.action === 'UNCHANGED';
+    const instruction = items.filter((i) => i.path !== `${r}/AGENT.md` && !i.path.startsWith(`${r}/`));
+    const checks = [];
+    const add = (link, good, okMsg, badMsg) => {
+        checks.push({ link, ok: good, detail: good ? okMsg : badMsg });
+    };
+    add('instructions → AGENT.md', instruction.length > 0 && instruction.every((i) => ok(i)), 'root instruction files point to AGENT.md', 'a root instruction file does not (yet) point to AGENT.md');
+    add('AGENT.md → skills', ok(state(`${r}/AGENT.md`)) && ok(state(`${r}/skills/INDEX.md`)), 'AGENT.md and the skills index are current', 'AGENT.md or the skills index is missing, edited or not current');
+    add('routing', ok(state(`${r}/context/maps/routing-map.md`)), 'CAPTURE_IDEA is routed', 'the CAPTURE_IDEA route is not in place');
+    const skillItem = state(`${r}/skills/idea-capture/SKILL.md`);
+    const skillPresent = skillItem?.action === 'UNCHANGED' || skillItem?.action === 'SKIP';
+    add('skill', skillPresent, 'the idea-capture skill exists', 'the idea-capture skill is missing or unreadable');
+    add('skill → CLI', skillPresent && skillText !== null && /monolith idea add/.test(prose(skillText)), 'the skill calls `monolith idea add`', 'the skill does not call `monolith idea add` (a customized skill may have dropped it)');
+    let storage = '';
+    try {
+        listIdeas(ideaStore(projectRoot));
+    }
+    catch (err) {
+        storage = err instanceof Error ? err.message : String(err);
+    }
+    add('CLI → storage', storage === '', 'the ideas store is usable (it is created on the first `idea add`)', `the ideas store cannot be used safely: ${storage}`);
+    return checks;
+}
+/** Integration is complete only when nothing is left to add, change or resolve AND every link of the chain checks out. */
 export function integrationComplete(plan) {
-    return plan.items.every((i) => i.action !== 'ADD' && i.action !== 'CONFLICT');
+    return plan.items.every((i) => i.action !== 'ADD' && i.action !== 'UPDATE' && i.action !== 'CONFLICT') && plan.chain.every((c) => c.ok);
 }
-/** Create every ADD item, exclusively. Stops at the first failure (earlier files stay; re-running continues). */
+/** Apply order: MONOLITH-owned files first, the pointer in the root instruction files last. */
+function rank(item, r) {
+    if (item.path.startsWith(`${r}/skills/idea-capture/`))
+        return 0;
+    if (item.path === `${r}/AGENT.md`)
+        return 1;
+    if (item.path.startsWith(`${r}/`))
+        return 2;
+    return 3;
+}
+/**
+ * Write every ADD and UPDATE of `plan`. The tree is re-planned first and an
+ * item is applied only if the file is exactly as planned: an `ADD` target that
+ * appeared is skipped, an `UPDATE` whose file changed is reported as stale and
+ * left alone. Stops at the first write failure (earlier files stay; re-run).
+ */
 export function applyPlan(target, plan) {
     const targetDir = resolve(target);
     const boundary = projectBoundary(targetDir);
-    const out = { created: [], warnings: [] };
-    for (const item of plan.items) {
-        if (item.action !== 'ADD' || item.content === undefined)
+    const out = { created: [], updated: [], stale: [], warnings: [] };
+    const fresh = planUpdate(targetDir);
+    const work = plan.items.filter((i) => (i.action === 'ADD' || i.action === 'UPDATE') && i.content !== undefined).sort((a, b) => rank(a, plan.monolithRoot) - rank(b, plan.monolithRoot));
+    for (const item of work) {
+        const now = fresh.items.find((i) => i.path === item.path);
+        if (now?.action === 'UNCHANGED')
+            continue; // someone else already did exactly this
+        if (!now || now.action !== item.action || now.content !== item.content || now.before !== item.before) {
+            out.stale.push(item.path);
             continue;
+        }
         const abs = join(targetDir, item.path);
         try {
-            const parent = openParent(boundary, dirname(abs), { create: true });
-            const outcome = createFile(parent, basename(abs), item.content, { mode: 0o666, exactMode: false, durability: 'file' });
-            out.warnings.push(...outcome.warnings);
-            out.created.push(item.path);
+            const parent = openParent(boundary, dirname(abs), { create: item.action === 'ADD' });
+            if (item.action === 'ADD') {
+                const outcome = createFile(parent, basename(abs), item.content, { mode: 0o666, exactMode: false, durability: 'file' });
+                out.warnings.push(...outcome.warnings);
+                out.created.push(item.path);
+            }
+            else {
+                // Last look: the file must still be the one planned against (narrows, does not close, the TOCTOU window).
+                const cur = readInstanceFile(targetDir, item.path);
+                if (cur.kind !== 'ok' || sha(cur.content) !== item.before) {
+                    out.stale.push(item.path);
+                    continue;
+                }
+                const outcome = replaceFile(parent, basename(abs), item.content, { mode: 0o666, exactMode: false, durability: 'file' });
+                out.warnings.push(...outcome.warnings);
+                out.updated.push(item.path);
+            }
         }
         catch (err) {
             // Another `update` (or the user) created it first: exclusive create refused, nothing was overwritten.

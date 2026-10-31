@@ -2,6 +2,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname, resolve, relative, basename } from 'path';
 import { fileURLToPath } from 'url';
+import { BLOCK_IDS, blockBody, placeholderFor, renderBlock } from '../managed/index.js';
 import { SafeWriteError, createFile, openParent, probeTarget, projectBoundary, resolveMonolithRootValue, } from '../root/index.js';
 const INSTRUCTION_FILE_MAP = {
     claude: 'CLAUDE.md',
@@ -63,6 +64,8 @@ function buildVars(config) {
             .split('\n')
             .join('\n  '),
         DRIFT_LOG_PATH: `${r}/enforcement/drift-log.json`,
+        // Same managed blocks `monolith update` writes into existing instances.
+        ...Object.fromEntries(BLOCK_IDS.map((id) => [placeholderFor(id), renderBlock(id, blockBody(id, r)).replace(/\n$/, '')])),
     };
 }
 // Relative to config.monolithRoot (`r`). Shared between createEmptyDirs

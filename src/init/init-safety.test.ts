@@ -236,10 +236,10 @@ describe('monolith init — CAPTURE_IDEA routing contract (IDEA-001A-F)', () => 
     expect(routing).toContain('.monolith/memory/long-term/ideas/IDEA-NNN.md');
     expect(routing).toContain('never writes or edits an idea file by hand');
     expect(read('.monolith', 'context', 'maps', 'semantic-map.md')).toContain('memory/long-term/ideas/IDEA-*.md');
-    expect(read('AGENTS.md')).toContain('.monolith/memory/long-term/ideas/');
-    const claude = read('CLAUDE.md');
-    expect(claude).toContain('CAPTURE_IDEA');
-    for (const f of ['AGENTS.md', 'CLAUDE.md', '.monolith/context/maps/routing-map.md']) expect(read(f)).not.toMatch(/\{\{[A-Z_]+\}\}/);
+    expect(read('AGENTS.md')).toContain('.monolith/AGENT.md');
+    expect(read('.monolith', 'AGENT.md')).toContain('monolith idea add');
+    expect(read('CLAUDE.md')).toContain('.monolith/AGENT.md');
+    for (const f of ['AGENTS.md', 'CLAUDE.md', '.monolith/AGENT.md', '.monolith/skills/INDEX.md', '.monolith/context/maps/routing-map.md']) expect(read(f)).not.toMatch(/\{\{[A-Z_]+\}\}/);
     expect(existsSync(join(dir, '.monolith', 'memory', 'ideas'))).toBe(false);
   });
 });

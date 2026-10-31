@@ -497,7 +497,8 @@ describe('limits and partial results', () => {
     expect(r.completeness).toBe('PARTIAL');
     expect(r.reproducible).toBe(false);
     expect(codes(r)).toContain('LIMIT_DEADLINE');
-    expect(r.stats.examined).toBeLessThan(20);
+    // `examined` counts entries READ (the whole root listing is charged at once); the walk stops inside it.
+    expect(r.stats.entries).toBeLessThan(20);
   });
 
   it('an unrepresentable name (control character, invalid UTF-8; an over-long name cannot be created on this file system, so that branch is covered by the helper only) is excluded and reported', () => {
@@ -636,5 +637,509 @@ describe('source constraints (ADR-021 gates G1, G12)', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DISCOVERY-001B-1-F — remediation of the independent review (F-01 … F-10)
+// ---------------------------------------------------------------------------
+
+type Ident = { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; dev: bigint; ino: bigint };
+
+interface Probe {
+  fs: TraversalFs;
+  /** Entries returned by `readSync` across all handles (the real work done). */
+  reads: () => number;
+  opened: string[];
+  open: () => number;
+}
+
+/** Real file system behind a seam that counts reads/opens and can permute, hide types or fail. */
+function probedFs(opts: {
+  order?: (names: import('fs').Dirent[], dir: string) => import('fs').Dirent[];
+  unknownType?: boolean;
+  lstat?: (p: string, real: Ident, calls: Map<string, number>) => Ident;
+  opendirError?: (p: string) => string | undefined;
+  readError?: (p: string, index: number) => string | undefined;
+} = {}): Probe {
+  let reads = 0;
+  let open = 0;
+  const opened: string[] = [];
+  const calls = new Map<string, number>();
+  const fs: TraversalFs = {
+    stat: (p) => lstatSync(p, { bigint: true }),
+    lstat: (p) => {
+      calls.set(p, (calls.get(p) ?? 0) + 1);
+      const real = lstatSync(p, { bigint: true });
+      return opts.lstat ? opts.lstat(p, real, calls) : real;
+    },
+    opendir: (p) => {
+      const bad = opts.opendirError?.(p);
+      if (bad) throw Object.assign(new Error(bad), { code: bad });
+      opened.push(p);
+      open++;
+      let names = readdirSync(p, { withFileTypes: true });
+      if (opts.order) names = opts.order(names, p);
+      let i = 0;
+      return {
+        readSync: () => {
+          const bad = opts.readError?.(p, i);
+          if (bad) throw Object.assign(new Error(bad), { code: bad });
+          const d = names[i++];
+          if (!d) return null;
+          reads++;
+          return opts.unknownType ? ({ name: d.name, isFile: () => false, isDirectory: () => false, isSymbolicLink: () => false } as never) : d;
+        },
+        closeSync: () => {
+          open--;
+        },
+      };
+    },
+  };
+  return { fs, reads: () => reads, opened, open: () => open };
+}
+
+/** A seeded, reproducible shuffle of what `readSync` returns for each directory (seed 0 reverses). */
+function permutedOrder(seed: number): NonNullable<Parameters<typeof probedFs>[0]>['order'] {
+  return (names) => {
+    if (seed === 0) return [...names].reverse();
+    let state = seed * 2654435761 >>> 0;
+    const next = (): number => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const out = [...names];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(next() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+}
+
+describe('F-01 bounded work: every listing is charged', () => {
+  it('a nested repository is recognised without being listed: its entries are never read, and it cannot cause PARTIAL', () => {
+    const { project } = sandbox();
+    for (let d = 0; d < 30; d++) {
+      mkdirSync(join(project, `n${String(d).padStart(2, '0')}/.git`), { recursive: true });
+      for (let f = 0; f < 50; f++) put(project, `n${String(d).padStart(2, '0')}/f${f}`);
+    }
+    const probe = probedFs();
+    const r = traverseProject(project, { fs: probe.fs, limits: { maxEntries: 100, maxEntriesPerDir: 40 } });
+    expect(probe.opened).toEqual([project]); // only the root was ever opened
+    expect(probe.reads()).toBe(30);
+    expect(r.stats.examined).toBe(30);
+    expect(r.completeness).toBe('COMPLETE');
+    expect(codes(r).filter((c) => c === 'NESTED_REPO_SKIPPED').length).toBeGreaterThan(0);
+    expect(codes(r)).not.toContain('LIMIT_DIR_ENTRIES');
+  });
+
+  it('a nested repository whose .git is a FILE (worktree) is skipped without listing, even when over the per-directory cap', () => {
+    const { project } = sandbox();
+    for (let f = 0; f < 40; f++) put(project, `wt/f${f}`);
+    put(project, 'wt/.git', 'gitdir: elsewhere');
+    put(project, 'ok.ts');
+    const probe = probedFs();
+    const r = traverseProject(project, { fs: probe.fs, limits: { maxEntriesPerDir: 10 } });
+    expect(probe.opened).toEqual([project]);
+    expect(paths(r)).toEqual(['ok.ts', 'wt']);
+    expect(r.completeness).toBe('COMPLETE');
+    expect(codes(r)).toContain('NESTED_REPO_SKIPPED');
+  });
+
+  it('actual reads never exceed maxEntries + 1, and `examined` is exactly the number of entries read', () => {
+    const { project } = sandbox();
+    for (let d = 0; d < 20; d++) for (let f = 0; f < 40; f++) put(project, `d${String(d).padStart(2, '0')}/f${f}`);
+    for (const maxEntries of [1, 19, 20, 21, 59, 60, 61, 100, 400, 819, 820, 821]) {
+      const probe = probedFs();
+      const r = traverseProject(project, { fs: probe.fs, limits: { maxEntries, maxEntriesPerDir: 1000 } });
+      expect(probe.reads()).toBeLessThanOrEqual(maxEntries + 1);
+      expect(r.stats.examined).toBe(probe.reads());
+      expect(r.completeness).toBe(maxEntries >= 820 ? 'COMPLETE' : 'PARTIAL');
+      expect(probe.open()).toBe(0);
+    }
+  });
+
+  it('a directory that does not fit in the remaining budget is not enumerated at all (no order-dependent prefix)', () => {
+    const { project } = sandbox();
+    for (let f = 0; f < 6; f++) put(project, `a/f${f}`);
+    // root: 1 entry, a: 6 entries; budget 5 leaves 4 for `a`, which has 6.
+    const r = traverseProject(project, { limits: { maxEntries: 5 } });
+    expect(paths(r)).toEqual(['a']);
+    expect(codes(r)).toContain('LIMIT_ENTRIES');
+    expect(r.stats.examined).toBe(6); // 1 + (4 + the one that proved it does not fit)
+    expect(r.completeness).toBe('PARTIAL');
+  });
+
+  it('the entries of a listing that is later discarded as DIR_CHANGED, or fails half-way, are still charged', () => {
+    const { project } = sandbox();
+    for (let f = 0; f < 5; f++) put(project, `victim/f${f}`);
+    for (let f = 0; f < 5; f++) put(project, `flaky/f${f}`);
+    const probe = probedFs({
+      lstat: (p, real, calls) => (p.endsWith('/victim') && (calls.get(p) ?? 0) >= 2 ? { isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false, dev: real.dev, ino: real.ino + 1n } : real),
+      readError: (p, i) => (p.endsWith('/flaky') && i === 3 ? 'EIO' : undefined),
+    });
+    const r = traverseProject(project, { fs: probe.fs });
+    expect(codes(r)).toEqual(expect.arrayContaining(['DIR_CHANGED', 'DIR_ERROR']));
+    expect(probe.reads()).toBe(2 + 5 + 3);
+    expect(r.stats.examined).toBe(10);
+  });
+
+  it('handles are closed when the budget or the per-directory cap stops the listing', () => {
+    const { project } = sandbox();
+    for (let f = 0; f < 30; f++) put(project, `big/f${f}`);
+    put(project, 'small/a');
+    const probe = probedFs();
+    traverseProject(project, { fs: probe.fs, limits: { maxEntriesPerDir: 10 } });
+    traverseProject(project, { fs: probe.fs, limits: { maxEntries: 5 } });
+    expect(probe.open()).toBe(0);
+  });
+});
+
+describe('F-03 determinism of the SET, not only of the order', () => {
+  function tree(project: string): void {
+    for (const d of ['a', 'b', 'c', 'd']) for (let f = 0; f < 3; f++) put(project, `${d}/${d}${f}.ts`);
+    for (const n of ['w', 'x', 'y', 'z']) put(project, `${n}.ts`);
+  }
+
+  const variants: [string, Record<string, number>][] = [
+    ['maxEntries', { maxEntries: 17 }],
+    ['maxEntries (another cut)', { maxEntries: 11 }],
+    ['maxPathBytes (cuts inside a directory)', { maxPathBytes: 60 }],
+    ['maxEntriesPerDir', { maxEntriesPerDir: 3 }],
+  ];
+
+  for (const [label, limits] of variants) {
+    it(`under ${label}, every read order of every directory yields the same entries, diagnostics and completeness`, () => {
+      const { project } = sandbox();
+      tree(project);
+      const base = traverseProject(project, { limits });
+      expect(base.completeness).toBe('PARTIAL');
+      for (let seed = 0; seed < 40; seed++) {
+        const r = traverseProject(project, { fs: probedFs({ order: permutedOrder(seed) }).fs, limits });
+        expect(paths(r)).toEqual(paths(base));
+        expect(r.diagnostics).toEqual(base.diagnostics);
+        expect(r.completeness).toBe(base.completeness);
+        expect(r.stats).toEqual(base.stats);
+      }
+    });
+  }
+});
+
+describe('F-03 opaque directory accounting', () => {
+  // root holds `big` (12 files, opaque at cap 10) and `small` (1 file): root = 2 reads.
+  function fixture(): string {
+    const { project } = sandbox();
+    for (let i = 0; i < 12; i++) put(project, `big/f${i}`);
+    put(project, 'small/a');
+    return project;
+  }
+
+  it('an opaque directory costs exactly maxEntriesPerDir + 1', () => {
+    const r = traverseProject(fixture(), { limits: { maxEntriesPerDir: 10 } });
+    expect(r.stats.examined).toBe(2 + 11 + 1);
+    expect(r.diagnostics.find((d) => d.code === 'LIMIT_DIR_ENTRIES')?.path).toBe('big');
+  });
+
+  it('a directory with exactly maxEntriesPerDir entries costs its entries, one more is opaque', () => {
+    const { project } = sandbox();
+    for (let i = 0; i < 10; i++) put(project, `d/f${i}`);
+    const exact = traverseProject(project, { limits: { maxEntriesPerDir: 10 } });
+    expect(exact.stats.examined).toBe(1 + 10);
+    expect(codes(exact)).not.toContain('LIMIT_DIR_ENTRIES');
+    put(project, 'd/extra');
+    const over = traverseProject(project, { limits: { maxEntriesPerDir: 10 } });
+    expect(over.stats.examined).toBe(1 + 11);
+    expect(codes(over)).toContain('LIMIT_DIR_ENTRIES');
+  });
+
+  it('the total budget decides on the boundary: 14 suffices for everything, 13 stops before `small`, 12 stops inside `big`', () => {
+    const project = fixture();
+    const at = (maxEntries: number): TraversalResult => traverseProject(project, { limits: { maxEntriesPerDir: 10, maxEntries } });
+    const ok = at(14);
+    expect(codes(ok)).not.toContain('LIMIT_ENTRIES');
+    expect(paths(ok)).toEqual(['big', 'small', 'small/a']);
+    const short = at(13);
+    expect(codes(short)).toContain('LIMIT_ENTRIES');
+    expect(paths(short)).toEqual(['big', 'small']); // `small` did not fit the one entry left over
+    expect(short.stats.examined).toBe(14);
+    const early = at(12);
+    expect(codes(early)).toContain('LIMIT_ENTRIES');
+    expect(early.stats.examined).toBe(13); // big was charged in full, then the walk stopped
+    expect(paths(early)).toEqual(['big', 'small']);
+  });
+
+  it('several opaque directories are each charged; they and ordinary directories combine without drift', () => {
+    const { project } = sandbox();
+    for (const d of ['o1', 'o2', 'o3']) for (let i = 0; i < 12; i++) put(project, `${d}/f${i}`);
+    put(project, 'ok/a');
+    put(project, 'ok/b');
+    const r = traverseProject(project, { limits: { maxEntriesPerDir: 10 } });
+    expect(r.stats.examined).toBe(4 + 3 * 11 + 2);
+    expect(r.diagnostics.filter((d) => d.code === 'LIMIT_DIR_ENTRIES').map((d) => d.path)).toEqual(['o1', 'o2', 'o3']);
+    expect(paths(r)).toEqual(['ok', 'ok/a', 'ok/b', 'o1', 'o2', 'o3'].sort());
+  });
+});
+
+describe('F-03 device boundary', () => {
+  // A seam shows that a changed `dev` is acted on; it does not prove the behaviour on every real mount.
+  const dirIdent = (dev: bigint, ino: bigint): Ident => ({ isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false, dev, ino });
+
+  it('a directory whose dev changes while it is listed (same inode) is DIR_CHANGED', () => {
+    const { project } = sandbox();
+    put(project, 'victim/inside.ts');
+    const probe = probedFs({ lstat: (p, real, calls) => (p.endsWith('/victim') && (calls.get(p) ?? 0) >= 2 ? dirIdent(real.dev + 1n, real.ino) : real) });
+    const r = traverseProject(project, { fs: probe.fs });
+    expect(r.diagnostics.find((d) => d.code === 'DIR_CHANGED')?.path).toBe('victim');
+    expect(paths(r)).not.toContain('victim/inside.ts');
+    expect(r.completeness).toBe('PARTIAL');
+  });
+
+  it('the project root whose dev changes while it is listed is DIR_CHANGED', () => {
+    const { project } = sandbox();
+    put(project, 'a.ts');
+    let statCalls = 0;
+    const base = probedFs();
+    const fs: TraversalFs = {
+      ...base.fs,
+      stat: (p) => {
+        const real = lstatSync(p, { bigint: true });
+        return ++statCalls >= 2 ? dirIdent(real.dev + 1n, real.ino) : real;
+      },
+    };
+    const r = traverseProject(project, { fs });
+    expect(codes(r)).toContain('DIR_CHANGED');
+    expect(r.entries).toEqual([]);
+  });
+
+  it('a directory on another dev is listed as an entry but never opened', () => {
+    const { project } = sandbox();
+    put(project, 'mnt/inside.ts');
+    const probe = probedFs({ lstat: (p, real) => (p.endsWith('/mnt') ? dirIdent(real.dev + 1n, real.ino) : real) });
+    const r = traverseProject(project, { fs: probe.fs });
+    expect(paths(r)).toEqual(['mnt']);
+    expect(probe.opened).toEqual([project]);
+  });
+});
+
+describe('F-02 bounded retained path text (maxPathBytes)', () => {
+  function fixture(): string {
+    const { project } = sandbox();
+    for (const n of ['a.ts', 'b.ts', 'c.ts', 'd.ts']) put(project, n);
+    return project;
+  }
+
+  it('is measured in UTF-8 bytes of the kept paths and reported in stats', () => {
+    const { project } = sandbox();
+    put(project, 'é.ts'); // 5 bytes, 4 characters
+    put(project, 'dir/ab');
+    const r = traverseProject(project);
+    expect(r.stats.pathBytes).toBe(Buffer.byteLength('dir') + Buffer.byteLength('dir/ab') + Buffer.byteLength('é.ts'));
+    expect(r.stats.pathBytes).toBe(r.entries.reduce((n, e) => n + Buffer.byteLength(e.path), 0));
+  });
+
+  it('exactly at the limit is COMPLETE, one byte below is PARTIAL with LIMIT_PATH_BYTES and the walk stops', () => {
+    const project = fixture(); // 4 paths of 4 bytes
+    const exact = traverseProject(project, { limits: { maxPathBytes: 16 } });
+    expect(exact.completeness).toBe('COMPLETE');
+    expect(exact.stats.pathBytes).toBe(16);
+    const below = traverseProject(project, { limits: { maxPathBytes: 15 } });
+    expect(below.completeness).toBe('PARTIAL');
+    expect(codes(below)).toContain('LIMIT_PATH_BYTES');
+    expect(paths(below)).toEqual(['a.ts', 'b.ts', 'c.ts']);
+    expect(below.stats.pathBytes).toBe(12);
+  });
+
+  it('a path-byte cut is a deterministic prefix: reproducible stays true and a repeat is identical', () => {
+    const project = fixture();
+    const one = traverseProject(project, { limits: { maxPathBytes: 9 } });
+    expect(one.reproducible).toBe(true);
+    expect(traverseProject(project, { limits: { maxPathBytes: 9 } })).toEqual(one);
+    expect(paths(one)).toEqual(['a.ts', 'b.ts']);
+  });
+
+  it('long paths hit the boundary before maxEntries would, and the default boundary is finite', () => {
+    const { project } = sandbox();
+    const long = 'x'.repeat(200);
+    for (let i = 0; i < 50; i++) put(project, `${String(i).padStart(2, '0')}${long}`);
+    const r = traverseProject(project, { limits: { maxPathBytes: 2_000 } });
+    expect(r.entries.length).toBeLessThan(50);
+    expect(r.stats.pathBytes).toBeLessThanOrEqual(2_000);
+    expect(codes(r)).toContain('LIMIT_PATH_BYTES');
+    expect(DEFAULT_TRAVERSAL_LIMITS.maxPathBytes).toBeGreaterThan(0);
+    expect(Number.isFinite(DEFAULT_TRAVERSAL_LIMITS.maxPathBytes)).toBe(true);
+  });
+
+  it('rejects a non-positive maxPathBytes', () => {
+    const { project } = sandbox();
+    expect(() => traverseProject(project, { limits: { maxPathBytes: 0 } })).toThrowError(expect.objectContaining({ code: 'INVALID_LIMITS' }));
+  });
+});
+
+describe('F-04 an entry whose type cannot be determined is never given a type', () => {
+  const failures: [string, Error][] = [
+    ['ENOENT', Object.assign(new Error('x'), { code: 'ENOENT' })],
+    ['EACCES', Object.assign(new Error('x'), { code: 'EACCES' })],
+    ['EPERM', Object.assign(new Error('x'), { code: 'EPERM' })],
+    ['EIO', Object.assign(new Error('x'), { code: 'EIO' })],
+    ['ENOTDIR', Object.assign(new Error('x'), { code: 'ENOTDIR' })],
+    ['EWEIRD', Object.assign(new Error('x'), { code: 'EWEIRD' })],
+  ];
+  for (const [code, err] of failures) {
+    it(`DT_UNKNOWN + lstat ${code}: ENTRY_UNCLASSIFIED, PARTIAL, not reproducible, the cause is kept, no entry`, () => {
+      const { project } = sandbox();
+      put(project, 'ghost');
+      put(project, 'fine');
+      const probe = probedFs({
+        unknownType: true,
+        lstat: (p, real) => {
+          if (p.endsWith('/ghost')) throw err;
+          return real;
+        },
+      });
+      const r = traverseProject(project, { fs: probe.fs });
+      expect(r.completeness).toBe('PARTIAL');
+      expect(r.reproducible).toBe(false);
+      expect(paths(r)).toEqual(['fine']);
+      const d = r.diagnostics.find((x) => x.code === 'ENTRY_UNCLASSIFIED');
+      expect(d?.path).toBe('ghost');
+      expect(d?.message).toContain(code);
+    });
+  }
+
+  it('an error without a code does not leak its message (which may hold an absolute path)', () => {
+    const { project } = sandbox();
+    put(project, 'ghost');
+    const probe = probedFs({
+      unknownType: true,
+      lstat: (p, real) => {
+        if (p.endsWith('/ghost')) throw new Error(`boom at ${p}`);
+        return real;
+      },
+    });
+    const r = traverseProject(project, { fs: probe.fs });
+    expect(r.completeness).toBe('PARTIAL');
+    expect(JSON.stringify(r)).not.toContain(project);
+    expect(r.diagnostics.find((x) => x.code === 'ENTRY_UNCLASSIFIED')?.message).toContain('unknown error');
+  });
+});
+
+describe('F-05 `reproducible` means: same tree + same limits => same result', () => {
+  function run(opts: Parameters<typeof traverseProject>[1], setup?: (project: string) => void): TraversalResult {
+    const { project } = sandbox();
+    put(project, 'a/x');
+    put(project, 'b/y');
+    setup?.(project);
+    return traverseProject(project, opts);
+  }
+  const eio = (p: string): string | undefined => (p.endsWith('/a') ? 'EIO' : undefined);
+
+  it('a complete walk is reproducible', () => {
+    const r = run({});
+    expect([r.completeness, r.reproducible]).toEqual(['COMPLETE', true]);
+  });
+
+  it.each([
+    ['maxDepth', { limits: { maxDepth: 1 } }],
+    ['maxEntries', { limits: { maxEntries: 3 } }],
+    ['maxEntriesPerDir', { limits: { maxEntriesPerDir: 1 } }],
+    ['maxPathBytes', { limits: { maxPathBytes: 3 } }],
+  ] as const)('a deterministic %s cut is PARTIAL and still reproducible', (_n, opts) => {
+    const r = run(opts);
+    expect(r.completeness).toBe('PARTIAL');
+    expect(r.reproducible).toBe(true);
+  });
+
+  it('an unreadable directory (EACCES) on an unchanged tree is PARTIAL and reproducible', () => {
+    const r = run({ fs: probedFs({ opendirError: (p) => (p.endsWith('/a') ? 'EACCES' : undefined) }).fs });
+    expect(codes(r)).toContain('DIR_UNREADABLE');
+    expect(r.reproducible).toBe(true);
+  });
+
+  it.each([
+    ['DIR_ERROR (EIO on open)', { opendirError: eio }, 'DIR_ERROR'],
+    ['DIR_ERROR (EIO on read)', { readError: (p: string, i: number) => (p.endsWith('/a') && i === 0 ? 'EIO' : undefined) }, 'DIR_ERROR'],
+    ['DIR_VANISHED (ENOENT on open)', { opendirError: (p: string) => (p.endsWith('/a') ? 'ENOENT' : undefined) }, 'DIR_VANISHED'],
+    [
+      'DIR_CHANGED',
+      { lstat: (p: string, real: Ident, calls: Map<string, number>) => (p.endsWith('/a') && (calls.get(p) ?? 0) >= 2 ? { isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false, dev: real.dev, ino: real.ino + 1n } : real) },
+      'DIR_CHANGED',
+    ],
+  ] as const)('%s is not reproducible', (_n, seam, code) => {
+    const r = run({ fs: probedFs(seam as never).fs });
+    expect(codes(r)).toContain(code);
+    expect(r.completeness).toBe('PARTIAL');
+    expect(r.reproducible).toBe(false);
+  });
+
+  it('the time budget is not reproducible (and an unclassifiable entry, see F-04)', () => {
+    let t = 0;
+    const r = run({ limits: { deadlineMs: 1 }, now: () => t++ });
+    expect(r.reproducible).toBe(false);
+  });
+
+  it('a walk without any unstable diagnostic is reproducible even with scope-policy diagnostics', () => {
+    const r = run({}, (project) => {
+      mkdirSync(join(project, 'node_modules'));
+      symlinkSync(join(project, 'a'), join(project, 'l'));
+    });
+    expect(r.completeness).toBe('COMPLETE');
+    expect(r.reproducible).toBe(true);
+  });
+});
+
+describe('F-07 nested repository is policy, not a resource event', () => {
+  it('a nested repository larger than maxEntriesPerDir is NESTED_REPO_SKIPPED and does not make the result PARTIAL', () => {
+    const { project } = sandbox();
+    mkdirSync(join(project, 'sub/.git'), { recursive: true });
+    for (let f = 0; f < 30; f++) put(project, `sub/f${f}`);
+    const r = traverseProject(project, { limits: { maxEntriesPerDir: 10 } });
+    expect(codes(r)).toEqual(['NESTED_REPO_SKIPPED']);
+    expect(r.completeness).toBe('COMPLETE');
+    expect(paths(r)).toEqual(['sub']);
+  });
+});
+
+describe('F-09 root errors fail closed before any listing', () => {
+  it('a root that is a file, missing or relative is ROOT_UNSAFE', () => {
+    const { base, project } = sandbox();
+    put(project, 'file');
+    for (const root of [join(project, 'file'), join(base, 'nope'), 'relative/dir']) {
+      expect(() => traverseProject(root)).toThrowError(expect.objectContaining({ code: 'ROOT_UNSAFE' }));
+    }
+  });
+
+  it.skipIf(isRoot)('an unreadable root is ROOT_UNSAFE (not a diagnostic), and nothing is listed', () => {
+    const { project } = sandbox();
+    put(project, 'a');
+    chmodSync(project, 0o000);
+    const probe = probedFs();
+    try {
+      expect(() => traverseProject(project, { fs: probe.fs })).toThrowError(expect.objectContaining({ code: 'ROOT_UNSAFE' }));
+    } finally {
+      chmodSync(project, 0o755);
+    }
+    expect(probe.opened).toEqual([]);
+  });
+});
+
+describe('F-10 unrepresentable names: a reason class, never the name', () => {
+  it('names the class and the parent, not the bytes', () => {
+    const { project } = sandbox();
+    put(project, 'sub/ok.ts');
+    put(project, 'new\nline.ts');
+    writeFileSync(Buffer.concat([Buffer.from(join(project, 'sub') + '/secret-'), Buffer.from([0xff, 0xfe]), Buffer.from('.ts')]), 'x');
+    const r = traverseProject(project);
+    const list = r.diagnostics.filter((d) => d.code === 'NAME_UNREPRESENTABLE');
+    expect(list.map((d) => d.path).sort()).toEqual(['.', 'sub']);
+    expect(list.find((d) => d.path === '.')?.message).toContain('control character');
+    expect(list.find((d) => d.path === 'sub')?.message).toContain('U+FFFD');
+    const text = JSON.stringify(r.diagnostics);
+    expect(text).not.toContain('secret-');
+    expect(text).not.toContain('line.ts');
+    expect(text).not.toContain('\ufffd');
   });
 });

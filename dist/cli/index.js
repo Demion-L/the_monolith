@@ -12,6 +12,7 @@
  *   monolith brief       — deterministic, bounded project context summary
  *   monolith durable     — inspect/verify/maintain Durable State task logs
  *   monolith idea        — capture and recall deferred ideas (add/list/show)
+ *   monolith update      — add missing Idea Capture infrastructure to an existing instance
  *   monolith ui          — launch Mission Control (read-only dashboard)
  */
 import { MONOLITH_VERSION } from '../version.js';
@@ -41,6 +42,11 @@ Commands:
               list | show | assess | packet | verify | retention.
   idea        Capture a deferred thought without leaving the current task, and
               recall it later: add | list | show. Plain Markdown files, no LLM.
+  update      Bring an existing instance up to Idea Capture & Recall. Preview by
+              default (changes nothing). --apply creates MONOLITH-managed files
+              and may add or refresh managed sections inside your existing
+              files; your text outside those sections is kept, and conflicting
+              edits are never overwritten (see 'monolith update --help').
   ui          Launch Mission Control, the read-only web dashboard, on
               127.0.0.1 (default port 4173). 'ui dev' adds Vite hot reload
               (source checkout only). See 'monolith ui --help'.
@@ -68,6 +74,9 @@ Idea usage:
   monolith idea list
   monolith idea show <id>
 
+Update usage:
+  monolith update [--apply]
+
 UI usage:
   monolith ui [--port N]
   monolith ui dev [--port N]
@@ -80,6 +89,12 @@ async function main() {
     const args = process.argv.slice(2);
     // `ui` owns its own --help / --version-like flags (`monolith ui dev --help`).
     const ownsHelp = args[0] === 'ui';
+    if (args[0] === 'update' && (args.includes('--help') || args.includes('-h'))) {
+        const { UPDATE_USAGE } = await import('../update/cli.js');
+        console.log(UPDATE_USAGE);
+        process.exit(0);
+        return;
+    }
     if (args.length === 0 || (!ownsHelp && (args.includes('--help') || args.includes('-h')))) {
         console.log(USAGE);
         process.exit(0);
@@ -152,6 +167,11 @@ async function main() {
         case 'idea': {
             const { runIdeaCommand } = await import('../ideas/cli.js');
             await runIdeaCommand(args.slice(1));
+            break;
+        }
+        case 'update': {
+            const { runUpdate } = await import('../update/cli.js');
+            process.exitCode = await runUpdate(args.slice(1));
             break;
         }
         case 'ui': {

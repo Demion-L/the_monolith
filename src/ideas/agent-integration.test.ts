@@ -163,10 +163,12 @@ describe('activation in a new instance', () => {
     expect(readFileSync(skill, 'utf8')).toBe(read(SKILL));
     const index = readFileSync(join(dir, '.monolith', 'skills', 'INDEX.md'), 'utf8');
     expect(index).toContain('.monolith/skills/idea-capture/SKILL.md');
+    // DX-UPDATE-003: the root instruction files carry one stable pointer; the skill wiring lives in AGENT.md.
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8');
-    expect(claude).toContain('.monolith/skills/idea-capture/SKILL.md');
+    expect(claude).toContain('.monolith/AGENT.md');
     expect(claude).not.toContain('{{');
-    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('.monolith/skills/idea-capture/SKILL.md');
+    expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toContain('.monolith/AGENT.md');
+    expect(readFileSync(join(dir, '.monolith', 'AGENT.md'), 'utf8')).toContain('.monolith/skills/idea-capture/SKILL.md');
   });
 
   it.each(['claude', 'cursor', 'windsurf'] as const)(
@@ -182,14 +184,17 @@ describe('activation in a new instance', () => {
         protocols: ['finalize-story'],
         monolithRoot: '.monolith',
       });
-      const file = { claude: 'CLAUDE.md', cursor: '.cursorrules', windsurf: '.windsurfrules' }[aiTool];
-      const text = readFileSync(join(dir, file), 'utf8');
-      expect(text).not.toContain('{{');
-      const refs = [...text.matchAll(/`(\.monolith\/skills\/[a-z-]+\/SKILL\.md)`/g)].map((m) => m[1]);
+      // Every tool reads AGENTS.md; the tool's own file (CLAUDE.md) is written only when init has a template for it.
+      const text = readFileSync(join(dir, 'AGENTS.md'), 'utf8');
+      expect(text).toContain('.monolith/AGENT.md');
+      const agent = readFileSync(join(dir, '.monolith', 'AGENT.md'), 'utf8');
+      expect(agent).not.toContain('{{');
+      const entry = agent;
+      const refs = [...entry.matchAll(/`(\.monolith\/skills\/[a-z-]+\/SKILL\.md)`/g)].map((m) => m[1]);
       expect(refs).toContain('.monolith/skills/idea-capture/SKILL.md');
       for (const r of refs) expect(existsSync(join(dir, r)), r).toBe(true);
-      expect(text).toMatch(/monolith idea add\|list\|show/);
-      expect(text).toMatch(/never write an idea into a file/i);
+      expect(entry).toContain('monolith idea add');
+      expect(entry).toMatch(/never choose a\s+path/i);
     },
   );
 
@@ -213,7 +218,7 @@ describe('activation in a new instance', () => {
 
 describe('routing', () => {
   it('Table 8 has the CAPTURE_IDEA route in the repository and in the template, CLI-only', () => {
-    for (const p of ['.monolith/context/maps/routing-map.md', 'templates/default-instance/monolith/context/maps/routing-map.md']) {
+    for (const p of ['.monolith/context/maps/routing-map.md', 'templates/default-instance/managed/routing-idea.md']) {
       const row = read(p).split('\n').find((l) => l.startsWith('| `CAPTURE_IDEA`'));
       expect(row, p).toBeDefined();
       expect(row).toContain('monolith idea add');
@@ -223,7 +228,7 @@ describe('routing', () => {
   });
 
   it('the skill is in both skill indexes and the semantic maps', () => {
-    for (const p of ['.monolith/skills/INDEX.md', 'templates/default-instance/monolith/skills/INDEX.md']) {
+    for (const p of ['.monolith/skills/INDEX.md', 'templates/default-instance/managed/index-idea.md']) {
       expect(read(p)).toContain('idea-capture');
     }
     for (const p of ['.monolith/context/maps/semantic-map.md', 'templates/default-instance/monolith/context/maps/semantic-map.md']) {

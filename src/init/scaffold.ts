@@ -3,6 +3,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join, dirname, resolve, relative, basename } from 'path';
 import { fileURLToPath } from 'url';
 import type { ProjectConfig } from './types.js';
+import { BLOCK_IDS, blockBody, placeholderFor, renderBlock } from '../managed/index.js';
 import {
   SafeWriteError,
   createFile,
@@ -24,11 +25,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Works both from dist/init/ (compiled) and src/init/ (tsx)
-const TEMPLATES_ROOT = resolve(__dirname, '..', '..', 'templates', 'default-instance');
+export const TEMPLATES_ROOT = resolve(__dirname, '..', '..', 'templates', 'default-instance');
 
 type Vars = Record<string, string>;
 
-function substitute(content: string, vars: Vars): string {
+export function substitute(content: string, vars: Vars): string {
   return content.replace(/\{\{([A-Z_]+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
 }
 
@@ -104,6 +105,8 @@ function buildVars(config: ProjectConfig): Vars {
       .split('\n')
       .join('\n  '),
     DRIFT_LOG_PATH: `${r}/enforcement/drift-log.json`,
+    // Same managed blocks `monolith update` writes into existing instances.
+    ...Object.fromEntries(BLOCK_IDS.map((id) => [placeholderFor(id), renderBlock(id, blockBody(id, r)).replace(/\n$/, '')])),
   };
 }
 

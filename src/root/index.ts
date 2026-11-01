@@ -281,6 +281,13 @@ export interface ProjectFileOptions {
   maxBytes?: number;
   /** Accept a zero-byte file. Defaults to false. */
   allowEmpty?: boolean;
+  /**
+   * Refuse (FILE_UNREADABLE) content that is not strictly valid UTF-8 or that
+   * contains a NUL byte (UTF-16 without BOM), instead of replacing bad bytes
+   * with U+FFFD. For callers that write the text back: a lossy read would
+   * corrupt the file. A UTF-8 BOM is kept in the string. Defaults to false.
+   */
+  strictUtf8?: boolean;
 }
 
 /**
@@ -444,7 +451,17 @@ export function readBoundedFile(
       if (total > maxBytes) return fail('FILE_TOO_LARGE', `${label} grew beyond the limit of ${maxBytes} bytes while being read.`);
       chunks.push(buf.subarray(0, n));
     }
-    return { ok: true, path: abs, size: total, content: Buffer.concat(chunks).toString('utf8') };
+    const bytes = Buffer.concat(chunks);
+    if (opts.strictUtf8) {
+      try {
+        if (bytes.includes(0)) throw new Error('NUL byte');
+        const content = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+        return { ok: true, path: abs, size: total, content };
+      } catch {
+        return fail('FILE_UNREADABLE', `${label} is not valid UTF-8 text (another encoding, UTF-16 or binary); MONOLITH does not convert encodings.`);
+      }
+    }
+    return { ok: true, path: abs, size: total, content: bytes.toString('utf8') };
   } catch (err) {
     return fail('FILE_UNREADABLE', `${label} cannot be read: ${errMsg(err)}`);
   } finally {

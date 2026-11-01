@@ -468,6 +468,65 @@ describe('security: untrusted strings', () => {
     expect(md).toContain('`émoji-😀`');
   });
 
+  describe('C1 controls (U+0080–U+009F) and whitespace-only values', () => {
+    const RAW_CONTROLS = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/; // everything but the line feed that ends our own lines
+    const withPaths = (paths: string[], diagPath?: string): DiscoveryResult =>
+      validOrFail(handMade([langFact('TypeScript', '.ts', paths.length, paths)], diagPath === undefined ? [] : [{ code: 'MANIFEST_EMPTY', path: diagPath, message: 'is empty.' }]));
+
+    it.each([
+      ['\u0080', '[U+0080]'],
+      ['\u0085', '[U+0085]'],
+      ['\u009B', '[U+009B]'],
+      ['\u009F', '[U+009F]'],
+    ])('shows %j in source.path as %s, with four hex digits', (c, shown) => {
+      const md = renderProjectMapProposal(withPaths([`d/a${c}b.ts`]));
+      expect(md).toContain(`d/a${shown}b.ts`);
+      expect(md).not.toMatch(RAW_CONTROLS);
+    });
+
+    it('shows C1 in source.path of a language aggregate and in diagnostic.path', () => {
+      const md = renderProjectMapProposal(withPaths(['d/a\u0085b\u009Bc.ts'], 'e/x\u0080y.json'));
+      expect(md).toContain('`d/a[U+0085]b[U+009B]c.ts`');
+      expect(md).toContain('`e/x[U+0080]y.json`');
+      expect(md).not.toMatch(RAW_CONTROLS);
+    });
+
+    it('shows a mix of C0-range-adjacent, C1, format and ordinary characters, and keeps the ordinary ones', () => {
+      const md = renderProjectMapProposal(withPaths(['d/\u0080a\u009F​б日😀é.ts']));
+      expect(md).toContain('d/[U+0080]a[U+009F][U+200B]б日😀é.ts');
+      expect(md).not.toMatch(RAW_CONTROLS);
+    });
+
+    it('never lets a C1 or C0 control in through free text: the validator rejects them, so only paths can carry C1', () => {
+      for (const bad of ['\u0001', '\u001F', '\u007F', '\u0080', '\u0085', '\u009B', '\u009F']) {
+        expect(() => renderProjectMapProposal(handMade([], [{ code: 'MANIFEST_EMPTY', message: `x${bad}y` }]))).toThrow(DiscoveryError);
+      }
+    });
+
+    it('is deterministic and does not change its input', () => {
+      const r = withPaths(['d/a\u0085b.ts'], 'e/\u009F.json');
+      const before = JSON.stringify(r);
+      const a = renderProjectMapProposal(r);
+      expect(renderProjectMapProposal(r)).toBe(a);
+      expect(JSON.stringify(r)).toBe(before);
+    });
+
+    it('shows a spaces-only value with exactly its spaces (no extra padding), distinct from an empty one', () => {
+      for (const [spaces, expected] of [[' ', '` `'], ['   ', '`   `']] as const) {
+        const md = renderProjectMapProposal(validOrFail(handMade([], [{ code: 'MANIFEST_EMPTY', message: spaces }])));
+        expect(md).toContain(`${expected}`);
+        expect(md).not.toContain(`\`${' '.repeat(spaces.length + 2)}\``);
+      }
+      const edge = renderProjectMapProposal(validOrFail(handMade([], [{ code: 'MANIFEST_EMPTY', message: ' a ' }])));
+      expect(edge).toContain('`  a  `');
+    });
+  });
+
+  it('labels FILE_PRESENT as evidence for entrypoint candidates, not as a count of project files', () => {
+    const md = renderProjectMapProposal(rich());
+    expect(md).toMatch(/- FILE_PRESENT \(DETECTED\): \d+ \(file evidence for entrypoint candidates only; not a count of project files\)/);
+  });
+
   it('shows hostile path characters inside code spans (a path may hold Markdown syntax)', () => {
     const paths = ['# not a heading/package.json', '[x](y)/package.json', 'a b|c/<b>/package.json', '- item/package.json'];
     const md = renderProjectMapProposal(validOrFail(extract(paths.map(f))));

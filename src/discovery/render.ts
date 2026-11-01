@@ -67,7 +67,9 @@ function code(text: string): string {
   let longest = 0;
   for (const run of shown.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
   const fence = '`'.repeat(longest + 1);
-  const pad = /^[` ]|[` ]$/.test(shown) ? ' ' : '';
+  // CommonMark strips one space from each side only when the content is not all spaces, so a
+  // spaces-only value gets no padding: it is shown with exactly the spaces it has.
+  const pad = !/^ +$/.test(shown) && /^[` ]|[` ]$/.test(shown) ? ' ' : '';
   return `${fence}${pad}${shown}${pad}${fence}`;
 }
 
@@ -265,7 +267,10 @@ export function renderProjectMapProposal(result: DiscoveryResult): string {
   line('## Evidence & Provenance');
   line();
   line('- Fact counts by kind:');
-  for (const kind of KIND_ORDER) line(`  - ${kind} (${FACT_LEVEL_BY_KIND[kind]}): ${ofKind(facts, kind).length}`);
+  for (const kind of KIND_ORDER) {
+    const note = kind === 'FILE_PRESENT' ? ' (file evidence for entrypoint candidates only; not a count of project files)' : '';
+    line(`  - ${kind} (${FACT_LEVEL_BY_KIND[kind]}): ${ofKind(facts, kind).length}${note}`);
+  }
   const sampled = languages.filter((f) => sourceCoverage(f) === 'SAMPLE').length;
   line(`- Source coverage: ${plural(languages.length - sampled, 'aggregate is', 'aggregates are')} FULL and ${plural(sampled, 'aggregate is', 'aggregates are')} SAMPLE. Every other fact rests on exactly the source listed with it.`);
   line('- DETECTED: observed in the project’s file names, directory entries or manifest fields. INTERPRETED: derived from DETECTED facts by a named rule.');

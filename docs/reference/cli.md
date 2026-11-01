@@ -280,7 +280,7 @@ version. Markers inside fenced code are examples, not blocks.
 | `ADD` | A MONOLITH-owned file is missing (`AGENT.md`, `skills/idea-capture/SKILL.md`); created exclusively. |
 | `UPDATE` | A managed block is appended to your file (every existing byte stays in place) or an **unedited** block is refreshed in place. Verified before writing; the file is re-checked just before the atomic replace. |
 | `UNCHANGED` | Already installed and current (an older unmanaged routing/index entry also counts). |
-| `CONFLICT` | Block edited by you, malformed/duplicated markers, your own `AGENT.md` without markers, your own `Table 8` without `CAPTURE_IDEA`, a missing user file, a file that cannot be read safely, a file that is not valid UTF-8 (no encoding is converted; UTF-16 and binary files are refused too), or a file that ends inside an unclosed ``` / ~~~ fence that would hide the new block. Nothing is written there; the plan says how to resolve it and prints the block to add by hand. |
+| `CONFLICT` | Nothing is written to that file; the plan says how to resolve it and prints the block to add by hand. Causes: a block edited by you; malformed or duplicated managed markers (a damaged block); managed markers inside an HTML comment (the block would not be active); your own `AGENT.md` without markers; your own `Table 8` without `CAPTURE_IDEA`; a missing user file; a file that cannot be read safely; a file that is not valid UTF-8 (no encoding is converted; UTF-16 and binary files are refused too); a file that ends inside an unclosed ``` / ~~~ Markdown fence; or a file that ends inside an unclosed HTML comment (`<!--`), either of which would hide the new block. |
 | `SKIP` | Left alone on purpose (an existing differing `idea-capture` skill; the optional semantic-map rows). |
 
 `COMPLETE` is a structural statement, not a promise about an AI model: it is reported only when
@@ -301,7 +301,7 @@ Known limitations (documented, not fixed here):
   rewrite it, because it lies outside a managed block; fix it by hand by writing `\|`.
 - Unmanaged text is matched structurally (the known table rows), not by meaning. A file that
   contradicts the managed text elsewhere (for example another rule for saving ideas) is not detected.
-- Only strict UTF-8 is supported for files `update` may write; no encoding is detected or converted.
+- Only strict UTF-8 is supported for files `update` may write; no encoding is detected or converted. A leading UTF-8 BOM is accepted and ignored when scanning the first line (fences, comments, markers); only the first line is treated this way.
 - Fences are recognised for ``` and ~~~ (up to 3 spaces of indent); fences nested in lists or
   block quotes are not tracked, and the post-write check refuses any result it cannot read back.
 

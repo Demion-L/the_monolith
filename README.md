@@ -101,6 +101,23 @@ monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
 instance, and it does not open a browser — open the printed address yourself.
 All commands: [CLI reference](./docs/reference/cli.md).
 
+## Updating an Existing Project
+
+If a project was initialised with an earlier MONOLITH version, bring it up to the current agent integration (agent entry point and Idea Capture) with:
+
+```bash
+monolith update            # preview: shows the plan, writes nothing
+monolith update --apply    # applies the safe changes
+```
+
+- The first command only prints a plan and does not modify the project.
+- The second applies the safe changes (missing MONOLITH-owned files and managed blocks).
+- Your project memory (`active.md`, `decisions.md`, roadmap, stories, ideas) and your own files are preserved.
+- A managed block you have edited is never overwritten automatically.
+- On a conflict the command writes nothing to that file and reports that manual resolution is required.
+
+Details and the full list of verdicts: [`monolith update` in the CLI reference](./docs/reference/cli.md#monolith-update).
+
 ## Architecture
 
 ```text

@@ -292,3 +292,6 @@ export function renderProjectMapProposal(result: DiscoveryResult): string {
 
   return `${out.join('\n')}\n`;
 }
+
+/** Internal (DISCOVERY-001C): the one safe way to place an untrusted string in Markdown, shared with the composer. */
+export { code as markdownCodeSpan };

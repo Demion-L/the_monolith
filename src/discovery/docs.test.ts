@@ -173,7 +173,7 @@ describe('markdown correctness', () => {
     expect(headings(result).map((h) => h.text)).toEqual(['A']);
     expect(linksOf(result)).toEqual([]);
     expect(result.diagnostics.find((d) => d.code === 'DOC_UNCLOSED_FENCE')?.message).toMatch(/line 2/);
-    expect(result.completeness).toBe('COMPLETE'); // as CommonMark: the rest IS code
+    expect(result.completeness).toBe('PARTIAL'); // F-01: an unclosed fence means the rest was not analysed
   });
 
   it('a backtick fence whose info string contains a backtick is not a fence', () => {
@@ -550,6 +550,21 @@ describe('evidence', () => {
   it('informational diagnostics do not make the result PARTIAL', () => {
     const { result } = run({ 'README.md': '---\na: b\n---\n<!-- c -->\n    indented\n# H\n' });
     expect(codes(result)).toEqual(['DOC_FRONT_MATTER_SKIPPED', 'DOC_HTML_COMMENT_SKIPPED', 'DOC_INDENTED_LINES_SKIPPED']);
+    expect(result.completeness).toBe('COMPLETE');
+  });
+
+  it('F-01: a fence inside a list whose closer is indented 4+ spaces is not recognised as closed, so the result is PARTIAL', () => {
+    const md = '# T\n\n- a\n\n    ```sh\n    # c\n    ```\n\n## Install\n[guide](docs/g.md)\n';
+    const { result } = run({ 'README.md': md });
+    expect(codes(result)).toContain('DOC_UNCLOSED_FENCE');
+    expect(result.completeness).toBe('PARTIAL');
+    expect(validateDocumentationResult(result)).toEqual([]);
+  });
+
+  it('F-01: a properly closed fence yields no DOC_UNCLOSED_FENCE and stays COMPLETE', () => {
+    const { result } = run({ 'README.md': '# T\n```sh\n# c\n```\n## Install\n[guide](docs/g.md)\n' });
+    expect(codes(result)).not.toContain('DOC_UNCLOSED_FENCE');
+    expect(headings(result).map((h) => h.text)).toEqual(['T', 'Install']);
     expect(result.completeness).toBe('COMPLETE');
   });
 

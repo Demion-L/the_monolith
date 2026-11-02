@@ -76,6 +76,9 @@ true there too (no `finalize` code, `project.definition.mjs` never loaded).
   self-healing; it is detected, explained and recoverable by one owner action.
 - **`.git`** is refused at any depth and in any case in document paths.
 - **`expectedCurrentStory: "any"` is removed**; `contains` must name the story id.
+- **Active story identity (DOCSYNC-007)** is the single `**Story:** <id>` field line of `## Current Story`
+  (first token, exact match; fences/comments ignored). A token found in free text proves nothing;
+  missing/duplicate/conflicting identity fails closed. Re-checked by `apply` (it re-plans).
 - **Evidence** must have exactly one Status/Story/Date; anything repeated,
   contradictory or malformed is `NOT_VERIFIED`; dated within 7 days before the
   finalization date. Still a self-report, not an independent verification.

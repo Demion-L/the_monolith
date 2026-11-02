@@ -78,8 +78,6 @@ export declare const LIMITS: {
     readonly docUpdates: 20;
     readonly docBytes: number;
 };
-/** True when `text` has a token that merely CONTAINS `id` (e.g. S-10, XS-1, 1.10 for S-1/1.1): ambiguous. */
-export declare function hasLookalikeIdToken(text: string, id: string): boolean;
 /**
  * True when `text` holds `id` as a whole Story ID token (case-insensitive).
  * Tokens are maximal runs of the Story ID alphabet [A-Za-z0-9._-]; trailing

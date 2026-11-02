@@ -25,7 +25,7 @@ import { dirname, join } from 'path';
 import { RootContainmentError, SafeWriteError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, replaceFile, resolveMonolithRoot, } from '../root/index.js';
 import { acquireLock } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
-import { hasLookalikeIdToken, hasStoryIdToken, validDate, validateRelPath } from './proposal.js';
+import { validDate, validateRelPath } from './proposal.js';
 const MAX_DOC_BYTES = 4 * 1024 * 1024;
 const LOCK_NAME = 'finalize.lock';
 const sha = (s) => createHash('sha256').update(s).digest('hex');
@@ -287,6 +287,53 @@ export const EVIDENCE_MAX_AGE_DAYS = 7;
 function fieldLines(content, field) {
     const re = new RegExp(`^\\*\\*${field}:\\*\\*[ \\t]*(.*)$`, 'gm');
     return [...content.matchAll(re)].map((m) => m[1].replace(/\r$/, '').trim());
+}
+const FIX_HINT = 'To finalize, put exactly one line "**Story:** <id> — <title>" (at the start of the line, outside code fences and comments) in the "## Current Story" section of active.md; MONOLITH never rewrites it for you.';
+/**
+ * Structural identity of the active story (DOCSYNC-007). The ONLY source is the
+ * `**Story:** <id> …` field line inside `## Current Story` (same grammar as the
+ * evidence files and `## Last Finalization`); its FIRST token is the id. Ids
+ * mentioned in titles, descriptions, comments, code fences or other fields carry
+ * no authority. Zero, several, or malformed field lines → no identity (fail closed).
+ */
+export function activeStoryIdentity(currentStoryBody) {
+    const found = [];
+    let fence = null;
+    let comment = false;
+    for (const raw of norm(currentStoryBody).split('\n')) {
+        const line = raw.trim();
+        if (comment) {
+            if (line.includes('-->'))
+                comment = false;
+            continue;
+        }
+        const f = /^(`{3,}|~{3,})/.exec(line);
+        if (fence !== null) {
+            if (f !== null && f[1][0] === fence[0] && f[1].length >= fence.length && line === f[1])
+                fence = null;
+            continue;
+        }
+        if (f !== null) {
+            fence = f[1];
+            continue;
+        }
+        if (line.startsWith('<!--')) {
+            if (!line.includes('-->'))
+                comment = true;
+            continue;
+        }
+        const m = /^\*\*Story:\*\*[ \t]*(.*)$/.exec(raw.replace(/\r$/, ''));
+        if (m !== null)
+            found.push(m[1].trim());
+    }
+    if (found.length === 0)
+        return { ok: false, reason: `the Current Story section has no "**Story:** <id>" line, so the active story cannot be identified (ids in free text, headings, comments or code blocks are not identity). ${FIX_HINT}` };
+    if (found.length > 1)
+        return { ok: false, reason: `the Current Story section has ${found.length} "**Story:**" lines (${found.map((x) => `"${x.slice(0, 40)}"`).join(', ')}): ${new Set(found.map((x) => /^(\S+)/.exec(x)?.[1] ?? '')).size > 1 ? 'conflicting' : 'duplicate'} identity. ${FIX_HINT}` };
+    const id = /^(\S+)(?:\s|$)/.exec(found[0])?.[1];
+    if (id === undefined || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id))
+        return { ok: false, reason: `the "**Story:**" line ("${found[0].slice(0, 60)}") does not start with a valid story id. ${FIX_HINT}` };
+    return { ok: true, id };
 }
 /**
  * Attested evidence. Contract: exactly one `**Status:**` (PASS or FAIL, nothing
@@ -564,11 +611,22 @@ function plan(ctx, p) {
             const excerpt = ex.excerpt ?? '';
             let ok;
             let want;
+            let why = '';
             if (exp === 'none')
                 (ok = ex.hasCurrentStorySection && /no active story/i.test(excerpt)), (want = 'no active story');
-            else
-                (ok = excerpt.includes(exp.contains) && hasStoryIdToken(excerpt, p.story.id) && !hasLookalikeIdToken(excerpt, p.story.id)), (want = `Current Story containing "${exp.contains}" and naming story ${p.story.id} as a whole id`);
-            checks.push({ id: 'expected-state', status: ok ? 'PASS' : 'FAIL', detail: ok ? `Current Story matches the expected state: ${want}.` : `Current Story does not match the expected state: ${want}.`, source: 'MONOLITH (brief Current Story extraction)' });
+            else {
+                const ident = activeStoryIdentity(excerpt);
+                want = `Current Story containing "${exp.contains}" whose "**Story:**" field is exactly ${p.story.id}`;
+                if (!excerpt.includes(exp.contains))
+                    (ok = false), (why = ' The expected text is not in the Current Story section.');
+                else if (!ident.ok)
+                    (ok = false), (why = ` ${ident.reason}`);
+                else if (ident.id !== p.story.id)
+                    (ok = false), (why = ` The active story is "${ident.id}", not ${p.story.id}.`);
+                else
+                    ok = true;
+            }
+            checks.push({ id: 'expected-state', status: ok ? 'PASS' : 'FAIL', detail: ok ? `Current Story matches the expected state: ${want}.` : `Current Story does not match the expected state: ${want}.${why}`, source: 'MONOLITH (brief Current Story extraction + structural **Story:** field)' });
         }
     }
     const reqShas = [];

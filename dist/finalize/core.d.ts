@@ -88,6 +88,21 @@ export declare function readFinalizeConfig(config: ConfigRead): FinalizeConfig;
 export declare function renderCapsule(p: FinalizationProposal): string;
 /** Evidence older than this many days before the finalization date is not accepted. */
 export declare const EVIDENCE_MAX_AGE_DAYS = 7;
+export type ActiveIdentity = {
+    ok: true;
+    id: string;
+} | {
+    ok: false;
+    reason: string;
+};
+/**
+ * Structural identity of the active story (DOCSYNC-007). The ONLY source is the
+ * `**Story:** <id> …` field line inside `## Current Story` (same grammar as the
+ * evidence files and `## Last Finalization`); its FIRST token is the id. Ids
+ * mentioned in titles, descriptions, comments, code fences or other fields carry
+ * no authority. Zero, several, or malformed field lines → no identity (fail closed).
+ */
+export declare function activeStoryIdentity(currentStoryBody: string): ActiveIdentity;
 export declare function planFinalization(targetDir: string, proposal: FinalizationProposal): FinalizationPlan;
 export declare function applyFinalization(targetDir: string, proposal: FinalizationProposal, approvedDigest: string, opts?: FinalizeOptions): Promise<ApplyResult>;
 //# sourceMappingURL=core.d.ts.map

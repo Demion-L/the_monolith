@@ -68,15 +68,6 @@ export const LIMITS = {
 
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-/** True when `text` has a token that merely CONTAINS `id` (e.g. S-10, XS-1, 1.10 for S-1/1.1): ambiguous. */
-export function hasLookalikeIdToken(text: string, id: string): boolean {
-  const want = id.toLowerCase();
-  return (text.match(/[A-Za-z0-9._-]+/g) ?? []).some((t) => {
-    const c = t.replace(/[._-]+$/, '').toLowerCase();
-    return c !== want && c.includes(want);
-  });
-}
-
 /**
  * True when `text` holds `id` as a whole Story ID token (case-insensitive).
  * Tokens are maximal runs of the Story ID alphabet [A-Za-z0-9._-]; trailing

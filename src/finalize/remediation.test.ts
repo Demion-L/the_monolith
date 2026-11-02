@@ -354,7 +354,7 @@ describe('SECURITY-4: current story identity', () => {
   });
   it('OTHER-5 active, DOCSYNC-001 proposed: refused under both remaining modes, OTHER-5 survives', async () => {
     const dir = await instance();
-    const active = read(dir, W + 'active.md').replace(/(## Current Story)[\s\S]*?(\n---|\n## )/, (_m, h: string, tail: string) => `${h}\n\nOTHER-5 in progress\n${tail}`);
+    const active = read(dir, W + 'active.md').replace(/(## Current Story)[\s\S]*?(\n---|\n## )/, (_m, h: string, tail: string) => `${h}\n\n**Story:** OTHER-5 in progress\n${tail}`);
     writeFileSync(join(dir, W + 'active.md'), active);
     for (const exp of ['none', { contains: 'DOCSYNC-001' }]) {
       const p = proposal({ expectedCurrentStory: exp });
@@ -368,7 +368,7 @@ describe('SECURITY-4: current story identity', () => {
   });
   it('the story being finalized may be the active one, and roll-forward after a partial run still passes', async () => {
     const dir = await instance();
-    const active = read(dir, W + 'active.md').replace(/(## Current Story)[\s\S]*?(\n---|\n## )/, (_m, h: string, tail: string) => `${h}\n\nDOCSYNC-001 in progress\n${tail}`);
+    const active = read(dir, W + 'active.md').replace(/(## Current Story)[\s\S]*?(\n---|\n## )/, (_m, h: string, tail: string) => `${h}\n\n**Story:** DOCSYNC-001 in progress\n${tail}`);
     writeFileSync(join(dir, W + 'active.md'), active);
     const p = proposal({ expectedCurrentStory: { contains: 'DOCSYNC-001' } });
     const fs = await import('fs');
@@ -446,7 +446,7 @@ describe('DOCSYNC-005: active story identity is a whole-id match', () => {
   const expected = (dir: string, over: Record<string, unknown>): string => planFinalization(dir, proposal(over)).checks.find((c) => c.id === 'expected-state')!.status;
 
   it('own story active → PASS (also with trailing punctuation)', async () => {
-    for (const text of ['S-1 in progress', 'Working on S-1.', '**S-1** — title', '(S-1)']) {
+    for (const text of ['**Story:** S-1 in progress', '**Story:** S-1', '**Story:** S-1 — title (S-1).']) {
       const dir = await instance();
       evidenceFor(dir, 'S-1');
       setActive(dir, text);
@@ -463,7 +463,7 @@ describe('DOCSYNC-005: active story identity is a whole-id match', () => {
   ])('finalizing %s while %s is active → refused, active.md byte-identical', async (id, other) => {
     const dir = await instance();
     evidenceFor(dir, id);
-    const active = setActive(dir, `${other} — somebody else's story`);
+    const active = setActive(dir, `**Story:** ${other} — somebody else's story`);
     const over = withId(id);
     const pl = planFinalization(dir, proposal(over));
     expect(pl.checks.find((c) => c.id === 'expected-state')!.status).toBe('FAIL');
@@ -476,7 +476,7 @@ describe('DOCSYNC-005: active story identity is a whole-id match', () => {
   it('active text naming both the own id and a lookalike is ambiguous → FAIL', async () => {
     const dir = await instance();
     evidenceFor(dir, 'S-1');
-    setActive(dir, 'S-10 in progress (not S-1)');
+    setActive(dir, '**Story:** S-10 in progress (not S-1)');
     expect(expected(dir, withId('S-1'))).toBe('FAIL');
   });
 
@@ -488,7 +488,7 @@ describe('DOCSYNC-005: active story identity is a whole-id match', () => {
 
   it('roll-forward after INCOMPLETE and identical repeat still work', async () => {
     const dir = await instance();
-    setActive(dir, 'DOCSYNC-001 in progress');
+    setActive(dir, '**Story:** DOCSYNC-001 in progress');
     const over = { expectedCurrentStory: { contains: 'DOCSYNC-001' } };
     const p = proposal(over);
     const fs = await import('fs');

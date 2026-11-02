@@ -284,7 +284,13 @@ capsule by its `id: story-<id>` frontmatter in any phase; a repeat with other
 title, slug or date is a `conflict` (nothing is written), an identical repeat is
 `ALREADY_FINALIZED`. `expectedCurrentStory` is `"none"` or `{"contains": "…"}`
 naming the story id; `"any"` is not accepted, so a proposal cannot replace an
-unrelated active story.
+unrelated active story. With `{"contains"}`, the active story is identified only by
+the structural field: exactly one line `**Story:** <id> — <title>` (at line start, outside
+code fences and `<!-- -->` comments) in `## Current Story`; its first token must equal the
+proposal's story id. Ids in free text never count; a missing, duplicate, conflicting or
+malformed field makes `expected-state` FAIL (plan `NOT_READY`, apply `REFUSED`) and
+active.md is never rewritten automatically. An `active.md` that predates this field needs
+that one line added by the owner before it can be finalized.
 
 A capsule left with two hard links by a process killed between `link()` and the
 removal of its staging name is reported by `plan` as `FILE_HARDLINKED`. When the

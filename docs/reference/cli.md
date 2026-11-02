@@ -278,10 +278,31 @@ Targets, in write order: story capsule (created, never overwritten),
 files are reported, never created. There is no rollback: an interrupted run is
 reported as partial by `plan`, and `plan` + `apply` rolls it forward.
 
+One story id is finalized once. History and index entries are recognised by the
+heading `## <id> — …` / `### <id> — …` (id compared case-insensitively), and a
+capsule by its `id: story-<id>` frontmatter in any phase; a repeat with other
+title, slug or date is a `conflict` (nothing is written), an identical repeat is
+`ALREADY_FINALIZED`. `expectedCurrentStory` is `"none"` or `{"contains": "…"}`
+naming the story id; `"any"` is not accepted, so a proposal cannot replace an
+unrelated active story.
+
+A capsule left with two hard links by a process killed between `link()` and the
+removal of its staging name is reported by `plan` as `FILE_HARDLINKED`. When the
+second name is exactly that staging residue (same file, identical content, no
+other links) `plan` names it and the command to remove it; MONOLITH never
+deletes it itself, because the origin of a hard link cannot be proven. Remove
+only that name, then run `plan` again. Any other hard link is reported as
+untrusted and nothing is advised.
+
 Integrity and governance preconditions are read from
 `memory/working/integrity-result.md` and `governance-result.md`, and count only
-when they say `**Status:** PASS` for the same story id. MONOLITH does not run
-the build or tests itself. Documents that must exist, and extra documents the
+when each has exactly one `**Status:** PASS`, exactly one `**Story:**` line
+starting with the same story id and exactly one valid `**Date:**` (not after the
+finalization date, at most 7 days before). Repeated or contradictory fields are
+`NOT_VERIFIED`. It is the assistant's own report. MONOLITH does not run the
+build or tests itself. The digest shows that the approved plan is unchanged; it
+does not prove who approved it. Paths under `docUpdates` / `allowedDocs` may not
+contain a `.git` component at any depth, in any letter case. Documents that must exist, and extra documents the
 proposal may edit, are declared in `monolith.config.json`:
 
 ```json

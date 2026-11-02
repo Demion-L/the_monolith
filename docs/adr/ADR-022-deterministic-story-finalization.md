@@ -61,3 +61,26 @@ true there too (no `finalize` code, `project.definition.mjs` never loaded).
   treated as verified.
 - Existing instances keep their own `finalize-story` skill (the updater never
   overwrites an existing skill); `monolith finalize` works on them regardless.
+
+## Amendment — DOCSYNC-003 (remediation of the DOCSYNC-002 review)
+
+- **One finalization per story id.** Entries are identified by heading prefix
+  (`## <id> — `, `### <id> — `, case-insensitive) and capsules by `id: story-<id>`
+  frontmatter; same id with other content is a conflict, never a second entry.
+- **Crash between `link()` and unlink of the staging name.** The capsule is left
+  with `nlink=2` and the global hard-link refusal stays. `plan` distinguishes
+  residue consistent with an interrupted create (exactly 2 links, identical
+  content, exactly one `<name>.tmp.<pid>.<16 hex>` twin) and tells the owner which
+  single name to remove. Nothing is deleted automatically: without a journal the
+  origin of a hard link cannot be proven. Guarantee boundary: this window is not
+  self-healing; it is detected, explained and recoverable by one owner action.
+- **`.git`** is refused at any depth and in any case in document paths.
+- **`expectedCurrentStory: "any"` is removed**; `contains` must name the story id.
+- **Evidence** must have exactly one Status/Story/Date; anything repeated,
+  contradictory or malformed is `NOT_VERIFIED`; dated within 7 days before the
+  finalization date. Still a self-report, not an independent verification.
+- Unchanged, stated explicitly: the digest proves the plan is unchanged, not who
+  approved it; the digest is not bound to a project root (an identical state in
+  another project accepts the same digest); the check-then-rename TOCTOU window
+  of ADR-013 remains; delivery of the updated skill to existing instances is out
+  of scope.

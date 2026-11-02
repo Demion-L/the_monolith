@@ -36,12 +36,16 @@ Where the CLI provides `monolith finalize`, use it instead of editing the memory
 files by hand (Steps 2-6 below describe what it writes; Step 1 and 5.5 stay yours).
 
 1. Complete Step 1 and write `memory/working/integrity-result.md` and
-   `memory/working/governance-result.md` for THIS story (`**Status:** PASS|FAIL`,
-   `**Story:** <id> ...`). MONOLITH reads them as attested evidence; a missing,
-   FAIL or other-story result is never treated as PASS.
+   `memory/working/governance-result.md` for THIS story. Each file needs exactly one
+   `**Status:** PASS` (or `FAIL`), exactly one `**Story:** <id> ...` whose first word is
+   the story id, and exactly one `**Date:** YYYY-MM-DD` (not after the finalization date,
+   at most 7 days before it). Repeated, contradictory or malformed fields, another story,
+   or a stale date are never PASS. It is your own report, not an independent check.
 2. Write a finalization proposal (JSON, schema version 1: story, expectedCurrentStory,
    work, summary, keyOutputs, history, optional handoff / docUpdates). Content is
-   yours; targets and paths are MONOLITH's.
+   yours; targets and paths are MONOLITH's. `expectedCurrentStory` is `"none"` or
+   `{"contains": "<text naming the story id>"}`; `"any"` does not exist. A story id is
+   finalized once: a second proposal for the same id with other wording is a conflict.
 3. `monolith finalize plan --proposal <file>` — read-only. Shows every precondition as
    PASS / FAIL / NOT_VERIFIED, every target, and a digest. Show it to the owner.
 4. Only after the owner approves: `monolith finalize apply --proposal <file> --approve <digest>`.

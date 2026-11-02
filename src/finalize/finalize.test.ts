@@ -146,7 +146,7 @@ describe('DOCSYNC-001 finalize', () => {
 
   it('3b. wrong expected current story → FAIL', async () => {
     const dir = await instance();
-    const plan = planFinalization(dir, proposal({ expectedCurrentStory: { contains: 'SOMETHING-ELSE' } }));
+    const plan = planFinalization(dir, proposal({ expectedCurrentStory: { contains: 'DOCSYNC-001 is the active story' } }));
     expect(plan.checks.find((c) => c.id === 'expected-state')!.status).toBe('FAIL');
     expect(plan.status).toBe('NOT_READY');
   });

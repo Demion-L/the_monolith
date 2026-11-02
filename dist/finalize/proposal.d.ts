@@ -8,7 +8,13 @@
  * approve the plan digest — never something this module claims to check.
  */
 export declare const PROPOSAL_SCHEMA_VERSION = 1;
-export type ExpectedCurrentStory = 'any' | 'none' | {
+/**
+ * What the Current Story section of active.md must hold before the transition.
+ * There is deliberately no "any": a proposal cannot switch the guard off and
+ * silently replace somebody else's active story. `contains` must name the
+ * story being finalized (checked in `parseProposal`).
+ */
+export type ExpectedCurrentStory = 'none' | {
     contains: string;
 };
 export interface FinalizationProposal {
@@ -72,6 +78,7 @@ export declare const LIMITS: {
     readonly docUpdates: 20;
     readonly docBytes: number;
 };
+export declare function validDate(s: string): boolean;
 /**
  * Lexical validation of a project-relative document path (R4). Rejects
  * absolute paths, `..`, backslashes, NUL, empty segments and VCS internals.

@@ -20,11 +20,12 @@
  * extractor of `monolith brief` (src/brief/story).
  */
 import { createHash } from 'crypto';
+import { constants as fsc, closeSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { RootContainmentError, SafeWriteError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, replaceFile, resolveMonolithRoot, } from '../root/index.js';
 import { acquireLock } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
-import { validateRelPath } from './proposal.js';
+import { validDate, validateRelPath } from './proposal.js';
 const MAX_DOC_BYTES = 4 * 1024 * 1024;
 const LOCK_NAME = 'finalize.lock';
 const sha = (s) => createHash('sha256').update(s).digest('hex');
@@ -220,28 +221,42 @@ function editActive(content, bodies) {
         out.splice(sec.start + 1, sec.end - sec.start - 1, ...fill(body));
     return { state: 'pending', content: out.join('\n') };
 }
-function editAppendEntry(content, heading, fragment) {
-    const n = norm(content);
-    const headingCount = n.split('\n').filter((l) => l.trim() === heading).length;
-    if (headingCount > 1)
-        return { state: 'conflict', reason: `"${heading}" is already recorded more than once.` };
-    if (headingCount === 1) {
-        return n.includes(fragment)
+/**
+ * Structural identity of an entry: a heading line `<level> <story id> — …`
+ * (id compared case-insensitively, the em dash separator is part of the
+ * contract). Title, slug and date are NOT part of the identity, so a repeat
+ * with different wording is found instead of being appended again.
+ */
+function entryHeadings(content, level, id) {
+    const prefix = `${level} ${id.toLowerCase()} — `;
+    return norm(content)
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.toLowerCase().startsWith(prefix));
+}
+function checkRecorded(content, level, id, heading, fragment, where) {
+    const hits = entryHeadings(content, level, id);
+    if (hits.length > 1)
+        return { state: 'conflict', reason: `story ${id} is already recorded ${hits.length} times in ${where}; one story has one finalization.` };
+    if (hits.length === 1) {
+        return hits[0] === heading && norm(content).includes(fragment)
             ? { state: 'done' }
-            : { state: 'conflict', reason: `"${heading}" is already recorded with different content; append-only entries are never edited.` };
+            : { state: 'conflict', reason: `story ${id} is already recorded in ${where} ("${hits[0].slice(0, 120)}") with different content; one story has one finalization and recorded entries are never edited.` };
     }
+    return null;
+}
+function editAppendEntry(content, id, heading, fragment) {
+    const recorded = checkRecorded(content, '##', id, heading, fragment, 'execution-history.md');
+    if (recorded)
+        return recorded;
     const eol = eolOf(content);
     const body = content.replace(/\s+$/, '');
     return { state: 'pending', content: `${body}${eol}${eol}---${eol}${eol}${fragment.replace(/\n/g, eol)}${eol}` };
 }
-function editIndex(content, phaseHeading, heading, fragment) {
-    const n = norm(content);
-    const count = n.split('\n').filter((l) => l.trim() === heading).length;
-    if (count > 1)
-        return { state: 'conflict', reason: `"${heading}" appears more than once in the story index.` };
-    if (count === 1) {
-        return n.includes(fragment) ? { state: 'done' } : { state: 'conflict', reason: `"${heading}" is already in the story index with different content.` };
-    }
+function editIndex(content, phaseHeading, id, heading, fragment) {
+    const recorded = checkRecorded(content, '###', id, heading, fragment, 'story-index.md');
+    if (recorded)
+        return recorded;
     const eol = eolOf(content);
     const lines = content.split('\n').map((l) => l.replace(/\r$/, ''));
     const hits = lines.map((l, i) => (l.trim() === `## ${phaseHeading}` ? i : -1)).filter((i) => i >= 0);
@@ -266,26 +281,156 @@ function editIndex(content, phaseHeading, heading, fragment) {
     const out = [...before, '', ...fragLines, '', ...after];
     return { state: 'pending', content: out.join(eol) };
 }
+/** Evidence older than this many days before the finalization date is not accepted. */
+export const EVIDENCE_MAX_AGE_DAYS = 7;
+/** Lines `**Field:** value` at the start of a line (CR tolerant). */
+function fieldLines(content, field) {
+    const re = new RegExp(`^\\*\\*${field}:\\*\\*[ \\t]*(.*)$`, 'gm');
+    return [...content.matchAll(re)].map((m) => m[1].replace(/\r$/, '').trim());
+}
+/**
+ * Attested evidence. Contract: exactly one `**Status:**` (PASS or FAIL, nothing
+ * else on the line), exactly one `**Story:**` whose FIRST token is the story id,
+ * exactly one valid `**Date:**` not after the finalization date and at most
+ * EVIDENCE_MAX_AGE_DAYS before it. Anything repeated, contradictory or
+ * malformed is NOT_VERIFIED (never PASS); only a single clean `FAIL` for this
+ * story is FAIL. This is still the assistant's own report: it ties the claim to
+ * a story and a date, not to a commit, and nobody here ran the tests.
+ */
 function evidenceCheck(ctx, p, id, label, file) {
     const rel = `${ctx.root}/memory/working/${file}`;
     const source = `${rel} (attested by the assistant that ran the ${label} step; MONOLITH does not execute it)`;
+    const nv = (detail, sha) => ({ check: { id, status: 'NOT_VERIFIED', detail, source }, sha });
     const d = readDoc(ctx.projectRoot, rel);
     if (d.kind === 'missing')
-        return { check: { id, status: 'NOT_VERIFIED', detail: `${rel} does not exist; ${label} was not recorded.`, source }, sha: 'ABSENT' };
+        return nv(`${rel} does not exist; ${label} was not recorded.`, 'ABSENT');
     if (d.kind === 'unreadable')
-        return { check: { id, status: 'NOT_VERIFIED', detail: `${rel} is unreadable (${d.code}).`, source }, sha: 'UNREADABLE' };
-    const status = /^\*\*Status:\*\*\s*([A-Za-z_]+)/m.exec(d.content)?.[1]?.toUpperCase();
-    const storyLine = /^\*\*Story:\*\*\s*(.+)$/m.exec(d.content)?.[1] ?? '';
-    const esc = p.story.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const mentions = new RegExp(`(^|[^A-Za-z0-9._-])${esc}($|[^A-Za-z0-9._-])`, 'i').test(storyLine);
-    if (!mentions) {
-        return { check: { id, status: 'NOT_VERIFIED', detail: `the recorded result is for another story ("${storyLine.slice(0, 120)}"), not ${p.story.id}; it is not evidence for this one.`, source }, sha: d.sha };
-    }
+        return nv(`${rel} is unreadable (${d.code}).`, 'UNREADABLE');
+    const stories = fieldLines(d.content, 'Story');
+    if (stories.length !== 1)
+        return nv(`expected exactly one "**Story:**" line, found ${stories.length}; ambiguous evidence is not evidence for ${p.story.id}.`, d.sha);
+    const first = /^(\S+)(?:\s|$)/.exec(stories[0])?.[1];
+    if (first !== p.story.id)
+        return nv(`the recorded result is for another story ("${stories[0].slice(0, 120)}"), not ${p.story.id}; the first token of the Story line must be exactly the story id.`, d.sha);
+    const statuses = fieldLines(d.content, 'Status');
+    if (statuses.length !== 1)
+        return nv(`expected exactly one "**Status:**" line, found ${statuses.length}${statuses.length > 1 ? ` (${statuses.map((x) => x.slice(0, 20)).join(' / ')}): contradictory or repeated` : ''}.`, d.sha);
+    const dates = fieldLines(d.content, 'Date');
+    if (dates.length !== 1 || !validDate(dates[0]))
+        return nv(`expected exactly one valid "**Date:** YYYY-MM-DD" line, found ${dates.length === 1 ? `"${dates[0].slice(0, 30)}"` : dates.length}.`, d.sha);
+    const ageDays = (Date.parse(`${p.story.date}T00:00:00Z`) - Date.parse(`${dates[0]}T00:00:00Z`)) / 86_400_000;
+    if (ageDays < 0)
+        return nv(`the recorded result is dated ${dates[0]}, after the finalization date ${p.story.date}.`, d.sha);
+    if (ageDays > EVIDENCE_MAX_AGE_DAYS)
+        return nv(`the recorded result is dated ${dates[0]}, more than ${EVIDENCE_MAX_AGE_DAYS} days before ${p.story.date}; it is stale. Re-run and re-record it.`, d.sha);
+    const status = statuses[0].toUpperCase();
     if (status === 'PASS')
-        return { check: { id, status: 'PASS', detail: `recorded Status: PASS for ${p.story.id}.`, source }, sha: d.sha };
+        return { check: { id, status: 'PASS', detail: `recorded Status: PASS for ${p.story.id} on ${dates[0]}.`, source }, sha: d.sha };
     if (status === 'FAIL')
-        return { check: { id, status: 'FAIL', detail: `recorded Status: FAIL for ${p.story.id}.`, source }, sha: d.sha };
-    return { check: { id, status: 'NOT_VERIFIED', detail: `no recognizable "**Status:** PASS|FAIL" for ${p.story.id}.`, source }, sha: d.sha };
+        return { check: { id, status: 'FAIL', detail: `recorded Status: FAIL for ${p.story.id} on ${dates[0]}.`, source }, sha: d.sha };
+    return nv(`the Status line must be exactly PASS or FAIL, found "${statuses[0].slice(0, 40)}".`, d.sha);
+}
+const MAX_CAPSULE_SCAN = 2000;
+/**
+ * Other capsules of the same story id (frontmatter line `id: story-<id>`),
+ * found by scanning `phases/<any>/stories/*.md` with the safe reader. Symlinked
+ * directories/files are not followed. A file that cannot be read safely cannot
+ * be shown to be a different story, so it is reported (fail closed).
+ */
+function findOtherCapsules(ctx, p, ownPath) {
+    const phasesRel = `${ctx.root}/memory/working/phases`;
+    const wanted = `id: story-${p.story.id.toLowerCase()}`;
+    const found = [];
+    let scanned = 0;
+    let phases = [];
+    try {
+        phases = readdirSync(join(ctx.projectRoot, phasesRel), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    }
+    catch {
+        return found;
+    }
+    for (const ph of phases.sort()) {
+        let files = [];
+        try {
+            files = readdirSync(join(ctx.projectRoot, phasesRel, ph, 'stories'), { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+        }
+        catch {
+            continue;
+        }
+        for (const f of files.sort()) {
+            const rel = `${phasesRel}/${ph}/stories/${f}`;
+            if (rel === ownPath)
+                continue;
+            if (++scanned > MAX_CAPSULE_SCAN) {
+                found.push(`(more than ${MAX_CAPSULE_SCAN} capsules: cannot rule out another capsule of this story)`);
+                return found;
+            }
+            const d = readDoc(ctx.projectRoot, rel);
+            if (d.kind === 'unreadable') {
+                found.push(`${rel} (unreadable: ${d.code}; cannot rule out that it is this story)`);
+                continue;
+            }
+            if (d.kind !== 'present')
+                continue;
+            const lines = norm(d.content).split('\n');
+            if (lines[0]?.trim() !== '---')
+                continue;
+            for (let i = 1; i < lines.length && lines[i].trim() !== '---'; i++) {
+                if (lines[i].trim().toLowerCase() === wanted) {
+                    found.push(rel);
+                    break;
+                }
+            }
+        }
+    }
+    return found;
+}
+const STAGING_RE = (name) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.tmp\\.\\d+\\.[0-9a-f]{16}$`);
+/**
+ * Explains a hard-linked capsule. `createFile` publishes with link(2) and then
+ * removes its staging name; a process killed in between leaves the capsule with
+ * a second name. Nothing is ever deleted here: this only reports whether the
+ * second name looks like exactly that residue, so the OWNER can remove it by
+ * hand. Without a journal the origin cannot be proven (anyone can create a
+ * file with such a name), so the verdict is deliberately worded as "consistent
+ * with", and any deviation is reported as not recoverable.
+ */
+function diagnoseCapsuleResidue(ctx, rel, expected) {
+    const generic = 'the capsule has more than one hard link, so it is not trusted. Nothing was changed. Do not delete anything unless you have verified the other link yourself.';
+    try {
+        const abs = join(ctx.projectRoot, rel);
+        const dir = dirname(abs);
+        const name = rel.slice(rel.lastIndexOf('/') + 1);
+        const st = lstatSync(abs, { bigint: true });
+        if (!st.isFile() || st.nlink !== 2n)
+            return `${generic} (link count ${st.nlink}, not exactly 2.)`;
+        const fd = openSync(abs, fsc.O_RDONLY | fsc.O_NOFOLLOW);
+        let content;
+        try {
+            const fst = fstatSync(fd, { bigint: true });
+            if (fst.ino !== st.ino || fst.dev !== st.dev)
+                return `${generic} (the file changed while being inspected.)`;
+            content = readFileSync(fd, 'utf8');
+        }
+        finally {
+            closeSync(fd);
+        }
+        if (content !== expected)
+            return `${generic} (its content differs from what this proposal would create, so it is not this operation's staging residue.)`;
+        const twins = readdirSync(dir)
+            .filter((n) => STAGING_RE(name).test(n))
+            .filter((n) => {
+            const t = lstatSync(join(dir, n), { bigint: true });
+            return t.isFile() && !t.isSymbolicLink() && t.ino === st.ino && t.dev === st.dev;
+        });
+        if (twins.length !== 1)
+            return `${generic} (found ${twins.length} matching staging names, expected exactly 1.)`;
+        const twinRel = `${dirname(rel)}/${twins[0]}`;
+        return `consistent with an interrupted create (the process stopped after link(), before removing its staging name): the second name is "${twinRel}", same file, identical content, no other links. Owner recovery, taking care to remove ONLY that staging name: rm -- '${twinRel}' — then run \`monolith finalize plan\` again. MONOLITH never deletes it automatically because the origin of a hard link cannot be proven.`;
+    }
+    catch (err) {
+        return `${generic} (could not be inspected: ${err.message}.)`;
+    }
 }
 function buildInternals(ctx, p) {
     const out = [];
@@ -296,10 +441,16 @@ function buildInternals(ctx, p) {
         const content = renderCapsule(p);
         const d = readDoc(ctx.projectRoot, path);
         const t = { id: 'capsule', kind: 'capsule', path, state: 'pending', reason: 'will be created', base: 'ABSENT' };
-        if (d.kind === 'missing')
+        const others = findOtherCapsules(ctx, p, path);
+        if (others.length > 0) {
+            out.push({ target: { ...t, state: 'conflict', reason: `story ${p.story.id} already has a capsule elsewhere (${others.join(', ')}); a second capsule is never created`, base: d.kind === 'present' ? d.sha : 'ABSENT' } });
+        }
+        else if (d.kind === 'missing')
             out.push({ target: { ...t, preview: content }, write: { mode: 'create', content, baseSha: null } });
-        else if (d.kind === 'unreadable')
-            out.push({ target: { ...t, state: 'unreadable', reason: `${d.code}: ${d.detail}`, base: 'UNREADABLE' } });
+        else if (d.kind === 'unreadable') {
+            const why = d.code === 'FILE_HARDLINKED' ? `${d.code}: ${diagnoseCapsuleResidue(ctx, path, content)}` : `${d.code}: ${d.detail}`;
+            out.push({ target: { ...t, state: 'unreadable', reason: why, base: 'UNREADABLE' } });
+        }
         else if (d.content === content)
             out.push({ target: { ...t, state: 'done', reason: 'capsule already present with identical content', base: 'DONE' } });
         else
@@ -324,8 +475,8 @@ function buildInternals(ctx, p) {
         else
             out.push({ target: { ...t, reason: 'will be updated', base: d.sha, preview }, write: { mode: 'replace', content: e.content, baseSha: d.sha } });
     };
-    textTarget('execution-history', 'execution-history', `${r}/memory/long-term/execution-history.md`, (c) => editAppendEntry(c, historyHeading(p), historyFragment(r, p)), historyFragment(r, p), 'execution-history.md does not exist; it is never created automatically');
-    textTarget('story-index', 'story-index', `${r}/memory/working/story-index.md`, (c) => editIndex(c, p.story.phaseHeading, indexHeading(p), indexFragment(r, p)), indexFragment(r, p), 'story-index.md does not exist; it is never created automatically');
+    textTarget('execution-history', 'execution-history', `${r}/memory/long-term/execution-history.md`, (c) => editAppendEntry(c, p.story.id, historyHeading(p), historyFragment(r, p)), historyFragment(r, p), 'execution-history.md does not exist; it is never created automatically');
+    textTarget('story-index', 'story-index', `${r}/memory/working/story-index.md`, (c) => editIndex(c, p.story.phaseHeading, p.story.id, indexHeading(p), indexFragment(r, p)), indexFragment(r, p), 'story-index.md does not exist; it is never created automatically');
     for (const [i, u] of (p.docUpdates ?? []).entries()) {
         const allowed = new Set([...ctx.config.requiredDocs.map((x) => x.path), ...ctx.config.allowedDocs]);
         const id = `doc:${i}`;
@@ -413,10 +564,8 @@ function plan(ctx, p) {
             const excerpt = ex.excerpt ?? '';
             let ok;
             let want;
-            if (exp === 'any')
-                (ok = ex.hasCurrentStorySection), (want = 'any state (section must exist)');
-            else if (exp === 'none')
-                (ok = /no active story/i.test(excerpt)), (want = 'no active story');
+            if (exp === 'none')
+                (ok = ex.hasCurrentStorySection && /no active story/i.test(excerpt)), (want = 'no active story');
             else
                 (ok = excerpt.includes(exp.contains)), (want = `Current Story containing "${exp.contains}"`);
             checks.push({ id: 'expected-state', status: ok ? 'PASS' : 'FAIL', detail: ok ? `Current Story matches the expected state: ${want}.` : `Current Story does not match the expected state: ${want}.`, source: 'MONOLITH (brief Current Story extraction)' });

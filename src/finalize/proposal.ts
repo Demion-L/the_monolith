@@ -10,7 +10,13 @@
 
 export const PROPOSAL_SCHEMA_VERSION = 1;
 
-export type ExpectedCurrentStory = 'any' | 'none' | { contains: string };
+/**
+ * What the Current Story section of active.md must hold before the transition.
+ * There is deliberately no "any": a proposal cannot switch the guard off and
+ * silently replace somebody else's active story. `contains` must name the
+ * story being finalized (checked in `parseProposal`).
+ */
+export type ExpectedCurrentStory = 'none' | { contains: string };
 
 export interface FinalizationProposal {
   schemaVersion: 1;
@@ -73,7 +79,7 @@ function noUnknown(obj: Record<string, unknown>, allowed: string[], where: strin
   for (const k of Object.keys(obj)) if (!allowed.includes(k)) errors.push(`${where}: unknown field "${k}".`);
 }
 
-function validDate(s: string): boolean {
+export function validDate(s: string): boolean {
   const m = DATE_RE.exec(s);
   if (m === null) return false;
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
@@ -113,7 +119,9 @@ export function validateRelPath(p: unknown): string | null {
   if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return 'path must be relative to the project root';
   const segs = p.split('/');
   if (segs.some((s) => s === '' || s === '.' || s === '..')) return 'path must not contain empty, "." or ".." segments';
-  if (segs[0] === '.git' || segs.includes('node_modules')) return 'path must not point into .git or node_modules';
+  // `.git` at ANY depth (nested repositories, submodule checkouts), any case
+  // (case-insensitive file systems), and trailing dot/space (Windows aliases).
+  if (segs.some((s) => /^\.git[. ]*$/i.test(s)) || segs.includes('node_modules')) return 'path must not contain a .git (any case, any depth) or node_modules component';
   return null;
 }
 
@@ -137,12 +145,17 @@ export function parseProposal(raw: unknown): ProposalParse {
   const date = text(story.date, 'story.date', errors, { multiline: false, max: 10 });
   if (date && !validDate(date)) errors.push('story.date: must be a real date YYYY-MM-DD.');
 
-  let expected: ExpectedCurrentStory = 'any';
+  let expected: ExpectedCurrentStory = 'none';
   const e = raw.expectedCurrentStory;
-  if (e === 'any' || e === 'none') expected = e;
+  if (e === 'none') expected = e;
   else if (isObject(e) && typeof e.contains === 'string' && e.contains.trim() !== '' && Object.keys(e).length === 1 && e.contains.length <= LIMITS.lineLen) {
     expected = { contains: e.contains };
-  } else errors.push('expectedCurrentStory: must be "any", "none" or {"contains": "<text>"}.');
+    if (id && !e.contains.toLowerCase().includes(id.toLowerCase())) {
+      errors.push(`expectedCurrentStory.contains: must contain the story id "${id}" being finalized, so the guard cannot match another story.`);
+    }
+  } else if (e === 'any') {
+    errors.push('expectedCurrentStory: "any" is not accepted (it would allow replacing an unrelated active story). Use "none" or {"contains": "<text containing the story id>"}.');
+  } else errors.push('expectedCurrentStory: must be "none" or {"contains": "<text containing the story id>"}.');
 
   const w = isObject(raw.work) ? raw.work : (errors.push('work: must be an object.'), {});
   noUnknown(w, ['objective', 'implementationSummary', 'filesChanged', 'tests', 'keyDecisions', 'adrs', 'lessons'], 'work', errors);

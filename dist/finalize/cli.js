@@ -85,7 +85,7 @@ function printPlan(pl) {
     for (const d of pl.diagnostics)
         console.log(`\nNote: ${printable(d)}`);
     if (pl.status === 'READY')
-        console.log(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}`);
+        console.log(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}\nThe digest shows this plan is unchanged; it does not prove who approves it. Do not run apply unless the owner approved this exact plan.`);
 }
 function printApply(r) {
     console.log(`Finalization of ${printable(r.storyId)}: ${r.status}`);

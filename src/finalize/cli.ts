@@ -81,7 +81,7 @@ function printPlan(pl: FinalizationPlan): void {
   console.log('\nTargets (in write order, active.md last):');
   for (const t of pl.targets) console.log(`  [${t.state}] ${t.id} → ${printable(t.path)}${t.state === 'done' ? '' : ` — ${printable(t.reason)}`}`);
   for (const d of pl.diagnostics) console.log(`\nNote: ${printable(d)}`);
-  if (pl.status === 'READY') console.log(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}`);
+  if (pl.status === 'READY') console.log(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}\nThe digest shows this plan is unchanged; it does not prove who approves it. Do not run apply unless the owner approved this exact plan.`);
 }
 
 function printApply(r: ApplyResult): void {

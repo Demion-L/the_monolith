@@ -29,7 +29,7 @@ function noUnknown(obj, allowed, where, errors) {
         if (!allowed.includes(k))
             errors.push(`${where}: unknown field "${k}".`);
 }
-function validDate(s) {
+export function validDate(s) {
     const m = DATE_RE.exec(s);
     if (m === null)
         return false;
@@ -76,8 +76,10 @@ export function validateRelPath(p) {
     const segs = p.split('/');
     if (segs.some((s) => s === '' || s === '.' || s === '..'))
         return 'path must not contain empty, "." or ".." segments';
-    if (segs[0] === '.git' || segs.includes('node_modules'))
-        return 'path must not point into .git or node_modules';
+    // `.git` at ANY depth (nested repositories, submodule checkouts), any case
+    // (case-insensitive file systems), and trailing dot/space (Windows aliases).
+    if (segs.some((s) => /^\.git[. ]*$/i.test(s)) || segs.includes('node_modules'))
+        return 'path must not contain a .git (any case, any depth) or node_modules component';
     return null;
 }
 export function parseProposal(raw) {
@@ -105,15 +107,21 @@ export function parseProposal(raw) {
     const date = text(story.date, 'story.date', errors, { multiline: false, max: 10 });
     if (date && !validDate(date))
         errors.push('story.date: must be a real date YYYY-MM-DD.');
-    let expected = 'any';
+    let expected = 'none';
     const e = raw.expectedCurrentStory;
-    if (e === 'any' || e === 'none')
+    if (e === 'none')
         expected = e;
     else if (isObject(e) && typeof e.contains === 'string' && e.contains.trim() !== '' && Object.keys(e).length === 1 && e.contains.length <= LIMITS.lineLen) {
         expected = { contains: e.contains };
+        if (id && !e.contains.toLowerCase().includes(id.toLowerCase())) {
+            errors.push(`expectedCurrentStory.contains: must contain the story id "${id}" being finalized, so the guard cannot match another story.`);
+        }
+    }
+    else if (e === 'any') {
+        errors.push('expectedCurrentStory: "any" is not accepted (it would allow replacing an unrelated active story). Use "none" or {"contains": "<text containing the story id>"}.');
     }
     else
-        errors.push('expectedCurrentStory: must be "any", "none" or {"contains": "<text>"}.');
+        errors.push('expectedCurrentStory: must be "none" or {"contains": "<text containing the story id>"}.');
     const w = isObject(raw.work) ? raw.work : (errors.push('work: must be an object.'), {});
     noUnknown(w, ['objective', 'implementationSummary', 'filesChanged', 'tests', 'keyDecisions', 'adrs', 'lessons'], 'work', errors);
     const block = (v, name) => text(v, `work.${name}`, errors, { multiline: true, max: LIMITS.blockLen });

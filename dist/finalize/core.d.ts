@@ -86,6 +86,8 @@ export interface FinalizeConfig {
 }
 export declare function readFinalizeConfig(config: ConfigRead): FinalizeConfig;
 export declare function renderCapsule(p: FinalizationProposal): string;
+/** Evidence older than this many days before the finalization date is not accepted. */
+export declare const EVIDENCE_MAX_AGE_DAYS = 7;
 export declare function planFinalization(targetDir: string, proposal: FinalizationProposal): FinalizationPlan;
 export declare function applyFinalization(targetDir: string, proposal: FinalizationProposal, approvedDigest: string, opts?: FinalizeOptions): Promise<ApplyResult>;
 //# sourceMappingURL=core.d.ts.map

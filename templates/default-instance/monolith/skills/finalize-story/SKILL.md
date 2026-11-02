@@ -28,6 +28,30 @@ Triggered by: "finalize story", "complete story", "mark story done"
 
 ---
 
+## Deterministic Execution (`monolith finalize`)
+
+Where the CLI provides `monolith finalize`, use it instead of editing the memory
+files by hand (Steps 2-6 below describe what it writes; Step 1 and 5.5 stay yours).
+
+1. Complete Step 1 and write `memory/working/integrity-result.md` and
+   `memory/working/governance-result.md` for THIS story (`**Status:** PASS|FAIL`,
+   `**Story:** <id> ...`). MONOLITH reads them as attested evidence; a missing,
+   FAIL or other-story result is never treated as PASS.
+2. Write a finalization proposal (JSON, schema version 1: story, expectedCurrentStory,
+   work, summary, keyOutputs, history, optional handoff / docUpdates). Content is
+   yours; targets and paths are MONOLITH's.
+3. `monolith finalize plan --proposal <file>` — read-only. Shows every precondition as
+   PASS / FAIL / NOT_VERIFIED, every target, and a digest. Show it to the owner.
+4. Only after the owner approves: `monolith finalize apply --proposal <file> --approve <digest>`.
+   Never run `apply` on your own authority and never declare the story finalized
+   unless it printed `FINALIZED` or `ALREADY_FINALIZED`. `INCOMPLETE` or `REFUSED`
+   means it is NOT finalized: report the output, then re-plan.
+
+Documents to keep in sync beyond the memory files go in `docUpdates`; they are written only
+if `monolith.config.json` lists them in `finalization.requiredDocs` / `allowedDocs`.
+
+---
+
 ## Steps
 
 ### Step 1 — Verify integrity

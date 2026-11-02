@@ -102,7 +102,7 @@ Result: PASS
 ```
 
 **What `monolith validate` does _not_ check yet:** `project.definition.mjs`
-declares several fields — `requiredFinalizationDocs`, `requiredRootArtifacts`,
+declares several fields — `requiredFinalizationDocs` (superseded by `monolith.config.json` `finalization.requiredDocs`, see `monolith finalize`), `requiredRootArtifacts`,
 `driftLogPath`, `forcedInjectionTerms`, `mistakeRoots` — that describe a
 richer integrity contract (required finalization documents, required root
 artifact IDs, a drift log). None of these are currently read or enforced by
@@ -250,6 +250,47 @@ become anything.
   against (SEC-001B.3; threat model TM-C is unsupported).
 - No LLM, network, search, reminders or automatic idea detection. Library entry:
   `import { ideas } from '@latysh-development/monolith'`.
+
+## `monolith finalize`
+
+```
+monolith finalize plan  --proposal <file|-> [--json]
+monolith finalize apply --proposal <file|-> --approve <digest> [--json]
+```
+
+Closes a story through a checked, owner-approved transition (DOCSYNC-001,
+[ADR-022](../adr/ADR-022-deterministic-story-finalization.md)). The assistant
+writes a JSON proposal; MONOLITH decides whether and where it can be applied.
+
+- `plan` is read-only. It reports each precondition as `PASS`, `FAIL` or
+  `NOT_VERIFIED` (an unverified check is never a pass), each write target
+  (`pending` / `done` / `conflict` / `missing` / `unreadable`) and a **digest**
+  that fingerprints the proposal, every target's current bytes and the evidence
+  inspected. Exit 0 when `READY` or `ALREADY_FINALIZED`, 2 when `NOT_READY`.
+- `apply` re-plans under a cross-process lock and writes only if the digest
+  still matches (`--approve` is the owner's approval of exactly that plan).
+  Exit 0 `FINALIZED` / `ALREADY_FINALIZED`; 2 `REFUSED` (nothing written);
+  3 `INCOMPLETE` (partially applied: the story is **not** finalized).
+
+Targets, in write order: story capsule (created, never overwritten),
+`execution-history.md` (append), `story-index.md` (insert), optional
+`docUpdates`, optional `HANDOFF.md`, and `active.md` last. Missing canonical
+files are reported, never created. There is no rollback: an interrupted run is
+reported as partial by `plan`, and `plan` + `apply` rolls it forward.
+
+Integrity and governance preconditions are read from
+`memory/working/integrity-result.md` and `governance-result.md`, and count only
+when they say `**Status:** PASS` for the same story id. MONOLITH does not run
+the build or tests itself. Documents that must exist, and extra documents the
+proposal may edit, are declared in `monolith.config.json`:
+
+```json
+{ "finalization": { "requiredDocs": [{ "path": "docs/current-state.md", "label": "Current state" }],
+                    "allowedDocs": ["README.md"] } }
+```
+
+`requiredFinalizationDocs` in `project.definition.mjs` is **not** read (that
+file is JavaScript and is never executed); use `finalization.requiredDocs`.
 
 ## `monolith update`
 

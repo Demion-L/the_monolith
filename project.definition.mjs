@@ -50,14 +50,18 @@ export const PROJECT_DEFINITION = {
 
   projectRootFiles: ['AGENTS.md'],
 
-  // NOT YET ENFORCED: src/validate/index.ts never reads
+  // NOT READ BY MONOLITH (DOCSYNC-001): this file is JavaScript and is never
+  // executed, so this field has no effect. The enforced equivalent is
+  // `finalization.requiredDocs` in monolith.config.json, used by
+  // `monolith finalize`. Kept only so existing instances still load.
+  // (Historical note: src/validate/index.ts never reads
   // requiredFinalizationDocs. Neither ROADMAP.md nor docs/current-state.md
   // exists in this repository today. Unlike requiredRootArtifacts above,
   // this list does not describe a currently-true state — whether these two
   // documents should be created, renamed to existing equivalents (e.g.
   // `.monolith/context/maps/roadmap-index.md`), or dropped is an open
   // decision, not resolved here. See the Knowledge Consistency Cleanup
-  // report (2026-10-20) for this ambiguity.
+  // report (2026-10-20) for this ambiguity.)
   requiredFinalizationDocs: [
     { path: 'ROADMAP.md', label: 'Project roadmap' },
     { path: 'docs/current-state.md', label: 'Current state document' },

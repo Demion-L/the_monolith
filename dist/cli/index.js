@@ -12,6 +12,7 @@
  *   monolith brief       — deterministic, bounded project context summary
  *   monolith durable     — inspect/verify/maintain Durable State task logs
  *   monolith idea        — capture and recall deferred ideas (add/list/show)
+ *   monolith finalize    — plan/apply a controlled story finalization (documentation sync)
  *   monolith update      — add missing Idea Capture infrastructure to an existing instance
  *   monolith ui          — launch Mission Control (read-only dashboard)
  */
@@ -42,6 +43,8 @@ Commands:
               list | show | assess | packet | verify | retention.
   idea        Capture a deferred thought without leaving the current task, and
               recall it later: add | list | show. Plain Markdown files, no LLM.
+  finalize    Close a story with checked preconditions and controlled documentation
+              updates: plan (read-only) | apply --approve <digest>.
   update      Bring an existing instance up to Idea Capture & Recall. Preview by
               default (changes nothing). --apply creates MONOLITH-managed files
               and may add or refresh managed sections inside your existing
@@ -73,6 +76,10 @@ Idea usage:
   monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]
   monolith idea list
   monolith idea show <id>
+
+Finalize usage:
+  monolith finalize plan  --proposal <file|-> [--json]
+  monolith finalize apply --proposal <file|-> --approve <digest> [--json]
 
 Update usage:
   monolith update [--apply]
@@ -167,6 +174,11 @@ async function main() {
         case 'idea': {
             const { runIdeaCommand } = await import('../ideas/cli.js');
             await runIdeaCommand(args.slice(1));
+            break;
+        }
+        case 'finalize': {
+            const { runFinalizeCommand } = await import('../finalize/cli.js');
+            process.exitCode = await runFinalizeCommand(args.slice(1));
             break;
         }
         case 'update': {

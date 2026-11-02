@@ -78,6 +78,15 @@ export declare const LIMITS: {
     readonly docUpdates: 20;
     readonly docBytes: number;
 };
+/** True when `text` has a token that merely CONTAINS `id` (e.g. S-10, XS-1, 1.10 for S-1/1.1): ambiguous. */
+export declare function hasLookalikeIdToken(text: string, id: string): boolean;
+/**
+ * True when `text` holds `id` as a whole Story ID token (case-insensitive).
+ * Tokens are maximal runs of the Story ID alphabet [A-Za-z0-9._-]; trailing
+ * `.`/`_`/`-` (sentence punctuation) are dropped. So `S-1` is a token of
+ * "S-1 in progress" or "(S-1)", but never of "S-10", "XS-1", "1.10" or "11.1".
+ */
+export declare function hasStoryIdToken(text: string, id: string): boolean;
 export declare function validDate(s: string): boolean;
 /**
  * Lexical validation of a project-relative document path (R4). Rejects

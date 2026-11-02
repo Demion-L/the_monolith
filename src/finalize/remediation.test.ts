@@ -430,3 +430,74 @@ describe('SECURITY-5: ambiguous evidence is never PASS', () => {
     expect(pl.status).toBe('NOT_READY');
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('DOCSYNC-005: active story identity is a whole-id match', () => {
+  const setActive = (dir: string, text: string): string => {
+    const a = read(dir, W + 'active.md').replace(/(## Current Story)[\s\S]*?(\n---|\n## )/, (_m, h: string, tail: string) => `${h}\n\n${text}\n${tail}`);
+    writeFileSync(join(dir, W + 'active.md'), a);
+    return a;
+  };
+  const withId = (id: string): Record<string, unknown> => ({ story: story({ id, slug: `story-${id.toLowerCase()}` }), expectedCurrentStory: { contains: id } });
+  const evidenceFor = (dir: string, id: string): void => {
+    writeFileSync(join(dir, W + 'integrity-result.md'), EV('PASS', id));
+    writeFileSync(join(dir, W + 'governance-result.md'), EV('PASS', id));
+  };
+  const expected = (dir: string, over: Record<string, unknown>): string => planFinalization(dir, proposal(over)).checks.find((c) => c.id === 'expected-state')!.status;
+
+  it('own story active → PASS (also with trailing punctuation)', async () => {
+    for (const text of ['S-1 in progress', 'Working on S-1.', '**S-1** — title', '(S-1)']) {
+      const dir = await instance();
+      evidenceFor(dir, 'S-1');
+      setActive(dir, text);
+      expect(expected(dir, withId('S-1')), text).toBe('PASS');
+    }
+  });
+
+  it.each([
+    ['S-1', 'S-10'],
+    ['S-1', 'XS-1'],
+    ['1.1', '11.1'],
+    ['1.1', '1.10'],
+    ['DOCSYNC-001', 'DOCSYNC-0010'],
+  ])('finalizing %s while %s is active → refused, active.md byte-identical', async (id, other) => {
+    const dir = await instance();
+    evidenceFor(dir, id);
+    const active = setActive(dir, `${other} — somebody else's story`);
+    const over = withId(id);
+    const pl = planFinalization(dir, proposal(over));
+    expect(pl.checks.find((c) => c.id === 'expected-state')!.status).toBe('FAIL');
+    expect(pl.status).toBe('NOT_READY');
+    expect((await applyFinalization(dir, proposal(over), pl.digest)).status).toBe('REFUSED');
+    expect(read(dir, W + 'active.md')).toBe(active);
+    expect(existsSync(join(dir, STORIES))).toBe(false);
+  });
+
+  it('active text naming both the own id and a lookalike is ambiguous → FAIL', async () => {
+    const dir = await instance();
+    evidenceFor(dir, 'S-1');
+    setActive(dir, 'S-10 in progress (not S-1)');
+    expect(expected(dir, withId('S-1'))).toBe('FAIL');
+  });
+
+  it('contains text must hold the id as a whole token', () => {
+    const r = parseProposal(raw({ story: story({ id: 'S-1', slug: 'story-s-1' }), expectedCurrentStory: { contains: 'S-10' } }));
+    expect(r.ok).toBe(false);
+    expect(parseProposal(raw({ story: story({ id: 'S-1', slug: 'story-s-1' }), expectedCurrentStory: { contains: 'story S-1, active' } })).ok).toBe(true);
+  });
+
+  it('roll-forward after INCOMPLETE and identical repeat still work', async () => {
+    const dir = await instance();
+    setActive(dir, 'DOCSYNC-001 in progress');
+    const over = { expectedCurrentStory: { contains: 'DOCSYNC-001' } };
+    const p = proposal(over);
+    const fs = await import('fs');
+    let n = 0;
+    const r1 = await applyFinalization(dir, p, planFinalization(dir, p).digest, { ops: { renameSync: (a: string, b: string) => { if (++n === 3) throw Object.assign(new Error('boom'), { code: 'EIO' }); return fs.renameSync(a, b); } } });
+    expect(r1.status).toBe('INCOMPLETE');
+    const pl = planFinalization(dir, p);
+    expect(pl.checks.find((c) => c.id === 'expected-state')!.status).toBe('PASS');
+    expect((await applyFinalization(dir, p, pl.digest)).status).toBe('FINALIZED');
+    expect((await applyFinalization(dir, p, planFinalization(dir, p).digest)).status).toBe('ALREADY_FINALIZED');
+  });
+});

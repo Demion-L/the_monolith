@@ -18,6 +18,24 @@ export const LIMITS = {
     docBytes: 1024 * 1024,
 };
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/** True when `text` has a token that merely CONTAINS `id` (e.g. S-10, XS-1, 1.10 for S-1/1.1): ambiguous. */
+export function hasLookalikeIdToken(text, id) {
+    const want = id.toLowerCase();
+    return (text.match(/[A-Za-z0-9._-]+/g) ?? []).some((t) => {
+        const c = t.replace(/[._-]+$/, '').toLowerCase();
+        return c !== want && c.includes(want);
+    });
+}
+/**
+ * True when `text` holds `id` as a whole Story ID token (case-insensitive).
+ * Tokens are maximal runs of the Story ID alphabet [A-Za-z0-9._-]; trailing
+ * `.`/`_`/`-` (sentence punctuation) are dropped. So `S-1` is a token of
+ * "S-1 in progress" or "(S-1)", but never of "S-10", "XS-1", "1.10" or "11.1".
+ */
+export function hasStoryIdToken(text, id) {
+    const want = id.toLowerCase();
+    return (text.match(/[A-Za-z0-9._-]+/g) ?? []).some((t) => t.replace(/[._-]+$/, '').toLowerCase() === want);
+}
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,99}$/;
 const PHASE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -113,8 +131,8 @@ export function parseProposal(raw) {
         expected = e;
     else if (isObject(e) && typeof e.contains === 'string' && e.contains.trim() !== '' && Object.keys(e).length === 1 && e.contains.length <= LIMITS.lineLen) {
         expected = { contains: e.contains };
-        if (id && !e.contains.toLowerCase().includes(id.toLowerCase())) {
-            errors.push(`expectedCurrentStory.contains: must contain the story id "${id}" being finalized, so the guard cannot match another story.`);
+        if (id && !hasStoryIdToken(e.contains, id)) {
+            errors.push(`expectedCurrentStory.contains: must contain the story id "${id}" as a whole token (not as part of a longer id), so the guard cannot match another story.`);
         }
     }
     else if (e === 'any') {

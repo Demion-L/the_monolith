@@ -25,7 +25,7 @@ import { dirname, join } from 'path';
 import { RootContainmentError, SafeWriteError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, replaceFile, resolveMonolithRoot, } from '../root/index.js';
 import { acquireLock } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
-import { validDate, validateRelPath } from './proposal.js';
+import { hasLookalikeIdToken, hasStoryIdToken, validDate, validateRelPath } from './proposal.js';
 const MAX_DOC_BYTES = 4 * 1024 * 1024;
 const LOCK_NAME = 'finalize.lock';
 const sha = (s) => createHash('sha256').update(s).digest('hex');
@@ -567,7 +567,7 @@ function plan(ctx, p) {
             if (exp === 'none')
                 (ok = ex.hasCurrentStorySection && /no active story/i.test(excerpt)), (want = 'no active story');
             else
-                (ok = excerpt.includes(exp.contains)), (want = `Current Story containing "${exp.contains}"`);
+                (ok = excerpt.includes(exp.contains) && hasStoryIdToken(excerpt, p.story.id) && !hasLookalikeIdToken(excerpt, p.story.id)), (want = `Current Story containing "${exp.contains}" and naming story ${p.story.id} as a whole id`);
             checks.push({ id: 'expected-state', status: ok ? 'PASS' : 'FAIL', detail: ok ? `Current Story matches the expected state: ${want}.` : `Current Story does not match the expected state: ${want}.`, source: 'MONOLITH (brief Current Story extraction)' });
         }
     }

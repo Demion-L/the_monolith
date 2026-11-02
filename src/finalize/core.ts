@@ -39,7 +39,7 @@ import {
 } from '../root/index.js';
 import { acquireLock, type LockOptions } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
-import { validDate, validateRelPath, type FinalizationProposal } from './proposal.js';
+import { hasLookalikeIdToken, hasStoryIdToken, validDate, validateRelPath, type FinalizationProposal } from './proposal.js';
 
 export type CheckStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
 export type TargetKind = 'capsule' | 'execution-history' | 'story-index' | 'doc' | 'handoff' | 'active';
@@ -659,7 +659,7 @@ function plan(ctx: Context, p: FinalizationProposal): { plan: FinalizationPlan; 
       let ok: boolean;
       let want: string;
       if (exp === 'none') (ok = ex.hasCurrentStorySection && /no active story/i.test(excerpt)), (want = 'no active story');
-      else (ok = excerpt.includes(exp.contains)), (want = `Current Story containing "${exp.contains}"`);
+      else (ok = excerpt.includes(exp.contains) && hasStoryIdToken(excerpt, p.story.id) && !hasLookalikeIdToken(excerpt, p.story.id)), (want = `Current Story containing "${exp.contains}" and naming story ${p.story.id} as a whole id`);
       checks.push({ id: 'expected-state', status: ok ? 'PASS' : 'FAIL', detail: ok ? `Current Story matches the expected state: ${want}.` : `Current Story does not match the expected state: ${want}.`, source: 'MONOLITH (brief Current Story extraction)' });
     }
   }

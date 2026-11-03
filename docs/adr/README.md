@@ -35,6 +35,7 @@ MONOLITH has no research layer; research of Webway's program is owned by Webway.
 | [ADR-019](ADR-019-persisted-prune-decision-register.md) | Persisted Prune Decision Register (DURABLE-001, Design A) — immutable per-attempt prepare/decision register; accepted 2026-10-26; implementation (FIX-004) not started | accepted | — | 2026-10-26 |
 | [ADR-020](ADR-020-canonical-knowledge-identity.md) | Canonical Knowledge Identity and Deterministic Reference Resolution in the ERG (`KnowledgeObject`, `namespace:localId`, `{#ID}`, resolver, conflicts); supersedes ADR-007 | accepted | — | 2026-10-28 |
 | [ADR-021](ADR-021-project-discovery-native-first-evidence-driven.md) | Project Discovery: Native-first Evidence-driven Architecture (DISCOVERY-001A, reviewed in DISCOVERY-001A-R) — create-only proposal, TM-C unsupported; accepted 2026-10-31; implementation by stories DISCOVERY-001B-1 … 001D | accepted | — | 2026-10-30 |
+| [ADR-022](ADR-022-deterministic-story-finalization.md) | Deterministic Story Finalization (DOCSYNC-001) — plan/apply with digest approval, three-valued preconditions, roll-forward consistency | accepted | — | 2026-11-02 |
 
 **ADR-015 / ADR-016:** `proposed` ADRs on the lock foundation and bounded state. Neither is accepted; ADR-016 implementation is gated on ADR-015 (G-LOCK), which is not passed.
 

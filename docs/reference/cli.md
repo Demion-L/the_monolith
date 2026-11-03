@@ -102,7 +102,7 @@ Result: PASS
 ```
 
 **What `monolith validate` does _not_ check yet:** `project.definition.mjs`
-declares several fields — `requiredFinalizationDocs`, `requiredRootArtifacts`,
+declares several fields — `requiredFinalizationDocs` (superseded by `monolith.config.json` `finalization.requiredDocs`, see `monolith finalize`), `requiredRootArtifacts`,
 `driftLogPath`, `forcedInjectionTerms`, `mistakeRoots` — that describe a
 richer integrity contract (required finalization documents, required root
 artifact IDs, a drift log). None of these are currently read or enforced by
@@ -250,6 +250,78 @@ become anything.
   against (SEC-001B.3; threat model TM-C is unsupported).
 - No LLM, network, search, reminders or automatic idea detection. Library entry:
   `import { ideas } from '@latysh-development/monolith'`.
+
+## `monolith finalize`
+
+```
+monolith finalize plan  --proposal <file|-> [--json]
+monolith finalize apply --proposal <file|-> --approve <digest> [--json]
+```
+
+Closes a story through a checked, owner-approved transition (DOCSYNC-001,
+[ADR-022](../adr/ADR-022-deterministic-story-finalization.md)). The assistant
+writes a JSON proposal; MONOLITH decides whether and where it can be applied.
+
+- `plan` is read-only. It reports each precondition as `PASS`, `FAIL` or
+  `NOT_VERIFIED` (an unverified check is never a pass), each write target
+  (`pending` / `done` / `conflict` / `missing` / `unreadable`) and a **digest**
+  that fingerprints the proposal, every target's current bytes and the evidence
+  inspected. Exit 0 when `READY` or `ALREADY_FINALIZED`, 2 when `NOT_READY`.
+- `apply` re-plans under a cross-process lock and writes only if the digest
+  still matches (`--approve` is the owner's approval of exactly that plan).
+  Exit 0 `FINALIZED` / `ALREADY_FINALIZED`; 2 `REFUSED` (nothing written);
+  3 `INCOMPLETE` (partially applied: the story is **not** finalized).
+
+Targets, in write order: story capsule (created, never overwritten),
+`execution-history.md` (append), `story-index.md` (insert), optional
+`docUpdates`, optional `HANDOFF.md`, and `active.md` last. Missing canonical
+files are reported, never created. There is no rollback: an interrupted run is
+reported as partial by `plan`, and `plan` + `apply` rolls it forward.
+
+One story id is finalized once. History and index entries are recognised by the
+heading `## <id> — …` / `### <id> — …` (id compared case-insensitively), and a
+capsule by its `id: story-<id>` frontmatter in any phase; a repeat with other
+title, slug or date is a `conflict` (nothing is written), an identical repeat is
+`ALREADY_FINALIZED`. `expectedCurrentStory` is `"none"` or `{"contains": "…"}`
+naming the story id; `"any"` is not accepted, so a proposal cannot replace an
+unrelated active story. With `{"contains"}`, the active story is identified only by
+the structural field: exactly one line `**Story:** <id> — <title>` (at line start, outside
+code fences and `<!-- -->` comments) in `## Current Story`; its first token must equal the
+proposal's story id, compared exactly (case-sensitive; `s-1` does not match `S-1`; the id is `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`,
+text after it is free). The line must start at column 0 (no indent, list marker or quote). The
+section runs from the `## Current Story` heading to the next heading or `---` line, so the
+field must come before either. `monolith brief` only shows this section as an excerpt; it does
+not validate the field. Ids in free text never count; a missing, duplicate, conflicting or
+malformed field makes `expected-state` FAIL (plan `NOT_READY`, apply `REFUSED`) and
+active.md is never rewritten automatically. An `active.md` that predates this field needs
+that one line added by the owner before it can be finalized.
+
+A capsule left with two hard links by a process killed between `link()` and the
+removal of its staging name is reported by `plan` as `FILE_HARDLINKED`. When the
+second name is exactly that staging residue (same file, identical content, no
+other links) `plan` names it and the command to remove it; MONOLITH never
+deletes it itself, because the origin of a hard link cannot be proven. Remove
+only that name, then run `plan` again. Any other hard link is reported as
+untrusted and nothing is advised.
+
+Integrity and governance preconditions are read from
+`memory/working/integrity-result.md` and `governance-result.md`, and count only
+when each has exactly one `**Status:** PASS`, exactly one `**Story:**` line
+starting with the same story id and exactly one valid `**Date:**` (not after the
+finalization date, at most 7 days before). Repeated or contradictory fields are
+`NOT_VERIFIED`. It is the assistant's own report. MONOLITH does not run the
+build or tests itself. The digest shows that the approved plan is unchanged; it
+does not prove who approved it. Paths under `docUpdates` / `allowedDocs` may not
+contain a `.git` component at any depth, in any letter case. Documents that must exist, and extra documents the
+proposal may edit, are declared in `monolith.config.json`:
+
+```json
+{ "finalization": { "requiredDocs": [{ "path": "docs/current-state.md", "label": "Current state" }],
+                    "allowedDocs": ["README.md"] } }
+```
+
+`requiredFinalizationDocs` in `project.definition.mjs` is **not** read (that
+file is JavaScript and is never executed); use `finalization.requiredDocs`.
 
 ## `monolith update`
 

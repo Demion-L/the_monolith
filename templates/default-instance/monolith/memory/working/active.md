@@ -15,6 +15,17 @@ referenced_by:
 
 # Active Working Memory
 
+<!--
+Starting a story: replace "No active story." in the "Current Story" section below with
+a field line at the very start of a line (no indent, list marker or quote), e.g.
+    **Story:** <story-id> — <title>
+The first word after "**Story:**" is the story id: letters, digits, "." "_" "-",
+starting with a letter or digit, matched exactly (case-sensitive). `monolith finalize`
+identifies the active story ONLY by this one line. Ids in descriptions, headings,
+code fences or comments do not count; zero or several "**Story:**" lines mean it
+refuses to finalize. Keep the field above any "---" line or heading in that section.
+-->
+
 ## Active Phase
 
 No active phase.

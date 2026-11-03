@@ -287,7 +287,11 @@ naming the story id; `"any"` is not accepted, so a proposal cannot replace an
 unrelated active story. With `{"contains"}`, the active story is identified only by
 the structural field: exactly one line `**Story:** <id> — <title>` (at line start, outside
 code fences and `<!-- -->` comments) in `## Current Story`; its first token must equal the
-proposal's story id. Ids in free text never count; a missing, duplicate, conflicting or
+proposal's story id, compared exactly (case-sensitive; `s-1` does not match `S-1`; the id is `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`,
+text after it is free). The line must start at column 0 (no indent, list marker or quote). The
+section runs from the `## Current Story` heading to the next heading or `---` line, so the
+field must come before either. `monolith brief` only shows this section as an excerpt; it does
+not validate the field. Ids in free text never count; a missing, duplicate, conflicting or
 malformed field makes `expected-state` FAIL (plan `NOT_READY`, apply `REFUSED`) and
 active.md is never rewritten automatically. An `active.md` that predates this field needs
 that one line added by the owner before it can be finalized.

@@ -79,6 +79,9 @@ true there too (no `finalize` code, `project.definition.mjs` never loaded).
 - **Active story identity (DOCSYNC-007)** is the single `**Story:** <id>` field line of `## Current Story`
   (first token, exact match; fences/comments ignored). A token found in free text proves nothing;
   missing/duplicate/conflicting identity fails closed. Re-checked by `apply` (it re-plans).
+  The field must sit at line start inside the section (heading to next heading or `---`), the id is compared
+  case-sensitively, and an `active.md` in the old free-text form is refused, never migrated: the owner
+  adds the one line, then `plan` is re-run (consistent with roll-forward; no rewrite of `active.md` by MONOLITH).
 - **Evidence** must have exactly one Status/Story/Date; anything repeated,
   contradictory or malformed is `NOT_VERIFIED`; dated within 7 days before the
   finalization date. Still a self-report, not an independent verification.

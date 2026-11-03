@@ -15,7 +15,7 @@ Read this file first on every session start. Do not start any task before comple
 ## Project
 
 **Package:** `@latysh-development/monolith`  
-**Version:** `0.1.0-alpha.1`  
+**Version:** `0.1.0-alpha.2`  
 **Language:** TypeScript (strict, ESM)  
 **Runtime:** Node.js >= 20  
 **Package Manager:** pnpm  

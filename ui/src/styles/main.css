@@ -17,6 +17,10 @@
 
 * { box-sizing: border-box; }
 
+/* The viewport is the scroll container. Reserving the scrollbar's gutter keeps the layout
+   width the same whether or not a section is tall enough to scroll. */
+html { scrollbar-gutter: stable; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -37,8 +41,8 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
   border-right: 1px solid var(--border);
 }
 .sidebar-head { padding: 14px 16px; }
-.sidebar-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; padding: 4px 12px 16px; overflow-y: auto; }
-.sidebar-panel .skin-switcher { margin-top: auto; padding: 12px 4px 0; border-top: 1px solid var(--border); }
+.sidebar-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 16px; padding: 4px 12px 16px; overflow-y: auto; }
+.sidebar-panel .skin-switcher { padding: 0 4px 12px; border-bottom: 1px solid var(--border); }
 .nav-toggle { display: none; }
 
 .topbar {

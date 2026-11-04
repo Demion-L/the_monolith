@@ -19,6 +19,7 @@
  *            absence of an active story alone never produce STALE, and the
  *            absence of an active story never means "project complete".
  */
+import { maskNonContent } from './markdown-context.js';
 export type FreshnessStatus = 'FRESH' | 'STALE' | 'UNKNOWN';
 export type FreshnessReasonCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'UNATTRIBUTED_ACTIVITY' | 'NO_ACTIVITY_SINCE_STATE_UPDATE' | 'ACTIVITY_RECORDED';
 export interface FreshnessReason {
@@ -92,15 +93,7 @@ export interface FreshnessResult {
 }
 export declare function extractWorkItemIds(text: string): string[];
 export declare function mentionsId(text: string, id: string): boolean;
-/**
- * Blanks every line (or part of a line) that sits inside a fenced code block
- * or an HTML comment, keeping the line count. Fence grammar matches DOCSYNC's
- * `activeStoryIdentity()`: a line that starts with ``` or ~~~ opens a fence,
- * and only a line made of the same character, at least as long, closes it.
- * An unterminated fence or comment hides the rest of the text — an example
- * that cannot be delimited is never read as a claim.
- */
-export declare function maskNonContent(text: string): string;
+export { maskNonContent };
 /**
  * Interprets the `## Current Story` excerpt of active.md.
  *
@@ -110,9 +103,12 @@ export declare function maskNonContent(text: string): string;
  * `unknown` (never a guess, never STALE on its own).
  *
  * Compatibility: a historical section with no `**Story:**` field at all is
- * still read when its first line *leads* with a single work-item id
- * (`WIDGET-001 — in progress`, `**WIDGET-001** — …`) and is the only id on that line. Anything else is
- * `unknown`.
+ * still read when its first line is a *bold declaration* of exactly one
+ * work-item id — `**WIDGET-001 — title**`, `**WIDGET-001**` or
+ * `**WIDGET-001** — status` (the form old active.md files used). An unbolded
+ * line (`STORY-001 was completed yesterday.`, `STORY-001 — done`) is
+ * indistinguishable from a sentence that merely mentions a story, so it is
+ * `unknown`, never a confirmed identity.
  */
 export declare function parseActiveStoryClaim(excerpt: string | null): StoryClaim;
 /** `Active Story: <text>` line of roadmap-index.md (outside code fences and comments). */

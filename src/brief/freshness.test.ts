@@ -176,7 +176,8 @@ describe('state document parsers', () => {
 
   it('parses the active story claim', () => {
     expect(parseActiveStoryClaim('No active story.\n\nPrevious: **X-001A**')).toEqual({ kind: 'none' });
-    expect(parseActiveStoryClaim('WIDGET-001 — in progress')).toEqual({ kind: 'ids', ids: ['WIDGET-001'] });
+    expect(parseActiveStoryClaim('**WIDGET-001** — in progress')).toEqual({ kind: 'ids', ids: ['WIDGET-001'] });
+    expect(parseActiveStoryClaim('WIDGET-001 — in progress')).toEqual({ kind: 'unknown' }); // unbolded: indistinguishable from prose
     expect(parseActiveStoryClaim('something vague')).toEqual({ kind: 'unknown' });
     expect(parseActiveStoryClaim(null)).toEqual({ kind: 'unknown' });
   });

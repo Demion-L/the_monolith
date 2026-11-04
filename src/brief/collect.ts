@@ -25,6 +25,7 @@ import {
 } from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
+import { maskNonContent } from './markdown-context.js';
 import {
   selectActiveMissions,
   selectRecentFinishedMissions,
@@ -283,7 +284,9 @@ function collectStory(
     diagnostics.push({
       code: 'ACTIVE_MD_NO_CURRENT_STORY',
       severity: 'info',
-      message: `${relPath} exists but has no "## Current Story" section.`,
+      message: extraction.ambiguous
+        ? `${relPath} has more than one "## Current Story" section outside code blocks and comments; the section is ambiguous and was not read.`
+        : `${relPath} exists but has no "## Current Story" section.`,
     });
   }
 
@@ -371,7 +374,8 @@ function collectFreshness(
     roadmapActiveStory: roadmap === null ? null : parseRoadmapActiveStory(roadmap),
     roadmapStatuses: roadmap === null ? new Map() : parseRoadmapStatuses(roadmap),
     storyIndexStatuses: storyIndex === null ? new Map() : parseStoryIndexStatuses(storyIndex),
-    recordedText: [...content.values()].filter((c): c is string => c !== null).join('\n'),
+    // Ids shown only inside code fences or HTML comments are examples, not records.
+    recordedText: [...content.values()].filter((c): c is string => c !== null).map(maskNonContent).join('\n'),
     stateFiles: new Set(stateFiles),
   };
   return { result: evaluateFreshness(evidence), evidence };

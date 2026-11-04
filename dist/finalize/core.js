@@ -25,6 +25,7 @@ import { dirname, join } from 'path';
 import { RootContainmentError, SafeWriteError, createFile, openParent, projectBoundary, readConfigFile, readProjectFile, replaceFile, resolveMonolithRoot, } from '../root/index.js';
 import { acquireLock } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
+import { maskNonContent } from '../brief/markdown-context.js';
 import { validDate, validateRelPath } from './proposal.js';
 const MAX_DOC_BYTES = 4 * 1024 * 1024;
 const LOCK_NAME = 'finalize.lock';
@@ -169,11 +170,16 @@ function activeBodies(root, p) {
 // Text transforms (pure)
 // ---------------------------------------------------------------------------
 const eolOf = (s) => (s.includes('\r\n') ? '\r\n' : '\n');
-/** Boundaries as in brief/story.ts: the next heading or a `---` rule ends a section. */
-function findSection(lines, re) {
+/**
+ * Boundaries as in brief/story.ts: the next heading or a `---` rule ends a
+ * section, and headings inside code fences or HTML comments do not count.
+ * `structural` is the same text with fenced / commented lines blanked (same
+ * line count), so reading and writing agree on which section is "Current Story".
+ */
+function findSection(lines, structural, re) {
     const hits = [];
-    lines.forEach((l, i) => {
-        if (re.test(l.trim()))
+    structural.forEach((l, i) => {
+        if (re.test(l.trim()) && l.trim() === lines[i].trim())
             hits.push(i);
     });
     if (hits.length === 0)
@@ -182,7 +188,7 @@ function findSection(lines, re) {
         return 'ambiguous';
     let end = lines.length;
     for (let i = hits[0] + 1; i < lines.length; i++) {
-        const t = lines[i].trim();
+        const t = structural[i].trim();
         if (/^#{1,6}\s+/.test(t) || /^-{3,}\s*$/.test(t)) {
             end = i;
             break;
@@ -199,8 +205,9 @@ const CURRENT_RE = /^##\s+Current Story\s*$/i;
 const LAST_RE = /^##\s+Last Finalization\s*$/i;
 function editActive(content, bodies) {
     const lines = content.split('\n');
-    const cur = findSection(lines, CURRENT_RE);
-    const last = findSection(lines, LAST_RE);
+    const structural = maskNonContent(content).split('\n');
+    const cur = findSection(lines, structural, CURRENT_RE);
+    const last = findSection(lines, structural, LAST_RE);
     for (const [name, s] of [['## Current Story', cur], ['## Last Finalization', last]]) {
         if (s === 'absent')
             return { state: 'conflict', reason: `active.md has no "${name}" section; it is never created automatically.` };
@@ -298,30 +305,10 @@ const FIX_HINT = 'To finalize, put exactly one line "**Story:** <id> — <title>
  */
 export function activeStoryIdentity(currentStoryBody) {
     const found = [];
-    let fence = null;
-    let comment = false;
-    for (const raw of norm(currentStoryBody).split('\n')) {
-        const line = raw.trim();
-        if (comment) {
-            if (line.includes('-->'))
-                comment = false;
-            continue;
-        }
-        const f = /^(`{3,}|~{3,})/.exec(line);
-        if (fence !== null) {
-            if (f !== null && f[1][0] === fence[0] && f[1].length >= fence.length && line === f[1])
-                fence = null;
-            continue;
-        }
-        if (f !== null) {
-            fence = f[1];
-            continue;
-        }
-        if (line.startsWith('<!--')) {
-            if (!line.includes('-->'))
-                comment = true;
-            continue;
-        }
+    // Same fence / HTML-comment grammar as the brief's story extraction and
+    // freshness readers (one shared helper): text inside a code fence or an HTML
+    // comment, including a comment opened mid-line, is never identity.
+    for (const raw of maskNonContent(norm(currentStoryBody)).split('\n')) {
         const m = /^\*\*Story:\*\*[ \t]*(.*)$/.exec(raw.replace(/\r$/, ''));
         if (m !== null)
             found.push(m[1].trim());
@@ -612,13 +599,21 @@ function plan(ctx, p) {
             let ok;
             let want;
             let why = '';
-            if (exp === 'none')
-                (ok = ex.hasCurrentStorySection && /no active story/i.test(excerpt)), (want = 'no active story');
+            const visible = maskNonContent(excerpt);
+            if (exp === 'none') {
+                // Same rule as the brief: the first visible line says "no active story"
+                // and no structural **Story:** field contradicts it. Text inside code
+                // fences or comments is not a statement.
+                const first = visible.split('\n').find((l) => l.trim() !== '') ?? '';
+                (ok = ex.hasCurrentStorySection && /^\W*no active story\b/i.test(first) && !activeStoryIdentity(excerpt).ok), (want = 'no active story');
+            }
             else {
                 const ident = activeStoryIdentity(excerpt);
                 want = `Current Story containing "${exp.contains}" whose "**Story:**" field is exactly ${p.story.id}`;
-                if (!excerpt.includes(exp.contains))
-                    (ok = false), (why = ' The expected text is not in the Current Story section.');
+                if (ex.ambiguous)
+                    (ok = false), (why = ' active.md has more than one "## Current Story" section outside code blocks and comments; the active story is ambiguous. ' + FIX_HINT);
+                else if (!visible.includes(exp.contains))
+                    (ok = false), (why = ` The expected text is not in the Current Story section${ident.ok ? '.' : `, and ${ident.reason}`}`);
                 else if (!ident.ok)
                     (ok = false), (why = ` ${ident.reason}`);
                 else if (ident.id !== p.story.id)

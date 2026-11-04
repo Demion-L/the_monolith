@@ -20,6 +20,7 @@
  *            absence of an active story never means "project complete".
  */
 import { isIdeaId } from '../ideas/format.js';
+import { maskNonContent } from './markdown-context.js';
 // ---------------------------------------------------------------------------
 // Work-item ids
 // ---------------------------------------------------------------------------
@@ -53,60 +54,9 @@ export function mentionsId(text, id) {
     const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`(?<![A-Za-z0-9-])${escaped}(?![A-Za-z0-9]|\\.\\d|-[A-Z0-9])`).test(text);
 }
-// ---------------------------------------------------------------------------
-// Markdown context
-// ---------------------------------------------------------------------------
-/**
- * Blanks every line (or part of a line) that sits inside a fenced code block
- * or an HTML comment, keeping the line count. Fence grammar matches DOCSYNC's
- * `activeStoryIdentity()`: a line that starts with ``` or ~~~ opens a fence,
- * and only a line made of the same character, at least as long, closes it.
- * An unterminated fence or comment hides the rest of the text — an example
- * that cannot be delimited is never read as a claim.
- */
-export function maskNonContent(text) {
-    let fence = null;
-    let comment = false;
-    const out = [];
-    for (const raw of text.split('\n')) {
-        const line = raw.trim();
-        const f = /^(`{3,}|~{3,})/.exec(line);
-        if (fence !== null) {
-            if (f !== null && f[1][0] === fence[0] && f[1].length >= fence.length && line === f[1])
-                fence = null;
-            out.push('');
-            continue;
-        }
-        if (!comment && f !== null) {
-            fence = f[1];
-            out.push('');
-            continue;
-        }
-        let kept = '';
-        let i = 0;
-        while (i < raw.length) {
-            if (comment) {
-                const end = raw.indexOf('-->', i);
-                if (end === -1)
-                    break;
-                comment = false;
-                i = end + 3;
-            }
-            else {
-                const start = raw.indexOf('<!--', i);
-                if (start === -1) {
-                    kept += raw.slice(i);
-                    break;
-                }
-                kept += raw.slice(i, start);
-                comment = true;
-                i = start + 4;
-            }
-        }
-        out.push(kept);
-    }
-    return out.join('\n');
-}
+// `maskNonContent` lives in ./markdown-context.ts (shared with story extraction
+// and DOCSYNC) and is re-exported here for existing importers.
+export { maskNonContent };
 // ---------------------------------------------------------------------------
 // Parsers for the state documents (confirmed structure only)
 // ---------------------------------------------------------------------------
@@ -122,9 +72,12 @@ const STORY_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
  * `unknown` (never a guess, never STALE on its own).
  *
  * Compatibility: a historical section with no `**Story:**` field at all is
- * still read when its first line *leads* with a single work-item id
- * (`WIDGET-001 — in progress`, `**WIDGET-001** — …`) and is the only id on that line. Anything else is
- * `unknown`.
+ * still read when its first line is a *bold declaration* of exactly one
+ * work-item id — `**WIDGET-001 — title**`, `**WIDGET-001**` or
+ * `**WIDGET-001** — status` (the form old active.md files used). An unbolded
+ * line (`STORY-001 was completed yesterday.`, `STORY-001 — done`) is
+ * indistinguishable from a sentence that merely mentions a story, so it is
+ * `unknown`, never a confirmed identity.
  */
 export function parseActiveStoryClaim(excerpt) {
     if (excerpt === null)
@@ -144,8 +97,11 @@ export function parseActiveStoryClaim(excerpt) {
         const id = /^(\S+)(?:\s|$)/.exec(fields[0])?.[1];
         return id !== undefined && STORY_ID_RE.test(id) ? { kind: 'ids', ids: [id] } : { kind: 'unknown' };
     }
-    const lead = /^\W{0,4}((?:[A-Z]{2,}-)+\d{3}[A-Z]?(?:\.\d+)*(?:-[A-Z])?)(?![A-Za-z0-9]|\.\d|-[A-Z0-9])/.exec(firstLine.trim());
-    return lead !== null && extractWorkItemIds(firstLine).length === 1 ? { kind: 'ids', ids: [lead[1]] } : { kind: 'unknown' };
+    const line = firstLine.trim();
+    const idEnd = String.raw `(?![A-Za-z0-9]|\.\d|-[A-Z0-9])`;
+    const declaration = new RegExp(`^\\*\\*(${WORK_ITEM_SOURCE})${idEnd}\\*\\*(?:\\s+[—–-](?:\\s.*)?)?$`).exec(line) ??
+        new RegExp(`^\\*\\*(${WORK_ITEM_SOURCE})${idEnd}\\s+[—–-]\\s.*\\*\\*$`).exec(line);
+    return declaration !== null && extractWorkItemIds(line).length === 1 ? { kind: 'ids', ids: [declaration[1]] } : { kind: 'unknown' };
 }
 /** `Active Story: <text>` line of roadmap-index.md (outside code fences and comments). */
 export function parseRoadmapActiveStory(content) {

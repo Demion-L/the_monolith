@@ -807,18 +807,6 @@ describe('monolith update — DOGFOOD-002 finalize-story skill', () => {
     expect(read(d, FIN)).toBe(mine);
   });
 
-  it('a customized skill that describes finalize plan/apply is SKIP (kept, not claimed compliant)', async () => {
-    const d = await newInstance();
-    const mine = '# my finalize\nRun `monolith finalize plan`, ask me, then `monolith finalize apply`.\n';
-    writeFileSync(join(d, FIN), mine);
-    const item = planUpdate(d).items.find((i) => i.path === FIN);
-    expect(item?.action).toBe('SKIP');
-    expect(item?.reason).toMatch(/not verified/);
-    quiet();
-    expect(await runUpdate(['--apply'], d)).toBe(0);
-    expect(read(d, FIN)).toBe(mine);
-  });
-
   it('mentions of the contract only inside a code fence or comment do not count', async () => {
     const d = await newInstance();
     writeFileSync(join(d, FIN), '# mine\nedit active.md by hand\n```\nmonolith finalize plan\nmonolith finalize apply\n```\n<!-- monolith finalize plan monolith finalize apply -->\n');
@@ -888,6 +876,174 @@ describe('monolith update — DOGFOOD-002 finalize-story skill', () => {
     expect(await runUpdate(['--apply'], d)).toBe(0);
     expect(read(d, FIN)).toBe(TEMPLATE_FIN);
     expect(integrationComplete(planUpdate(d))).toBe(true);
+  });
+});
+
+describe('monolith update — DOGFOOD-005 unverified finalize-story compatibility is never COMPLETE', () => {
+  const MENTIONS = '# my finalize\nRun `monolith finalize plan`, ask me, then `monolith finalize apply`.\n';
+  const UNSAFE = MENTIONS + 'If the CLI fails, finalize documents manually.\n';
+  const COMPLETE_LINE = /Agent integration: COMPLETE/;
+  const INCOMPLETE_LINE = /Agent integration: INCOMPLETE/;
+
+  /** Runs the CLI, returns exit code and everything it printed. */
+  async function run(d: string, args: string[]): Promise<{ code: number; out: string }> {
+    const logs = quiet();
+    const code = await runUpdate(args, d);
+    return { code, out: logs.join('\n') };
+  }
+
+  it.each([
+    ['both commands mentioned', MENTIONS],
+    ['both commands plus a manual-finalization fallback (F-1)', UNSAFE],
+    ['both commands, correct-looking, long', MENTIONS + '\nOwner approval is required before apply. Never edit active.md by hand.\n'],
+  ])('custom skill (%s): CONFLICT, kept byte-identical, never COMPLETE, apply exits 2', async (_n, mine) => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), mine);
+    const plan = planUpdate(d);
+    const item = plan.items.find((i) => i.path === FIN);
+    expect(item?.action).toBe('CONFLICT');
+    expect(plan.chain.find((c) => c.link === 'finalize skill → CLI')?.ok).toBe(false);
+    expect(integrationComplete(plan)).toBe(false);
+
+    const preview = await run(d, []);
+    expect(preview.code).toBe(0); // preview never fails (unchanged policy)
+    expect(preview.out).toMatch(INCOMPLETE_LINE);
+    expect(preview.out).not.toMatch(COMPLETE_LINE);
+
+    const before = snapshot(d);
+    const applied = await run(d, ['--apply']);
+    expect(applied.code).toBe(2);
+    expect(applied.out).toMatch(INCOMPLETE_LINE);
+    expect(applied.out).not.toMatch(COMPLETE_LINE);
+    expect(read(d, FIN)).toBe(mine);
+    expect(snapshot(d)).toEqual(before); // nothing at all was written
+  });
+
+  it('the diagnostic names the skill, says why it is unknown, that the file is unchanged, and what the owner must do', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), UNSAFE);
+    const item = planUpdate(d).items.find((i) => i.path === FIN);
+    expect(item?.reason).toMatch(/not verified/i);
+    expect(item?.reason).toMatch(/not changed/i);
+    expect(item?.proposal).toContain('Deterministic Execution');
+    const { out } = await run(d, ['--apply']);
+    expect(out).toContain(FIN);
+    expect(out).toMatch(/not verified/i);
+    expect(out).toContain('Deterministic Execution');
+  });
+
+  it('a custom skill without the commands stays a CONFLICT', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), '# mine\nedit active.md by hand\n');
+    expect(actions(d)[FIN]).toBe('CONFLICT');
+  });
+
+  it.each([
+    ['CRLF', (t: string) => t.replace(/\n/g, '\r\n')],
+    ['UTF-8 BOM', (t: string) => '﻿' + t],
+    ['no trailing newline', (t: string) => t.replace(/\n+$/, '')],
+    ['user addition', (t: string) => t + '\nMy extra rule.\n'],
+  ])('byte variant of the CURRENT template (%s) is not UNCHANGED: CONFLICT, bytes kept, never COMPLETE', async (_n, mutate) => {
+    const d = await newInstance();
+    const mine = mutate(TEMPLATE_FIN);
+    expect(mine).not.toBe(TEMPLATE_FIN);
+    writeFileSync(join(d, FIN), mine, 'utf8');
+    const plan = planUpdate(d);
+    expect(plan.items.find((i) => i.path === FIN)?.action).toBe('CONFLICT');
+    expect(integrationComplete(plan)).toBe(false);
+    const applied = await run(d, ['--apply']);
+    expect(applied.code).toBe(2);
+    expect(applied.out).not.toMatch(COMPLETE_LINE);
+    expect(readFileSync(join(d, FIN), 'utf8')).toBe(mine);
+  });
+
+  it('idea-capture UNCHANGED + finalize-story unverified is INCOMPLETE', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), MENTIONS);
+    expect(actions(d)[SKILL]).toBe('UNCHANGED');
+    expect(integrationComplete(planUpdate(d))).toBe(false);
+    expect((await run(d, ['--apply'])).code).toBe(2);
+  });
+
+  it('idea-capture UPDATE/ADD + finalize-story unverified: the idea part is written, the result is honestly INCOMPLETE', async () => {
+    const d = await oldInstance();
+    writeFileSync(join(d, FIN), MENTIONS);
+    const before = snapshot(d);
+    const applied = await run(d, ['--apply']);
+    expect(applied.code).toBe(2);
+    expect(applied.out).toMatch(INCOMPLETE_LINE);
+    expect(applied.out).not.toMatch(COMPLETE_LINE);
+    expect(applied.out).toContain('Created ');
+    const after = snapshot(d);
+    expect(after[SKILL]).toBeDefined(); // idea-capture installed (partial write is reported, not hidden)
+    expect(after[FIN]).toBe(MENTIONS);
+    // every file that existed before and is not an expected UPDATE target is unchanged
+    for (const k of Object.keys(before)) if (!/AGENTS\.md$|CLAUDE\.md$|INDEX\.md$|routing-map\.md$/.test(k)) expect(after[k]).toBe(before[k]);
+  });
+
+  it('repeated apply on an unverified skill is stable: same bytes, still exit 2', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), UNSAFE);
+    expect((await run(d, ['--apply'])).code).toBe(2);
+    const once = snapshot(d);
+    expect((await run(d, ['--apply'])).code).toBe(2);
+    expect(snapshot(d)).toEqual(once);
+  });
+
+  it('a stale preview over an unverified skill never writes it', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), MENTIONS);
+    const plan = planUpdate(d);
+    writeFileSync(join(d, FIN), UNSAFE);
+    const r = applyPlan(d, plan);
+    expect([...r.created, ...r.updated]).not.toContain(FIN);
+    expect(read(d, FIN)).toBe(UNSAFE);
+  });
+
+  it('unrelated skills and user files survive an apply next to an unverified finalize-story skill', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), UNSAFE);
+    mkdirSync(join(d, '.monolith/skills/mine'), { recursive: true });
+    writeFileSync(join(d, '.monolith/skills/mine/SKILL.md'), 'my own skill\n');
+    writeFileSync(join(d, 'notes.txt'), 'user notes\n');
+    const before = snapshot(d);
+    await run(d, ['--apply']);
+    expect(snapshot(d)).toEqual(before);
+  });
+
+  it('Idea Capture regression: a customized idea-capture skill that calls the CLI is still kept and the instance is COMPLETE', async () => {
+    const d = await newInstance();
+    const mine = '# my idea skill\nRun `monolith idea add --title ...`.\n';
+    writeFileSync(join(d, SKILL), mine);
+    expect(actions(d)[SKILL]).toBe('SKIP');
+    const applied = await run(d, ['--apply']);
+    expect(applied.code).toBe(0);
+    expect(applied.out).toMatch(COMPLETE_LINE);
+    expect(read(d, SKILL)).toBe(mine);
+  });
+
+  it('a known legacy skill is still replaced and the instance is COMPLETE (no regression)', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), fixture('finalize-story.alpha2.md'));
+    const applied = await run(d, ['--apply']);
+    expect(applied.code).toBe(0);
+    expect(applied.out).toMatch(COMPLETE_LINE);
+    expect(read(d, FIN)).toBe(TEMPLATE_FIN);
+  });
+
+  it('after the owner restores the current template by hand, a re-run is COMPLETE', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), UNSAFE);
+    expect((await run(d, ['--apply'])).code).toBe(2);
+    writeFileSync(join(d, FIN), TEMPLATE_FIN);
+    const again = await run(d, ['--apply']);
+    expect(again.code).toBe(0);
+    expect(again.out).toMatch(COMPLETE_LINE);
+  });
+
+  it('the help text states that a customized finalize-story skill is never reported as verified', () => {
+    expect(UPDATE_USAGE).toMatch(/finalize-story/);
+    expect(UPDATE_USAGE).toMatch(/not verified|unverified/i);
   });
 });
 

@@ -27,10 +27,12 @@ What is written, and what is not:
     to resolve it. SKIP means left alone on purpose (e.g. your own skill).
   - Your existing skills, memory, state.json, ideas and text are never overwritten.
     The one exception: a finalize-story skill byte-identical to a known older
-    MONOLITH template (nothing of yours in it) is replaced by the current one. An
-    edited finalize-story skill that does not describe \`monolith finalize plan\` /
-    \`apply\` is a CONFLICT (it may still tell an assistant to finalize by hand): it
-    is kept and the plan says how to merge it.
+    MONOLITH template (nothing of yours in it) is replaced by the current one. Any
+    other finalize-story skill (edited, or the current text in different bytes such
+    as CRLF/BOM) is a CONFLICT: it is kept, and its compatibility with the
+    Finalization Contract is not verified, even if it mentions \`monolith finalize
+    plan\` / \`apply\` (it may still allow finalizing by hand). The integration is
+    then INCOMPLETE and --apply exits 2 until the file equals the current template.
     Nothing is executed.
 Instances carry no template version, so state is read from the files. Safe to
 re-run. Not transactional and not coordinated between simultaneous runs: apply

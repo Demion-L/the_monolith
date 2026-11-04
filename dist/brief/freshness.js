@@ -19,6 +19,7 @@
  *            absence of an active story alone never produce STALE, and the
  *            absence of an active story never means "project complete".
  */
+import { isIdeaId } from '../ideas/format.js';
 // ---------------------------------------------------------------------------
 // Work-item ids
 // ---------------------------------------------------------------------------
@@ -30,8 +31,14 @@
 const WORK_ITEM_SOURCE = String.raw `(?:[A-Z]{2,}-)+\d{3}[A-Z]?(?:\.\d+)*(?:-[A-Z])?`;
 /** Decision / lesson records are not work items. */
 const NON_WORK_PREFIXES = ['ADR-', 'DEC-', 'LESSON-'];
+/**
+ * Ideas live in their own namespace (`IDEA-NNN`, src/ideas/format.ts) and are
+ * stored in the idea store, not in the state documents. Only the exact idea
+ * grammar is excluded: `IDEA-001A`, `IDEA-001B.1` or `IDEA-003-R` are story
+ * ids that merely share the prefix and stay work items.
+ */
 function isWorkItem(id) {
-    return !NON_WORK_PREFIXES.some((p) => id.startsWith(p));
+    return !NON_WORK_PREFIXES.some((p) => id.startsWith(p)) && !isIdeaId(id);
 }
 export function extractWorkItemIds(text) {
     const re = new RegExp(`(?<![A-Za-z0-9-])${WORK_ITEM_SOURCE}(?![A-Za-z0-9]|\\.\\d|-[A-Z0-9])`, 'g');
@@ -47,28 +54,108 @@ export function mentionsId(text, id) {
     return new RegExp(`(?<![A-Za-z0-9-])${escaped}(?![A-Za-z0-9]|\\.\\d|-[A-Z0-9])`).test(text);
 }
 // ---------------------------------------------------------------------------
+// Markdown context
+// ---------------------------------------------------------------------------
+/**
+ * Blanks every line (or part of a line) that sits inside a fenced code block
+ * or an HTML comment, keeping the line count. Fence grammar matches DOCSYNC's
+ * `activeStoryIdentity()`: a line that starts with ``` or ~~~ opens a fence,
+ * and only a line made of the same character, at least as long, closes it.
+ * An unterminated fence or comment hides the rest of the text — an example
+ * that cannot be delimited is never read as a claim.
+ */
+export function maskNonContent(text) {
+    let fence = null;
+    let comment = false;
+    const out = [];
+    for (const raw of text.split('\n')) {
+        const line = raw.trim();
+        const f = /^(`{3,}|~{3,})/.exec(line);
+        if (fence !== null) {
+            if (f !== null && f[1][0] === fence[0] && f[1].length >= fence.length && line === f[1])
+                fence = null;
+            out.push('');
+            continue;
+        }
+        if (!comment && f !== null) {
+            fence = f[1];
+            out.push('');
+            continue;
+        }
+        let kept = '';
+        let i = 0;
+        while (i < raw.length) {
+            if (comment) {
+                const end = raw.indexOf('-->', i);
+                if (end === -1)
+                    break;
+                comment = false;
+                i = end + 3;
+            }
+            else {
+                const start = raw.indexOf('<!--', i);
+                if (start === -1) {
+                    kept += raw.slice(i);
+                    break;
+                }
+                kept += raw.slice(i, start);
+                comment = true;
+                i = start + 4;
+            }
+        }
+        out.push(kept);
+    }
+    return out.join('\n');
+}
+// ---------------------------------------------------------------------------
 // Parsers for the state documents (confirmed structure only)
 // ---------------------------------------------------------------------------
 const NONE_RE = /^\W*(?:no active story|none|unknown)\b|^\s*[—-]\s*$/i;
-/** Interprets the `## Current Story` excerpt of active.md. */
+/** Same id grammar as DOCSYNC's `activeStoryIdentity()`. */
+const STORY_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/**
+ * Interprets the `## Current Story` excerpt of active.md.
+ *
+ * Identity comes from the structural `**Story:** <id> …` field only (first
+ * token = id), exactly as DOCSYNC reads it. Ids in titles, prose, code fences
+ * or comments are never identity. Zero usable, several or malformed fields →
+ * `unknown` (never a guess, never STALE on its own).
+ *
+ * Compatibility: a historical section with no `**Story:**` field at all is
+ * still read when its first line *leads* with a single work-item id
+ * (`WIDGET-001 — in progress`, `**WIDGET-001** — …`) and is the only id on that line. Anything else is
+ * `unknown`.
+ */
 export function parseActiveStoryClaim(excerpt) {
     if (excerpt === null)
         return { kind: 'unknown' };
-    const firstLine = excerpt.split('\n').find((l) => l.trim() !== '') ?? '';
+    const masked = maskNonContent(excerpt);
+    const firstLine = masked.split('\n').find((l) => l.trim() !== '') ?? '';
     if (/^\W*no active story\b/i.test(firstLine))
         return { kind: 'none' };
-    const ids = extractWorkItemIds(excerpt);
-    return ids.length > 0 ? { kind: 'ids', ids } : { kind: 'unknown' };
+    const fields = masked
+        .split('\n')
+        .map((l) => /^\*\*Story:\*\*[ \t]*(.*)$/.exec(l.replace(/\r$/, '')))
+        .filter((m) => m !== null)
+        .map((m) => m[1].trim());
+    if (fields.length > 0) {
+        if (fields.length > 1)
+            return { kind: 'unknown' };
+        const id = /^(\S+)(?:\s|$)/.exec(fields[0])?.[1];
+        return id !== undefined && STORY_ID_RE.test(id) ? { kind: 'ids', ids: [id] } : { kind: 'unknown' };
+    }
+    const lead = /^\W{0,4}((?:[A-Z]{2,}-)+\d{3}[A-Z]?(?:\.\d+)*(?:-[A-Z])?)(?![A-Za-z0-9]|\.\d|-[A-Z0-9])/.exec(firstLine.trim());
+    return lead !== null && extractWorkItemIds(firstLine).length === 1 ? { kind: 'ids', ids: [lead[1]] } : { kind: 'unknown' };
 }
-/** `Active Story: <text>` line of roadmap-index.md. */
+/** `Active Story: <text>` line of roadmap-index.md (outside code fences and comments). */
 export function parseRoadmapActiveStory(content) {
-    const m = /^Active Story:\s*(.+?)\s*$/m.exec(content);
+    const m = /^Active Story:\s*(.+?)\s*$/m.exec(maskNonContent(content));
     return m ? m[1] : null;
 }
-/** Table rows `| id | title | STATUS | date |` of roadmap-index.md. */
+/** Table rows `| id | title | STATUS | date |` of roadmap-index.md (outside code fences and comments). */
 export function parseRoadmapStatuses(content) {
     const out = new Map();
-    for (const line of content.split('\n')) {
+    for (const line of maskNonContent(content).split('\n')) {
         const cells = line.split('|').map((c) => c.trim());
         // leading and trailing '|' produce empty first/last cells
         if (cells.length < 5 || cells[0] !== '' || cells[cells.length - 1] !== '')
@@ -82,10 +169,10 @@ export function parseRoadmapStatuses(content) {
     }
     return out;
 }
-/** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md. */
+/** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md (outside code fences and comments). */
 export function parseStoryIndexStatuses(content) {
     const out = new Map();
-    const lines = content.split('\n');
+    const lines = maskNonContent(content).split('\n');
     for (let i = 0; i < lines.length; i++) {
         const h = /^###\s+(?:STORY\s+)?([A-Za-z0-9][A-Za-z0-9.\-]*)\s+—/.exec(lines[i]);
         if (!h)

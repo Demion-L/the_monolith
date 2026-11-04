@@ -58,8 +58,14 @@ export type StoryClaim = {
 } | {
     kind: 'ids';
     ids: string[];
-} | {
+}
+/**
+ * `contradiction`: the section both says "no active story" and has a
+ * structural `**Story:**` field (PSC-004A) — the field value(s), verbatim.
+ */
+ | {
     kind: 'unknown';
+    contradiction?: string[];
 };
 export interface FreshnessEvidence {
     git: GitSignals;
@@ -109,6 +115,11 @@ export { maskNonContent };
  * line (`STORY-001 was completed yesterday.`, `STORY-001 — done`) is
  * indistinguishable from a sentence that merely mentions a story, so it is
  * `unknown`, never a confirmed identity.
+ *
+ * "No active story" as the first visible line is `none` only when the section
+ * has no structural `**Story:**` field at all; with one (valid, duplicate or
+ * malformed) the section contradicts itself → `unknown` with `contradiction`
+ * (PSC-004A, same rule as DOCSYNC's `activeStoryIdentity()`).
  */
 export declare function parseActiveStoryClaim(excerpt: string | null): StoryClaim;
 /** `Active Story: <text>` line of roadmap-index.md (outside code fences and comments). */

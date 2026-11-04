@@ -92,13 +92,34 @@ export interface FreshnessResult {
 }
 export declare function extractWorkItemIds(text: string): string[];
 export declare function mentionsId(text: string, id: string): boolean;
-/** Interprets the `## Current Story` excerpt of active.md. */
+/**
+ * Blanks every line (or part of a line) that sits inside a fenced code block
+ * or an HTML comment, keeping the line count. Fence grammar matches DOCSYNC's
+ * `activeStoryIdentity()`: a line that starts with ``` or ~~~ opens a fence,
+ * and only a line made of the same character, at least as long, closes it.
+ * An unterminated fence or comment hides the rest of the text — an example
+ * that cannot be delimited is never read as a claim.
+ */
+export declare function maskNonContent(text: string): string;
+/**
+ * Interprets the `## Current Story` excerpt of active.md.
+ *
+ * Identity comes from the structural `**Story:** <id> …` field only (first
+ * token = id), exactly as DOCSYNC reads it. Ids in titles, prose, code fences
+ * or comments are never identity. Zero usable, several or malformed fields →
+ * `unknown` (never a guess, never STALE on its own).
+ *
+ * Compatibility: a historical section with no `**Story:**` field at all is
+ * still read when its first line *leads* with a single work-item id
+ * (`WIDGET-001 — in progress`, `**WIDGET-001** — …`) and is the only id on that line. Anything else is
+ * `unknown`.
+ */
 export declare function parseActiveStoryClaim(excerpt: string | null): StoryClaim;
-/** `Active Story: <text>` line of roadmap-index.md. */
+/** `Active Story: <text>` line of roadmap-index.md (outside code fences and comments). */
 export declare function parseRoadmapActiveStory(content: string): string | null;
-/** Table rows `| id | title | STATUS | date |` of roadmap-index.md. */
+/** Table rows `| id | title | STATUS | date |` of roadmap-index.md (outside code fences and comments). */
 export declare function parseRoadmapStatuses(content: string): Map<string, string>;
-/** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md. */
+/** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md (outside code fences and comments). */
 export declare function parseStoryIndexStatuses(content: string): Map<string, string>;
 export declare function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult;
 //# sourceMappingURL=freshness.d.ts.map

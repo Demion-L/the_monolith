@@ -16,6 +16,7 @@ import { readBriefConfig } from './config.js';
 import { resolveMonolithRootValue, checkContainedFile, readBoundedFileStable, isReadSecurityViolation, findWriteArtifacts, describeWriteArtifacts, } from '../root/index.js';
 import { discoverDocs } from './docs.js';
 import { extractCurrentStory } from './story.js';
+import { maskNonContent } from './markdown-context.js';
 import { selectActiveMissions, selectRecentFinishedMissions, selectLatestCheckpoint, hasCheckpointOrderMismatch, } from './selectors.js';
 import { stateFilePath, validateState, createInitialState, MAX_STATE_BYTES } from '../coordinatorium/index.js';
 import { ACTIVE_MD_REL, PARKED_IDEAS_LIMIT, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
@@ -202,7 +203,9 @@ function collectStory(targetDir, monolithRoot, root, diagnostics) {
         diagnostics.push({
             code: 'ACTIVE_MD_NO_CURRENT_STORY',
             severity: 'info',
-            message: `${relPath} exists but has no "## Current Story" section.`,
+            message: extraction.ambiguous
+                ? `${relPath} has more than one "## Current Story" section outside code blocks and comments; the section is ambiguous and was not read.`
+                : `${relPath} exists but has no "## Current Story" section.`,
         });
     }
     return {
@@ -273,7 +276,8 @@ function collectFreshness(targetDir, monolithRoot, root, story) {
         roadmapActiveStory: roadmap === null ? null : parseRoadmapActiveStory(roadmap),
         roadmapStatuses: roadmap === null ? new Map() : parseRoadmapStatuses(roadmap),
         storyIndexStatuses: storyIndex === null ? new Map() : parseStoryIndexStatuses(storyIndex),
-        recordedText: [...content.values()].filter((c) => c !== null).join('\n'),
+        // Ids shown only inside code fences or HTML comments are examples, not records.
+        recordedText: [...content.values()].filter((c) => c !== null).map(maskNonContent).join('\n'),
         stateFiles: new Set(stateFiles),
     };
     return { result: evaluateFreshness(evidence), evidence };

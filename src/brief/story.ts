@@ -7,7 +7,14 @@
  * heading, and a line that is exactly `---` (used in active.md as a visual
  * section separator). The "Current Story" section's content is everything
  * between its own heading line and the next such boundary.
+ *
+ * Headings and separators are structural only outside fenced code blocks and
+ * HTML comments (PSC-004): a `## Current Story` shown inside a Markdown
+ * example is not the section. If more than one real heading exists the
+ * section is ambiguous and is NOT read (`ambiguous: true`, no section): no
+ * consumer may guess which one is the project's current story.
  */
+import { maskNonContent } from './markdown-context.js';
 
 const CURRENT_STORY_HEADING_RE = /^##\s+Current Story\s*$/i;
 const HEADING_RE = /^#{1,6}\s+/;
@@ -18,26 +25,34 @@ export interface StoryExtraction {
   excerpt: string | null;
   /** 1-indexed inclusive line range, e.g. "24-29". */
   lineRange: string | null;
+  /** More than one real "## Current Story" heading; no section is returned. */
+  ambiguous?: boolean;
 }
 
 export function extractCurrentStory(content: string): StoryExtraction {
   const lines = content.split('\n');
+  // Same line count as `lines`; fenced / commented text is blank.
+  const structural = maskNonContent(content).split('\n');
 
-  let headingLineIdx = -1;
+  const headings: number[] = [];
   for (let i = 0; i < lines.length; i++) {
-    if (CURRENT_STORY_HEADING_RE.test(lines[i].trim())) {
-      headingLineIdx = i;
-      break;
-    }
+    // The heading line must be untouched by masking: a line carrying (or
+    // opening) an HTML comment is not a heading, so no comment state can leak
+    // from it into the section body.
+    if (CURRENT_STORY_HEADING_RE.test(structural[i].trim()) && structural[i].trim() === lines[i].trim()) headings.push(i);
   }
 
-  if (headingLineIdx === -1) {
+  if (headings.length === 0) {
     return { hasCurrentStorySection: false, excerpt: null, lineRange: null };
   }
+  if (headings.length > 1) {
+    return { hasCurrentStorySection: false, excerpt: null, lineRange: null, ambiguous: true };
+  }
+  const headingLineIdx = headings[0];
 
   let endIdx = lines.length;
   for (let i = headingLineIdx + 1; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
+    const trimmed = structural[i].trim();
     if (HEADING_RE.test(trimmed) || RULE_RE.test(trimmed)) {
       endIdx = i;
       break;

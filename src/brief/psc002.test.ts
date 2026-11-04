@@ -113,8 +113,8 @@ describe('PSC-002 unknown is not stale; historical documents (INV-5)', () => {
     expect(parseActiveStoryClaim('STORY-001 and STORY-002 are both under review')).toEqual({ kind: 'unknown' });
   });
 
-  it('historical document whose first line leads with one id is still read (compatibility)', () => {
-    expect(parseActiveStoryClaim('WIDGET-001 — in progress')).toEqual({ kind: 'ids', ids: ['WIDGET-001'] });
+  it('historical document whose first line is a bold declaration of one id is still read (compatibility)', () => {
+    expect(parseActiveStoryClaim('**WIDGET-001 — Some title**\nStatus: implemented')).toEqual({ kind: 'ids', ids: ['WIDGET-001'] });
     expect(parseActiveStoryClaim('**WIDGET-001** — in progress\n\nafter WIDGET-000')).toEqual({ kind: 'ids', ids: ['WIDGET-001'] });
   });
 
@@ -162,7 +162,7 @@ describe('PSC-002 confirmed contradictions are preserved (INV-6)', () => {
   });
 
   it('historical leading-id claim against a COMPLETED record is still a contradiction', () => {
-    const ev = evidence({ activeStory: parseActiveStoryClaim('WIDGET-001 — in progress'), roadmapStatuses: new Map([['WIDGET-001', 'COMPLETED']]) });
+    const ev = evidence({ activeStory: parseActiveStoryClaim('**WIDGET-001** — in progress'), roadmapStatuses: new Map([['WIDGET-001', 'COMPLETED']]) });
     expect(evaluateFreshness(ev).status).toBe('STALE');
   });
 });

@@ -27,5 +27,7 @@ export default defineConfig({
   build: {
     outDir: '../dist/ui',
     emptyOutDir: true,
+    // Keep the small brand mark as a real file in dist/ui/assets instead of a data: URI in the JS.
+    assetsInlineLimit: 0,
   },
 });

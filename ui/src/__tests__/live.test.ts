@@ -219,7 +219,12 @@ describe('App in LIVE mode (default)', () => {
     expect(w.text()).toContain('Real <b>Project</b>');
     await goTo(w, 'roadmap');
     expect(w.get('[data-testid="roadmap-text"]').element.textContent).toContain('<script>window.__pwn=1</script>');
-    const injected = await sweep(w, () => ['script', 'img', 'b'].some((t) => w.find(t).exists()));
+    // Whole document, not just the content column. The only element allowed through is the single
+    // static brand logo in the sidebar (trusted, no user data reaches it); any other script/img/b fails.
+    const untrusted = (tag: string): number =>
+      w.findAll(tag).filter((el) => !(tag === 'img' && el.element.matches('.sidebar .brand-logo'))).length;
+    expect(w.findAll('.sidebar img')).toHaveLength(1);
+    const injected = await sweep(w, () => ['script', 'img', 'b'].some((t) => untrusted(t) > 0));
     expect(injected).toEqual([false, false, false, false, false]);
     expect((window as unknown as { __pwn?: number }).__pwn).toBeUndefined();
   });

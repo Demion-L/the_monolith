@@ -80,6 +80,7 @@ An independent security review runs in a separate worktree
 - TD-007b — CLI usage text lists `status`/`dry-run` as implemented; both exit 1
 - STATE-001 — State Retention & Compaction — **PROPOSED / BACKLOG, registration only**; first step is an inventory (AUDIT ONLY), no design before it. See `tech-debt.md` (STATE-001 detail); related to MEM-001
 - MEM-001 — Memory Lifecycle — **PROPOSED / BACKLOG, registration only**; first step is an inventory of existing memory mechanisms (AUDIT ONLY). See `tech-debt.md` (MEM-001 detail); STATE-001 may become one of its foundations, the two are not merged
+- MONOLITH-DOCINT-001 — Documentation Reference Integrity Feasibility — **CANDIDATE / BACKLOG, registration only; priority MEDIUM; no code.** Future first stage is a feasibility study: (1) establish the actual contract of `monolith validate`; (2) check whether a link-checking mechanism already exists; (3) investigate the four broken links reported by SupportOps as a control example; (4) define safe resolution semantics for relative links; (5) decide whether one small read-only analyzer is enough; (6) prepare an implementation conclusion. Not started, not scheduled
 - Mission Control UI (read-only local web UI, stages UI-000…UI-005) — **architecture accepted (ADR-010), not implemented, unscheduled, no priority implied**; does not block or reorder any item above. See ADR-010 (`accepted`) and `.monolith/context/templates/plan-ui-mission-control.md`
 
 Terra persistence (`webway:ADR-006`) and Webway v1 improvements (frontmatter

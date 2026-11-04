@@ -349,11 +349,30 @@ version. Markers inside fenced code are examples, not blocks.
 
 | Verdict | Meaning |
 | --- | --- |
-| `ADD` | A MONOLITH-owned file is missing (`AGENT.md`, `skills/idea-capture/SKILL.md`); created exclusively. |
-| `UPDATE` | A managed block is appended to your file (every existing byte stays in place) or an **unedited** block is refreshed in place. Verified before writing; the file is re-checked just before the atomic replace. |
+| `ADD` | A MONOLITH-owned file is missing (`AGENT.md`, `skills/idea-capture/SKILL.md`, `skills/finalize-story/SKILL.md`); created exclusively. |
+| `UPDATE` | A managed block is appended to your file (every existing byte stays in place) or an **unedited** block is refreshed in place. The same verdict replaces a `finalize-story` skill that is **byte-identical** to a known older MONOLITH template (see below). Verified before writing; the file is re-checked just before the atomic replace. |
 | `UNCHANGED` | Already installed and current (an older unmanaged routing/index entry also counts). |
-| `CONFLICT` | Nothing is written to that file; the plan says how to resolve it and prints the block to add by hand. Causes: a block edited by you; malformed or duplicated managed markers (a damaged block); managed markers inside an HTML comment (the block would not be active); your own `AGENT.md` without markers; your own `Table 8` without `CAPTURE_IDEA`; a missing user file; a file that cannot be read safely; a file that is not valid UTF-8 (no encoding is converted; UTF-16 and binary files are refused too); a file that ends inside an unclosed ``` / ~~~ Markdown fence; or a file that ends inside an unclosed HTML comment (`<!--`), either of which would hide the new block. |
-| `SKIP` | Left alone on purpose (an existing differing `idea-capture` skill; the optional semantic-map rows). |
+| `CONFLICT` | Nothing is written to that file; the plan says how to resolve it and prints the block to add by hand. Causes: a block edited by you; malformed or duplicated managed markers (a damaged block); managed markers inside an HTML comment (the block would not be active); your own `AGENT.md` without markers; your own `Table 8` without `CAPTURE_IDEA`; a missing user file; a file that cannot be read safely; a file that is not valid UTF-8 (no encoding is converted; UTF-16 and binary files are refused too); a file that ends inside an unclosed ``` / ~~~ Markdown fence; or a file that ends inside an unclosed HTML comment (`<!--`), either of which would hide the new block; an edited `finalize-story` skill that does not describe `monolith finalize plan` / `apply`. |
+| `SKIP` | Left alone on purpose (an existing differing `idea-capture` skill; an edited `finalize-story` skill that does mention `finalize plan` / `apply`; the optional semantic-map rows). |
+
+**`finalize-story` skill (contract drift).** `monolith finalize plan` / `apply` is the only supported
+way to finalize a story, and the current skill says so and forbids finalizing by hand. An instance
+created before that carries a skill that describes manual Markdown steps, which an assistant may
+keep following. `update` classifies the installed skill by exact content, never by a phrase it
+contains:
+
+| Installed `skills/finalize-story/SKILL.md` | Verdict |
+| --- | --- |
+| missing | `ADD` (current template) |
+| identical to the current template | `UNCHANGED` |
+| byte-identical to a known older MONOLITH template (`0.1.0-alpha.0` … `alpha.2`; list in `src/update/legacy-skills.ts`) | `UPDATE`, replaced by the current template on `--apply` (nothing of yours is in it) |
+| edited by you, and it does not mention both `monolith finalize plan` and `monolith finalize apply` outside code fences and comments | `CONFLICT`: kept; the plan says to merge the template's "Deterministic Execution" section or to rename your file and re-run |
+| edited by you, and it mentions both | `SKIP`: kept; that it forbids manual finalization is **not** verified |
+
+The skill text is only classified: it is not executed and not trusted as authority. This is an
+instruction-level control: nothing technically prevents an assistant from editing Markdown directly.
+When a later release changes this skill, the then-current text is added to that list so an
+unedited copy keeps updating. `monolith validate` does not look at skill content.
 
 `COMPLETE` is a structural statement, not a promise about an AI model: it is reported only when
 nothing is left to add, change or resolve **and** the static consistency check passes: instructions → `AGENT.md` → skills index → routing → skill → CLI call →

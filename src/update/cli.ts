@@ -12,7 +12,7 @@ export const UPDATE_USAGE = `Usage: monolith update [--apply]
 
 Brings an existing MONOLITH instance up to the current agent integration: a
 stable entry point (<root>/AGENT.md), the idea-capture skill, its routing and the
-pointer in your AI instruction files.
+pointer in your AI instruction files, and an up-to-date finalize-story skill.
   (no flag)  Preview: shows the plan, writes nothing.
   --apply    Performs the plan: ADD creates a missing MONOLITH file, UPDATE adds
              or refreshes a managed block inside a file of yours.
@@ -26,6 +26,11 @@ What is written, and what is not:
     valid UTF-8 (no encoding is converted) or an unreadable file is CONFLICT: nothing is written there and the plan says how
     to resolve it. SKIP means left alone on purpose (e.g. your own skill).
   - Your existing skills, memory, state.json, ideas and text are never overwritten.
+    The one exception: a finalize-story skill byte-identical to a known older
+    MONOLITH template (nothing of yours in it) is replaced by the current one. An
+    edited finalize-story skill that does not describe \`monolith finalize plan\` /
+    \`apply\` is a CONFLICT (it may still tell an assistant to finalize by hand): it
+    is kept and the plan says how to merge it.
     Nothing is executed.
 Instances carry no template version, so state is read from the files. Safe to
 re-run. Not transactional and not coordinated between simultaneous runs: apply
@@ -67,13 +72,13 @@ function verdict(plan: UpdatePlan, stale: string[] = []): string {
   const pending = plan.items.filter((i) => i.action === 'ADD' || i.action === 'UPDATE').length;
   const manual = plan.items.filter((i) => i.action === 'CONFLICT').length;
   const broken = plan.chain.filter((c) => !c.ok).length;
-  if (pending === 0 && manual === 0 && broken === 0 && stale.length === 0) return 'Idea Capture integration: COMPLETE (the managed components are installed and pass the structural check; how an AI assistant behaves is not verified).';
+  if (pending === 0 && manual === 0 && broken === 0 && stale.length === 0) return 'Agent integration: COMPLETE (the managed components are installed and pass the structural check; how an AI assistant behaves is not verified).';
   const parts = [];
   if (pending > 0) parts.push(`${pending} change(s) to apply`);
   if (manual > 0) parts.push(`${manual} manual action(s)`);
   if (stale.length > 0) parts.push(`${stale.length} change(s) skipped because the file changed meanwhile`);
   if (broken > 0 && parts.length === 0) parts.push(`${broken} consistency check(s) failing`);
-  return `Idea Capture integration: INCOMPLETE (${parts.join(', ')}). A partly installed integration is not active.`;
+  return `Agent integration: INCOMPLETE (${parts.join(', ')}). A partly installed integration is not active.`;
 }
 
 export async function runUpdate(args: string[], targetDir = process.cwd()): Promise<number> {

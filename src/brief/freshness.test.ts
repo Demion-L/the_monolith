@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readdirSync } from 'fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
@@ -316,6 +316,31 @@ describe('monolith brief — Freshness end to end', () => {
       expect(stdout).toContain('Review project state before relying on this brief.');
       expect(stdout).toContain('Active Story: none recorded (this does not mean the project is complete)');
     }
+  });
+
+  it('DOGFOOD-003: STALE → UNKNOWN when state documents are edited but not committed; committing them gives FRESH', async () => {
+    const dir = makeProject({ git: true });
+    commitAll(dir, 'docs: state', 1);
+    write(dir, 'src/a.ts', 'export {};\n');
+    commitAll(dir, 'feat(GADGET-002): a', 2);
+    write(dir, 'src/b.ts', 'export {};\n');
+    commitAll(dir, 'tweak without a work item', 3);
+    expect((await briefOf(dir)).stdout.split('\n')[1]).toBe('Freshness: STALE');
+
+    // The owner records GADGET-002 in a state document but has not committed it yet.
+    const roadmap = readFileSync(join(dir, ROADMAP), 'utf8');
+    write(dir, ROADMAP, roadmap.replace('| WIDGET-001 |', '| GADGET-002 | G | COMPLETED | d |\n| WIDGET-001 |'));
+    const edited = await briefOf(dir);
+    // Contract: the named discrepancy is gone, but the baseline is still the last COMMIT touching a
+    // state document, and the later commit without a work item cannot be attributed. Not FRESH.
+    expect(edited.stdout.split('\n').slice(0, 2)).toEqual(['Completeness: COMPLETE', 'Freshness: UNKNOWN']);
+    expect(edited.stdout).toContain('UNATTRIBUTED_ACTIVITY');
+    const rec = await briefOf(dir, ['--reconcile']);
+    expect(rec.stdout).toContain('uncommitted edits count for "mentioned" but not for that baseline');
+
+    // Committing the update moves the baseline: positive evidence, FRESH.
+    commitAll(dir, 'docs: record GADGET-002', 4);
+    expect((await briefOf(dir)).stdout.split('\n')[1]).toBe('Freshness: FRESH');
   });
 
   it('FRESH is reported when the state is the newest thing in history', async () => {

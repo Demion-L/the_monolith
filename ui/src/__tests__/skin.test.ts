@@ -15,8 +15,23 @@ afterEach(() => {
 });
 
 describe('skin manager', () => {
-  it('defaults to classic', () => {
+  it('defaults to cosmic-glass when nothing is saved', () => {
+    expect(readSavedSkin()).toBe('cosmic-glass');
+    expect(initSkin()).toBe('cosmic-glass');
+    expect(document.documentElement.dataset.skin).toBe('cosmic-glass');
+  });
+
+  it('keeps an explicit Classic choice across reloads without overwriting it', () => {
+    setSkin('classic');
     expect(readSavedSkin()).toBe('classic');
+    expect(initSkin()).toBe('classic');
+    expect(window.localStorage.getItem(SKIN_STORAGE_KEY)).toBe('classic');
+  });
+
+  it('does not write storage just by reading the default', () => {
+    readSavedSkin();
+    initSkin();
+    expect(window.localStorage.getItem(SKIN_STORAGE_KEY)).toBeNull();
   });
 
   it('restores saved skins', () => {
@@ -26,18 +41,18 @@ describe('skin manager', () => {
     expect(readSavedSkin()).toBe('cosmic-glass');
   });
 
-  it('replaces an unknown id with classic', () => {
+  it('replaces an unknown id with the default skin', () => {
     window.localStorage.setItem(SKIN_STORAGE_KEY, 'neon');
-    expect(readSavedSkin()).toBe('classic');
-    expect(initSkin()).toBe('classic');
-    expect(document.documentElement.dataset.skin).toBe('classic');
+    expect(readSavedSkin()).toBe('cosmic-glass');
+    expect(initSkin()).toBe('cosmic-glass');
+    expect(document.documentElement.dataset.skin).toBe('cosmic-glass');
   });
 
-  it('falls back to classic when reading storage throws', () => {
+  it('falls back to cosmic-glass when reading storage throws', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('blocked');
     });
-    expect(readSavedSkin()).toBe('classic');
+    expect(readSavedSkin()).toBe('cosmic-glass');
   });
 
   it('does not throw when writing storage fails, and still applies the skin', () => {
@@ -81,7 +96,7 @@ describe('SkinSwitcher', () => {
   });
 
   it('has an accessible name', () => {
-    expect(mount(SkinSwitcher).get('select').attributes('aria-label')).toBe('Skin');
+    expect(mount(SkinSwitcher).get('select').attributes('aria-label')).toBe('Appearance');
   });
 
   it('applies and persists the chosen skin', async () => {

@@ -20,17 +20,17 @@ function onChange(event: Event): void {
 
 <template>
   <label class="skin-switcher">
-    Skin
-    <select :value="selected" data-testid="skin-select" aria-label="Skin" @change="onChange">
+    Appearance
+    <select :value="selected" data-testid="skin-select" aria-label="Appearance" @change="onChange">
       <option v-for="id in SKINS" :key="id" :value="id">{{ labels[id] }}</option>
     </select>
   </label>
 </template>
 
 <style scoped>
-.skin-switcher { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+.skin-switcher { color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .skin-switcher select {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--control-border); border-radius: 4px; padding: 2px 6px;
+  border: 1px solid var(--control-border); border-radius: 4px; padding: 4px 6px;
 }
 </style>

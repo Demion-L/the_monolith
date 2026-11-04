@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App.vue';
@@ -31,6 +33,23 @@ describe('layout shell', () => {
       await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
     }
+  });
+
+  it('puts the skin switcher at the top of the sidebar, before the section links', () => {
+    const w = mount(App);
+    const panel = w.get('.sidebar-panel').element;
+    const children = Array.from(panel.children);
+    const switcher = panel.querySelector('.skin-switcher')!;
+    const nav = panel.querySelector('nav.nav')!;
+    expect(children.indexOf(switcher)).toBe(0);
+    expect(children.indexOf(switcher)).toBeLessThan(children.indexOf(nav));
+    expect(w.findAll('[data-testid="skin-select"]')).toHaveLength(1);
+    expect(switcher.textContent).toContain('Appearance');
+  });
+
+  it('reserves the scrollbar gutter on the viewport scroller (no horizontal shift)', () => {
+    const css = readFileSync(resolve(__dirname, '../styles/main.css'), 'utf8');
+    expect(css).toMatch(/(^|\n)html\s*\{[^}]*scrollbar-gutter:\s*stable/);
   });
 
   it('has no duplicate ids', () => {

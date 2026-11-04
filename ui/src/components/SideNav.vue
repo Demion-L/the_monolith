@@ -53,6 +53,7 @@ function onKeydown(event: KeyboardEvent): void {
       </button>
     </div>
     <div id="sidebar-panel" class="sidebar-panel" data-testid="sidebar-panel">
+      <SkinSwitcher />
       <nav v-if="sections" class="nav" aria-label="Sections">
         <a
           v-for="link in SECTIONS"
@@ -63,7 +64,6 @@ function onKeydown(event: KeyboardEvent): void {
           >{{ link.label }}</a
         >
       </nav>
-      <SkinSwitcher />
     </div>
   </aside>
 </template>

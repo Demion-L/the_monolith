@@ -63,7 +63,7 @@
   border-left-color: #d3ccff;
   box-shadow: none;
 }
-:root[data-skin="cosmic-glass"] .sidebar-panel .skin-switcher { border-top-color: var(--border); }
+:root[data-skin="cosmic-glass"] .sidebar-panel .skin-switcher { border-bottom-color: var(--border); }
 
 /* Topbar */
 :root[data-skin="cosmic-glass"] .topbar {

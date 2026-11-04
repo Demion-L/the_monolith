@@ -1,14 +1,14 @@
 export const SKINS = ['classic', 'cosmic-glass'] as const;
 export type SkinId = (typeof SKINS)[number];
 
-export const DEFAULT_SKIN: SkinId = 'classic';
+export const DEFAULT_SKIN: SkinId = 'cosmic-glass';
 export const SKIN_STORAGE_KEY = 'monolith.skin';
 
 export function isSkinId(value: unknown): value is SkinId {
   return typeof value === 'string' && (SKINS as readonly string[]).includes(value);
 }
 
-// Storage may be missing, blocked or throwing; every failure degrades to Classic.
+// Storage may be missing, blocked or throwing; every failure degrades to the default skin.
 export function readSavedSkin(): SkinId {
   try {
     const saved = window.localStorage.getItem(SKIN_STORAGE_KEY);

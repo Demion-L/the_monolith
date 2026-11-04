@@ -8,7 +8,7 @@
   --border: rgba(190, 200, 255, 0.2);
   --control-border: rgba(204, 212, 255, 0.52);
   --text: #f1f4ff;
-  --muted: #b8c3df;
+  --muted: #c6d0e8;
   --accent: #b4a9ff;
   --ok: #5fd68a;
   --warn: #f0c040;
@@ -50,7 +50,8 @@
   box-shadow: 1px 0 0 rgba(150, 140, 255, 0.08), 6px 0 28px rgba(2, 3, 14, 0.35);
 }
 :root[data-skin="cosmic-glass"] .brand strong { color: var(--text); letter-spacing: 0.16em; }
-:root[data-skin="cosmic-glass"] .brand .muted { font-size: 13px; }
+:root[data-skin="cosmic-glass"] .brand .muted { font-size: var(--fs-meta); }
+:root[data-skin="cosmic-glass"] .brand-logo { border-radius: 9px; box-shadow: 0 0 0 1px rgba(190, 200, 255, 0.28), 0 2px 12px rgba(2, 3, 14, 0.5); }
 :root[data-skin="cosmic-glass"] .nav a { color: var(--muted); border-left: 2px solid transparent; border-radius: 0 6px 6px 0; }
 :root[data-skin="cosmic-glass"] .nav a:hover {
   color: var(--text);
@@ -72,7 +73,7 @@
   border-bottom-color: var(--border);
   box-shadow: 0 6px 24px rgba(2, 3, 14, 0.3);
 }
-:root[data-skin="cosmic-glass"] .project { font-size: 16px; letter-spacing: 0.01em; }
+:root[data-skin="cosmic-glass"] .project { font-size: var(--fs-project); letter-spacing: 0.01em; }
 :root[data-skin="cosmic-glass"] .live-badge {
   background: #14532f; color: #eafff3;
   border: 1px solid #5fd68a;
@@ -89,18 +90,18 @@
   padding: 18px 22px;
 }
 :root[data-skin="cosmic-glass"] .panel h2 {
-  font-size: 14px; letter-spacing: 0.08em; font-weight: 700;
+  font-size: var(--fs-h2); letter-spacing: 0.08em; font-weight: 700;
   padding-bottom: 8px; margin-bottom: 14px;
   border-bottom: 1px solid var(--border);
 }
-:root[data-skin="cosmic-glass"] .panel h3 { font-size: 15px; font-weight: 650; }
+:root[data-skin="cosmic-glass"] .panel h3 { font-size: var(--fs-h3); font-weight: 650; }
 :root[data-skin="cosmic-glass"] .card {
   background: var(--surface-2);
   border-radius: 8px;
   box-shadow: var(--glass-edge);
   line-height: 1.55;
 }
-:root[data-skin="cosmic-glass"] .facts dt { font-size: 13px; }
+:root[data-skin="cosmic-glass"] .facts dt { font-size: var(--fs-secondary); }
 /* Long-form text sits on a denser surface than the rest. */
 :root[data-skin="cosmic-glass"] .roadmap,
 :root[data-skin="cosmic-glass"] .story {

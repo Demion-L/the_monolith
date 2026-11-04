@@ -28,9 +28,9 @@ function onChange(event: Event): void {
 </template>
 
 <style scoped>
-.skin-switcher { color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.skin-switcher { color: var(--muted); font-size: var(--fs-secondary); display: flex; flex-direction: column; gap: 4px; }
 .skin-switcher select {
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--control-border); border-radius: 4px; padding: 4px 6px;
+  border: 1px solid var(--control-border); border-radius: 4px; padding: 4px 6px; font: inherit;
 }
 </style>

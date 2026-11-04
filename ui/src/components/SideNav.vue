@@ -37,8 +37,11 @@ function onKeydown(event: KeyboardEvent): void {
   <aside class="sidebar" :class="{ open }" @keydown="onKeydown">
     <div class="sidebar-head">
       <div class="brand">
-        <strong>MONOLITH</strong>
-        <span class="muted">Mission Control</span>
+        <img class="brand-logo" src="../assets/monolith-mark.webp" alt="" width="40" height="40" />
+        <span class="brand-text">
+          <strong>MONOLITH</strong>
+          <span class="muted">Mission Control</span>
+        </span>
       </div>
       <button
         ref="toggle"

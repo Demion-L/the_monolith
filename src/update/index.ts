@@ -7,6 +7,12 @@
  * read from the files themselves):
  *  - MONOLITH-owned, created when absent: `<root>/AGENT.md`, the `idea-capture`
  *    skill. An existing skill is never overwritten, whatever it contains.
+ *  - `finalize-story` skill (DOGFOOD-002): created when absent; replaced ONLY when
+ *    it is byte-identical to a known older MONOLITH template (sha256 list in
+ *    legacy-skills.ts), so nothing of the user's is lost. A customized one is
+ *    never replaced: without the `finalize plan` / `finalize apply` contract it
+ *    is a CONFLICT (possible contract drift), with it a SKIP. Its content is
+ *    only classified, never trusted as authority and never executed.
  *  - Mixed (user-owned file + MONOLITH text): CLAUDE.md / AGENTS.md /
  *    .cursorrules / .windsurfrules, routing-map, skills index. MONOLITH text
  *    lives only in checksummed managed blocks (src/managed). A missing block is
@@ -40,6 +46,7 @@ import {
 } from '../root/index.js';
 import { TEMPLATES_ROOT, substitute } from '../init/scaffold.js';
 import { listIdeas, ideaStore } from '../ideas/store.js';
+import { FINALIZE_STORY_LEGACY } from './legacy-skills.js';
 import { blockBody, inspectBlock, planAppend, planRefresh, prose, renderBlock, type BlockId } from '../managed/index.js';
 
 export type UpdateAction = 'ADD' | 'UPDATE' | 'UNCHANGED' | 'CONFLICT' | 'SKIP';
@@ -150,6 +157,44 @@ function blockItem(projectRoot: string, root: string, spec: BlockSpec): UpdateIt
   }
 }
 
+const FINALIZE_SKILL_TEMPLATE = 'monolith/skills/finalize-story/SKILL.md';
+
+/**
+ * The `finalize-story` skill against the current template (DOGFOOD-002). A known older template
+ * is recognised by exact hash, not by searching text, so a user's file is never "recognised" by
+ * a phrase it happens to contain.
+ */
+function finalizeSkillItem(projectRoot: string, r: string, vars: Record<string, string>): { item: UpdateItem; text: string | null } {
+  const rel = `${r}/skills/finalize-story/SKILL.md`;
+  const template = readTemplate(FINALIZE_SKILL_TEMPLATE, vars);
+  const effect = 'the finalize-story skill requires the deterministic plan → approval → apply flow and forbids manual finalization';
+  const read = readInstanceFile(projectRoot, rel, true);
+  if (read.kind === 'unsafe') return { item: { path: rel, action: 'CONFLICT', reason: `cannot be read safely (${read.detail}); not inspected or changed` }, text: null };
+  if (read.kind === 'missing') return { item: { path: rel, action: 'ADD', reason: 'new file from the current template', content: template, effect }, text: null };
+  const text = read.content;
+  if (text === template) return { item: { path: rel, action: 'UNCHANGED', reason: 'identical to the current template' }, text };
+  const known = FINALIZE_STORY_LEGACY[sha(text)];
+  if (known !== undefined) {
+    return {
+      item: { path: rel, action: 'UPDATE', reason: `unedited older MONOLITH template (${known}); replace with the current one`, content: template, before: sha(text), effect },
+      text,
+    };
+  }
+  const visible = prose(text);
+  if (/monolith finalize plan/.test(visible) && /monolith finalize apply/.test(visible)) {
+    return { item: { path: rel, action: 'SKIP', reason: 'customized (differs from the current template); not overwritten. It mentions `finalize plan` / `finalize apply`; that it forbids manual finalization is not verified' }, text };
+  }
+  return {
+    item: {
+      path: rel,
+      action: 'CONFLICT',
+      reason: 'customized, and it does not describe `monolith finalize plan` / `apply`: it may still tell an assistant to finalize by hand. Your file is not changed',
+      proposal: `Compare your file with the current template (templates/default-instance/${FINALIZE_SKILL_TEMPLATE} in the monolith package) and merge its "Deterministic Execution" section, or rename ${rel} and re-run \`monolith update --apply\` to get the current skill.\n`,
+    },
+    text,
+  };
+}
+
 /**
  * Read-only. Throws RootContainmentError when the root/config is unusable and
  * `Error` when the directory is not a MONOLITH instance.
@@ -191,6 +236,9 @@ export function planUpdate(target: string): UpdatePlan {
     skillText = skill.content;
     items.push({ path: skillRel, action: 'SKIP', reason: 'exists and differs from the current template (customized or older); not overwritten' });
   }
+
+  const fin = finalizeSkillItem(pr, r, vars);
+  items.push(fin.item);
 
   items.push(
     blockItem(pr, r, {
@@ -249,11 +297,11 @@ export function planUpdate(target: string): UpdatePlan {
   if (sem.kind === 'ok' && /monolith idea/.test(sem.content)) items.push({ path: semRel, action: 'UNCHANGED', reason: 'ideas rows present' });
   else items.push({ path: semRel, action: 'SKIP', reason: 'optional: ideas rows in the semantic map are documentation only; not required for Idea Capture' });
 
-  return { monolithRoot: r, items, chain: chainChecks(pr, r, items, skillText) };
+  return { monolithRoot: r, items, chain: chainChecks(pr, r, items, skillText, fin.text) };
 }
 
 /** Static check of the whole chain. Only files MONOLITH can reason about; nothing is executed. */
-function chainChecks(projectRoot: string, r: string, items: UpdateItem[], skillText: string | null): ChainCheck[] {
+function chainChecks(projectRoot: string, r: string, items: UpdateItem[], skillText: string | null, finalizeText: string | null): ChainCheck[] {
   const state = (path: string): UpdateItem | undefined => items.find((i) => i.path === path);
   const ok = (i: UpdateItem | undefined): boolean => i?.action === 'UNCHANGED';
   const instruction = items.filter((i) => i.path !== `${r}/AGENT.md` && !i.path.startsWith(`${r}/`));
@@ -272,6 +320,13 @@ function chainChecks(projectRoot: string, r: string, items: UpdateItem[], skillT
     skillPresent && skillText !== null && /monolith idea add/.test(prose(skillText)),
     'the skill calls `monolith idea add`',
     'the skill does not call `monolith idea add` (a customized skill may have dropped it)',
+  );
+  const finItem = state(`${r}/skills/finalize-story/SKILL.md`);
+  add(
+    'finalize skill → CLI',
+    finItem?.action === 'UNCHANGED' || (finItem?.action === 'SKIP' && finalizeText !== null),
+    'the finalize-story skill is current (or customized and mentions `finalize plan` / `apply`)',
+    'the finalize-story skill is missing, outdated or does not describe `monolith finalize plan` / `apply`',
   );
   let storage = '';
   try {
@@ -301,7 +356,7 @@ export interface ApplyResult {
 
 /** Apply order: MONOLITH-owned files first, the pointer in the root instruction files last. */
 function rank(item: UpdateItem, r: string): number {
-  if (item.path.startsWith(`${r}/skills/idea-capture/`)) return 0;
+  if (item.path.startsWith(`${r}/skills/idea-capture/`) || item.path.startsWith(`${r}/skills/finalize-story/`)) return 0;
   if (item.path === `${r}/AGENT.md`) return 1;
   if (item.path.startsWith(`${r}/`)) return 2;
   return 3;

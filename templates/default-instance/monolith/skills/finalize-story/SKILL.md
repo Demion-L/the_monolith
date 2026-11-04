@@ -30,8 +30,24 @@ Triggered by: "finalize story", "complete story", "mark story done"
 
 ## Deterministic Execution (`monolith finalize`)
 
-Where the CLI provides `monolith finalize`, use it instead of editing the memory
-files by hand (Steps 2-6 below describe what it writes; Step 1 and 5.5 stay yours).
+Finalization is deterministic and goes through the CLI, in this order:
+
+```text
+Proposal -> monolith finalize plan -> READY + digest -> Owner Approval
+         -> monolith finalize apply -> Verification
+```
+
+**Do not finalize by hand.** Never edit `active.md`, `story-index.md`,
+`execution-history.md`, a story capsule or any other finalization target yourself
+in order to "finalize" a story, and never skip `plan`, the owner's approval or
+`apply`. If `monolith finalize` is unavailable, fails or reports `NOT_READY` /
+`REFUSED` / `INCOMPLETE`, stop, report the output and ask the owner; do not fall
+back to the manual Steps below. This is an instruction to you, not a technical
+barrier: the CLI cannot stop an assistant from editing Markdown directly, so
+following it is your responsibility.
+
+Steps 2-6 below only describe what `monolith finalize apply` writes; they are not a
+manual procedure. Step 1 (the integrity and governance results, item 1 below) stays yours.
 
 0. **Structural story identity (required before `plan`).** `monolith finalize` knows
    which story is active only from one field line in the `## Current Story` section of
@@ -80,7 +96,7 @@ if `monolith.config.json` lists them in `finalization.requiredDocs` / `allowedDo
 
 ## Steps
 
-### Step 1 — Verify integrity
+### Step 1 — Verify integrity (yours)
 
 Run integrity verification. All checks must pass before proceeding.
 

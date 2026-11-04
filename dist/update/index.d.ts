@@ -7,6 +7,12 @@
  * read from the files themselves):
  *  - MONOLITH-owned, created when absent: `<root>/AGENT.md`, the `idea-capture`
  *    skill. An existing skill is never overwritten, whatever it contains.
+ *  - `finalize-story` skill (DOGFOOD-002): created when absent; replaced ONLY when
+ *    it is byte-identical to a known older MONOLITH template (sha256 list in
+ *    legacy-skills.ts), so nothing of the user's is lost. A customized one is
+ *    never replaced: without the `finalize plan` / `finalize apply` contract it
+ *    is a CONFLICT (possible contract drift), with it a SKIP. Its content is
+ *    only classified, never trusted as authority and never executed.
  *  - Mixed (user-owned file + MONOLITH text): CLAUDE.md / AGENTS.md /
  *    .cursorrules / .windsurfrules, routing-map, skills index. MONOLITH text
  *    lives only in checksummed managed blocks (src/managed). A missing block is

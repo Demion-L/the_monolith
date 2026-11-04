@@ -7,6 +7,9 @@ import type { ProjectConfig } from '../init/types.js';
 import { applyPlan, integrationComplete, planUpdate } from './index.js';
 import { inspectBlock, blockBody, renderBlock } from '../managed/index.js';
 import { runUpdate, UPDATE_USAGE } from './cli.js';
+import { FINALIZE_STORY_CURRENT, FINALIZE_STORY_LEGACY } from './legacy-skills.js';
+import { createHash } from 'crypto';
+import { TEMPLATES_ROOT } from '../init/scaffold.js';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -733,5 +736,178 @@ describe('monolith update — F-4 help and F-6 template', () => {
     expect(row).toContain('\\|');
     // 4 columns = 5 unescaped pipes
     expect(row.replace(/\\\|/g, '').match(/\|/g)?.length).toBe(5);
+  });
+});
+
+// ---- DOGFOOD-002: finalize-story skill/CLI contract drift ----------------------------------
+
+const FIN = '.monolith/skills/finalize-story/SKILL.md';
+const fixture = (n: string): string => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
+const shaOf = (s: string): string => createHash('sha256').update(s).digest('hex');
+const TEMPLATE_FIN = readFileSync(join(TEMPLATES_ROOT, 'monolith/skills/finalize-story/SKILL.md'), 'utf8');
+
+describe('monolith update — DOGFOOD-002 finalize-story skill', () => {
+  it('a new instance carries the current skill, which forbids manual finalization and states the flow', async () => {
+    const d = await newInstance();
+    expect(read(d, FIN)).toBe(TEMPLATE_FIN);
+    expect(actions(d)[FIN]).toBe('UNCHANGED');
+    expect(TEMPLATE_FIN).toContain('Do not finalize by hand');
+    expect(TEMPLATE_FIN).toContain('monolith finalize plan');
+    expect(TEMPLATE_FIN).toContain('monolith finalize apply');
+    expect(TEMPLATE_FIN).toContain('Owner Approval');
+    expect(TEMPLATE_FIN).toMatch(/not a technical\s+barrier/);
+    expect(planUpdate(d).chain.find((c) => c.link === 'finalize skill → CLI')?.ok).toBe(true);
+  });
+
+  it('the hash list knows the released alpha.0/alpha.1 and alpha.2 templates, and not the current one', () => {
+    expect(FINALIZE_STORY_LEGACY[shaOf(fixture('finalize-story.alpha1.md'))]).toBeDefined();
+    expect(FINALIZE_STORY_LEGACY[shaOf(fixture('finalize-story.alpha2.md'))]).toBeDefined();
+    expect(FINALIZE_STORY_LEGACY[shaOf(TEMPLATE_FIN)]).toBeUndefined();
+  });
+
+  it.each(['finalize-story.alpha1.md', 'finalize-story.alpha2.md'])('detects the unedited legacy skill %s, previews without writing, then updates only that file', async (name) => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), fixture(name));
+    mkdirSync(join(d, '.monolith/memory/long-term/ideas'), { recursive: true });
+    writeFileSync(join(d, '.monolith/memory/working/active.md'), 'my story\n');
+    const before = snapshot(d);
+    const plan = planUpdate(d);
+    const item = plan.items.find((i) => i.path === FIN);
+    expect(item?.action).toBe('UPDATE');
+    expect(integrationComplete(plan)).toBe(false);
+    expect(plan.chain.find((c) => c.link === 'finalize skill → CLI')?.ok).toBe(false);
+    expect(snapshot(d)).toEqual(before); // preview wrote nothing
+
+    const logs = quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(0);
+    const after = snapshot(d);
+    expect(after[FIN]).toBe(TEMPLATE_FIN);
+    for (const k of Object.keys(before)) if (k !== FIN) expect(after[k]).toBe(before[k]); // nothing else changed
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    expect(logs.join('\n')).toContain('COMPLETE');
+
+    // idempotent
+    const once = snapshot(d);
+    expect(await runUpdate(['--apply'], d)).toBe(0);
+    expect(snapshot(d)).toEqual(once);
+    expect(actions(d)[FIN]).toBe('UNCHANGED');
+  });
+
+  it('a legacy skill with one byte of user change is a CONFLICT and is kept', async () => {
+    const d = await newInstance();
+    const mine = fixture('finalize-story.alpha1.md') + '\nMy rule: always finalize by editing active.md directly.\n';
+    writeFileSync(join(d, FIN), mine);
+    const plan = planUpdate(d);
+    const item = plan.items.find((i) => i.path === FIN);
+    expect(item?.action).toBe('CONFLICT');
+    expect(item?.reason).toMatch(/finalize by hand/);
+    expect(item?.proposal).toContain('Deterministic Execution');
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(2);
+    expect(read(d, FIN)).toBe(mine);
+  });
+
+  it('a customized skill that describes finalize plan/apply is SKIP (kept, not claimed compliant)', async () => {
+    const d = await newInstance();
+    const mine = '# my finalize\nRun `monolith finalize plan`, ask me, then `monolith finalize apply`.\n';
+    writeFileSync(join(d, FIN), mine);
+    const item = planUpdate(d).items.find((i) => i.path === FIN);
+    expect(item?.action).toBe('SKIP');
+    expect(item?.reason).toMatch(/not verified/);
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(0);
+    expect(read(d, FIN)).toBe(mine);
+  });
+
+  it('mentions of the contract only inside a code fence or comment do not count', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), '# mine\nedit active.md by hand\n```\nmonolith finalize plan\nmonolith finalize apply\n```\n<!-- monolith finalize plan monolith finalize apply -->\n');
+    expect(actions(d)[FIN]).toBe('CONFLICT');
+  });
+
+  it('a missing skill is added from the template', async () => {
+    const d = await newInstance();
+    rmSync(join(d, '.monolith/skills/finalize-story'), { recursive: true });
+    expect(actions(d)[FIN]).toBe('ADD');
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(0);
+    expect(read(d, FIN)).toBe(TEMPLATE_FIN);
+  });
+
+  it('a symlinked skill file is a CONFLICT, never read or replaced through the link', async () => {
+    const d = await newInstance();
+    const outside = tmp();
+    writeFileSync(join(outside, 'x.md'), fixture('finalize-story.alpha1.md'));
+    rmSync(join(d, FIN));
+    symlinkSync(join(outside, 'x.md'), join(d, FIN));
+    expect(actions(d)[FIN]).toBe('CONFLICT');
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(2);
+    expect(readFileSync(join(outside, 'x.md'), 'utf8')).toBe(fixture('finalize-story.alpha1.md'));
+    expect(lstatSync(join(d, FIN)).isSymbolicLink()).toBe(true);
+  });
+
+  it('a hardlinked legacy skill is a CONFLICT: the other name is never rewritten', async () => {
+    const d = await newInstance();
+    const outside = tmp();
+    writeFileSync(join(outside, 'x.md'), fixture('finalize-story.alpha1.md'));
+    rmSync(join(d, FIN));
+    linkSync(join(outside, 'x.md'), join(d, FIN));
+    expect(actions(d)[FIN]).toBe('CONFLICT');
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(2);
+    expect(readFileSync(join(outside, 'x.md'), 'utf8')).toBe(fixture('finalize-story.alpha1.md'));
+    expect(read(d, FIN)).toBe(fixture('finalize-story.alpha1.md'));
+  });
+
+  it('a non-UTF-8 skill is a CONFLICT and untouched', async () => {
+    const d = await newInstance();
+    const bytes = Buffer.from([0xff, 0xfe, 0x41, 0x00]);
+    writeFileSync(join(d, FIN), bytes);
+    expect(actions(d)[FIN]).toBe('CONFLICT');
+    quiet();
+    await runUpdate(['--apply'], d);
+    expect(readFileSync(join(d, FIN)).equals(bytes)).toBe(true);
+  });
+
+  it('a skill edited between preview and apply is reported stale and kept', async () => {
+    const d = await newInstance();
+    writeFileSync(join(d, FIN), fixture('finalize-story.alpha1.md'));
+    const plan = planUpdate(d);
+    const edited = fixture('finalize-story.alpha1.md') + '\nedited meanwhile\n';
+    writeFileSync(join(d, FIN), edited);
+    const r = applyPlan(d, plan);
+    expect(r.stale).toContain(FIN);
+    expect(read(d, FIN)).toBe(edited);
+  });
+
+  it('an old (alpha.0) instance gets the current finalize skill together with Idea Capture', async () => {
+    const d = await oldInstance();
+    writeFileSync(join(d, FIN), fixture('finalize-story.alpha1.md'));
+    quiet();
+    expect(await runUpdate(['--apply'], d)).toBe(0);
+    expect(read(d, FIN)).toBe(TEMPLATE_FIN);
+    expect(integrationComplete(planUpdate(d))).toBe(true);
+  });
+});
+
+describe('legacy skill registry stays in sync with the templates', () => {
+  it('every registered hash is a well-formed sha256 with a label', () => {
+    for (const [h, label] of Object.entries(FINALIZE_STORY_LEGACY)) {
+      expect(h).toMatch(/^[0-9a-f]{64}$/);
+      expect(label.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('the pinned current hash equals the shipped template and is not also registered as legacy', () => {
+    // Fails after any edit of the template: move the old hash into FINALIZE_STORY_LEGACY, then update FINALIZE_STORY_CURRENT.
+    expect(shaOf(TEMPLATE_FIN)).toBe(FINALIZE_STORY_CURRENT);
+    expect(FINALIZE_STORY_LEGACY[FINALIZE_STORY_CURRENT]).toBeUndefined();
+  });
+
+  it('released templates (alpha.1, alpha.2 fixtures) are registered with their exact hashes', () => {
+    expect(shaOf(fixture('finalize-story.alpha1.md'))).toBe('8d7011640de68df5e4aad3f1ff5ecf421d1f7a3b454f3c51f12079cfea743b8a');
+    expect(shaOf(fixture('finalize-story.alpha2.md'))).toBe('31cc69d09ba4996f71b497f1f4454912ab497c1bcd766f4b7b337c34384efd2d');
+    for (const n of ['finalize-story.alpha1.md', 'finalize-story.alpha2.md']) expect(FINALIZE_STORY_LEGACY[shaOf(fixture(n))]).toBeDefined();
   });
 });

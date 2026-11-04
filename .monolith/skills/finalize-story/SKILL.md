@@ -26,14 +26,31 @@ Triggered by: "finalize story", "finalize X.Y", "complete story", "mark story do
 - User has confirmed the story is done (or the request itself implies it)
 - No active blockers
 
-Note: `active.md` may or may not have a registered story entry — proceed either way for the manual steps below. `monolith finalize` is stricter: it requires the structural `**Story:** <id>` line (see Deterministic Execution, item 0).
+Note: `monolith finalize` requires the structural `**Story:** <id>` line in `active.md` (see Deterministic Execution, item 0). If it is missing, do not fall back to manual finalization: report it to the owner.
 
 ---
 
 ## Deterministic Execution (`monolith finalize`)
 
-Where the CLI provides `monolith finalize`, use it instead of editing the memory
-files by hand (Steps 2-6 below describe what it writes; Step 1 and 5.5 stay yours).
+Finalization is deterministic and goes through the CLI, in this order:
+
+```text
+Proposal -> monolith finalize plan -> READY + digest -> Owner Approval
+         -> monolith finalize apply -> Verification
+```
+
+**Do not finalize by hand.** Never edit `active.md`, `story-index.md`,
+`execution-history.md`, a story capsule or any other finalization target yourself
+in order to "finalize" a story, and never skip `plan`, the owner's approval or
+`apply`. If `monolith finalize` fails or reports `NOT_READY` / `REFUSED` /
+`INCOMPLETE`, stop, report the output and ask the owner; do not fall back to the
+Steps below. This is an instruction to you, not a technical barrier: the CLI cannot
+stop an assistant from editing Markdown directly, so following it is your responsibility.
+
+Steps 2-6 below describe what `monolith finalize apply` writes (capsule, `active.md`,
+story index, execution history, optional `HANDOFF.md` and `docUpdates`); they are reference, not a manual procedure. Yours remain: Step 1
+(build and integrity/governance results), Step 2.5 (lessons), Step 5.5
+(documentation synchronization, before `plan`) and Step 7 (commit, only when the owner asks).
 
 0. **Structural story identity (required before `plan`).** `monolith finalize` knows
    which story is active only from one field line in the `## Current Story` section of
@@ -81,6 +98,9 @@ if `monolith.config.json` lists them in `finalization.requiredDocs` / `allowedDo
 ---
 
 ## Steps
+
+> Reference for what `monolith finalize apply` writes. Do not perform Steps 2-6 by hand;
+> see Deterministic Execution above. Steps 1, 2.5, 5.5 and 7 are yours.
 
 ### Step 1 — Verify build
 
@@ -243,7 +263,7 @@ Rewrite `context/boot/HANDOFF.md` with current state:
 
 ### Step 7 — Git commit
 
-Stage all modified memory files and commit:
+After `apply` printed `FINALIZED` / `ALREADY_FINALIZED` and the owner asks for a commit, stage the modified memory files and commit:
 
 ```
 git add .monolith/memory/ .monolith/context/boot/HANDOFF.md
@@ -264,4 +284,4 @@ Do NOT push automatically. Ask the user if they want to push.
 - [ ] ADR Index (`docs/adr/README.md`) updated (if ADR was written); `decisions.md` updated (only for a non-ADR decision)
 - [ ] Documentation Synchronization complete (Step 5.5) — no known contradiction between docs and implementation left unresolved
 - [ ] `HANDOFF.md` current
-- [ ] Commit created
+- [ ] Commit created (only if the owner asked)

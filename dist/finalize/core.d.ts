@@ -101,6 +101,8 @@ export type ActiveIdentity = {
  * evidence files and `## Last Finalization`); its FIRST token is the id. Ids
  * mentioned in titles, descriptions, comments, code fences or other fields carry
  * no authority. Zero, several, or malformed field lines → no identity (fail closed).
+ * A section whose first visible line says "no active story" AND that has a
+ * structural field is contradictory → no identity (PSC-004A).
  */
 export declare function activeStoryIdentity(currentStoryBody: string): ActiveIdentity;
 export declare function planFinalization(targetDir: string, proposal: FinalizationProposal): FinalizationPlan;

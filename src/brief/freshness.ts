@@ -21,7 +21,7 @@
  */
 
 import { isIdeaId } from '../ideas/format.js';
-import { maskNonContent } from './markdown-context.js';
+import { declaresNoActiveStory, maskNonContent } from './markdown-context.js';
 
 export type FreshnessStatus = 'FRESH' | 'STALE' | 'UNKNOWN';
 
@@ -69,7 +69,11 @@ export type GitSignals =
 export type StoryClaim =
   | { kind: 'none' }
   | { kind: 'ids'; ids: string[] }
-  | { kind: 'unknown' };
+  /**
+   * `contradiction`: the section both says "no active story" and has a
+   * structural `**Story:**` field (PSC-004A) — the field value(s), verbatim.
+   */
+  | { kind: 'unknown'; contradiction?: string[] };
 
 export interface FreshnessEvidence {
   git: GitSignals;
@@ -165,18 +169,23 @@ const STORY_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
  * line (`STORY-001 was completed yesterday.`, `STORY-001 — done`) is
  * indistinguishable from a sentence that merely mentions a story, so it is
  * `unknown`, never a confirmed identity.
+ *
+ * "No active story" as the first visible line is `none` only when the section
+ * has no structural `**Story:**` field at all; with one (valid, duplicate or
+ * malformed) the section contradicts itself → `unknown` with `contradiction`
+ * (PSC-004A, same rule as DOCSYNC's `activeStoryIdentity()`).
  */
 export function parseActiveStoryClaim(excerpt: string | null): StoryClaim {
   if (excerpt === null) return { kind: 'unknown' };
   const masked = maskNonContent(excerpt);
   const firstLine = masked.split('\n').find((l) => l.trim() !== '') ?? '';
-  if (/^\W*no active story\b/i.test(firstLine)) return { kind: 'none' };
 
   const fields = masked
     .split('\n')
     .map((l) => /^\*\*Story:\*\*[ \t]*(.*)$/.exec(l.replace(/\r$/, '')))
     .filter((m): m is RegExpExecArray => m !== null)
     .map((m) => m[1].trim());
+  if (declaresNoActiveStory(excerpt)) return fields.length === 0 ? { kind: 'none' } : { kind: 'unknown', contradiction: fields };
   if (fields.length > 0) {
     if (fields.length > 1) return { kind: 'unknown' };
     const id = /^(\S+)(?:\s|$)/.exec(fields[0])?.[1];
@@ -253,6 +262,13 @@ interface Contradiction {
 
 function findContradictions(ev: FreshnessEvidence): Contradiction[] {
   const out: Contradiction[] = [];
+
+  if (ev.activeStory.kind === 'unknown' && ev.activeStory.contradiction !== undefined) {
+    out.push({
+      message: `active.md records no active story, but its Current Story section also has a **Story:** field (${ev.activeStory.contradiction.map((f) => `"${f.slice(0, 40)}"`).join(', ')}).`,
+      documents: ['active.md'],
+    });
+  }
 
   if (ev.activeStory.kind === 'none' && ev.roadmapActiveStory !== null && !NONE_RE.test(ev.roadmapActiveStory)) {
     out.push({

@@ -39,7 +39,7 @@ import {
 } from '../root/index.js';
 import { acquireLock, type LockOptions } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
-import { maskNonContent } from '../brief/markdown-context.js';
+import { declaresNoActiveStory, maskNonContent } from '../brief/markdown-context.js';
 import { validDate, validateRelPath, type FinalizationProposal } from './proposal.js';
 
 export type CheckStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
@@ -413,8 +413,21 @@ const FIX_HINT = 'To finalize, put exactly one line "**Story:** <id> — <title>
  * evidence files and `## Last Finalization`); its FIRST token is the id. Ids
  * mentioned in titles, descriptions, comments, code fences or other fields carry
  * no authority. Zero, several, or malformed field lines → no identity (fail closed).
+ * A section whose first visible line says "no active story" AND that has a
+ * structural field is contradictory → no identity (PSC-004A).
  */
 export function activeStoryIdentity(currentStoryBody: string): ActiveIdentity {
+  const found = structuralStoryFields(currentStoryBody);
+  if (found.length > 0 && declaresNoActiveStory(currentStoryBody)) return { ok: false, reason: `the Current Story section says there is no active story but also has ${found.length === 1 ? 'a "**Story:**" line' : `${found.length} "**Story:**" lines`} (${found.map((x) => `"${x.slice(0, 40)}"`).join(', ')}): contradictory identity. ${FIX_HINT}` };
+  if (found.length === 0) return { ok: false, reason: `the Current Story section has no "**Story:** <id>" line, so the active story cannot be identified (ids in free text, headings, comments or code blocks are not identity). ${FIX_HINT}` };
+  if (found.length > 1) return { ok: false, reason: `the Current Story section has ${found.length} "**Story:**" lines (${found.map((x) => `"${x.slice(0, 40)}"`).join(', ')}): ${new Set(found.map((x) => /^(\S+)/.exec(x)?.[1] ?? '')).size > 1 ? 'conflicting' : 'duplicate'} identity. ${FIX_HINT}` };
+  const id = /^(\S+)(?:\s|$)/.exec(found[0])?.[1];
+  if (id === undefined || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id)) return { ok: false, reason: `the "**Story:**" line ("${found[0].slice(0, 60)}") does not start with a valid story id. ${FIX_HINT}` };
+  return { ok: true, id };
+}
+
+/** Values of the structural `**Story:**` field lines (outside code fences and HTML comments). */
+function structuralStoryFields(currentStoryBody: string): string[] {
   const found: string[] = [];
   // Same fence / HTML-comment grammar as the brief's story extraction and
   // freshness readers (one shared helper): text inside a code fence or an HTML
@@ -423,11 +436,7 @@ export function activeStoryIdentity(currentStoryBody: string): ActiveIdentity {
     const m = /^\*\*Story:\*\*[ \t]*(.*)$/.exec(raw.replace(/\r$/, ''));
     if (m !== null) found.push(m[1].trim());
   }
-  if (found.length === 0) return { ok: false, reason: `the Current Story section has no "**Story:** <id>" line, so the active story cannot be identified (ids in free text, headings, comments or code blocks are not identity). ${FIX_HINT}` };
-  if (found.length > 1) return { ok: false, reason: `the Current Story section has ${found.length} "**Story:**" lines (${found.map((x) => `"${x.slice(0, 40)}"`).join(', ')}): ${new Set(found.map((x) => /^(\S+)/.exec(x)?.[1] ?? '')).size > 1 ? 'conflicting' : 'duplicate'} identity. ${FIX_HINT}` };
-  const id = /^(\S+)(?:\s|$)/.exec(found[0])?.[1];
-  if (id === undefined || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id)) return { ok: false, reason: `the "**Story:**" line ("${found[0].slice(0, 60)}") does not start with a valid story id. ${FIX_HINT}` };
-  return { ok: true, id };
+  return found;
 }
 
 /**
@@ -696,10 +705,11 @@ function plan(ctx: Context, p: FinalizationProposal): { plan: FinalizationPlan; 
       const visible = maskNonContent(excerpt);
       if (exp === 'none') {
         // Same rule as the brief: the first visible line says "no active story"
-        // and no structural **Story:** field contradicts it. Text inside code
-        // fences or comments is not a statement.
-        const first = visible.split('\n').find((l) => l.trim() !== '') ?? '';
-        (ok = ex.hasCurrentStorySection && /^\W*no active story\b/i.test(first) && !activeStoryIdentity(excerpt).ok), (want = 'no active story');
+        // and no structural **Story:** field (valid, duplicate or malformed)
+        // contradicts it (PSC-004A). Text inside code fences or comments is
+        // not a statement.
+        (ok = ex.hasCurrentStorySection && declaresNoActiveStory(excerpt) && structuralStoryFields(excerpt).length === 0), (want = 'no active story');
+        if (!ok && ex.hasCurrentStorySection && declaresNoActiveStory(excerpt)) why = ' The section also has a "**Story:**" field: contradictory identity. ' + FIX_HINT;
       }
       else {
         const ident = activeStoryIdentity(excerpt);

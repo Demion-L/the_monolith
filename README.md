@@ -101,6 +101,29 @@ monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
 instance, and it does not open a browser — open the printed address yourself.
 All commands: [CLI reference](./docs/reference/cli.md).
 
+### 🧠 One More Thing: Give Your AI Chat the Context!
+
+MONOLITH is installed. Now make sure your AI assistant knows how to use it.
+
+Open `.monolith/context/MONOLITH-CHAT-CONTEXT.md` and copy its contents into your ChatGPT Project instructions, Claude conversation, or another AI workspace you use to coordinate development.
+
+It explains MONOLITH's capabilities, project memory, workflows, and limitations.
+
+**Your coding agent gets the protocols. Your working chat gets the context.**
+
+`monolith init` creates this file. Print it from the project root (the directory where you ran `monolith init`):
+
+```bash
+cat .monolith/context/MONOLITH-CHAT-CONTEXT.md
+```
+
+If `monolithRoot` in `monolith.config.json` is not `.monolith`, use that directory instead.
+Projects initialized with an earlier MONOLITH version do not get this file from
+`monolith update`; copy it from the template in this repository (replace
+`{{MONOLITH_ROOT}}` with `.monolith`, otherwise `monolith validate` reports an
+unreplaced placeholder). You can also read the template before installing:
+[`templates/default-instance/monolith/context/MONOLITH-CHAT-CONTEXT.md`](./templates/default-instance/monolith/context/MONOLITH-CHAT-CONTEXT.md).
+
 ## Updating an Existing Project
 
 If a project was initialised with an earlier MONOLITH version, bring it up to the current agent integration (agent entry point and Idea Capture) with:

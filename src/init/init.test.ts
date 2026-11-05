@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { scaffoldInstance } from './scaffold.js';
+import { planScaffoldConflicts, scaffoldInstance, TEMPLATES_ROOT } from './scaffold.js';
 import { SafeWriteError } from '../root/index.js';
 import { runValidate } from '../validate/index.js';
 import type { ProjectConfig } from './types.js';
@@ -154,5 +154,38 @@ describe('scaffoldInstance — ADR index routing', () => {
     const decisions = read(dir, 'memory/long-term/decisions.md');
     expect(decisions).toContain('DEC-YYYY-XXXX');
     expect(decisions).not.toMatch(/^# Architectural Decisions/m);
+  });
+});
+
+describe('scaffoldInstance — AI chat context (MONOLITH-CHAT-CONTEXT-001)', () => {
+  const REL = join('.monolith', 'context', 'MONOLITH-CHAT-CONTEXT.md');
+
+  it('creates a non-empty chat context at <root>/context/MONOLITH-CHAT-CONTEXT.md with the root substituted', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+
+    const content = readFileSync(join(dir, REL), 'utf8');
+    expect(content.trim().length).toBeGreaterThan(0);
+    expect(content).toMatch(/^# MONOLITH/);
+    expect(content).toContain('`.monolith/memory/working/active.md`');
+    expect(content).not.toMatch(/\{\{[A-Z_]+\}\}/);
+  });
+
+  it('never overwrites an existing chat context: init is refused and the file is untouched', async () => {
+    const dir = makeTempDir();
+    mkdirSync(join(dir, '.monolith', 'context'), { recursive: true });
+    writeFileSync(join(dir, REL), 'user-authored', 'utf8');
+
+    expect(planScaffoldConflicts(dir, CONFIG)).toContain(REL);
+    await expect(scaffoldInstance(dir, CONFIG)).rejects.toBeInstanceOf(SafeWriteError);
+    expect(readFileSync(join(dir, REL), 'utf8')).toBe('user-authored');
+  });
+
+  it('the README links to the template that exists in the repository', () => {
+    const repoRoot = join(TEMPLATES_ROOT, '..', '..');
+    const readme = readFileSync(join(repoRoot, 'README.md'), 'utf8');
+    const link = './templates/default-instance/monolith/context/MONOLITH-CHAT-CONTEXT.md';
+    expect(readme).toContain(`](${link})`);
+    expect(existsSync(join(repoRoot, link))).toBe(true);
   });
 });

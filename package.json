@@ -1,6 +1,6 @@
 {
   "name": "@latysh-development/monolith",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "MONOLITH: Cognitive Infrastructure for AI. An open-source toolkit for observable project state, structured knowledge, and explicit execution governance.",
   "author": "Dmytro Latysh",
   "license": "MIT",

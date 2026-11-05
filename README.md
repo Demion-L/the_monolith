@@ -183,7 +183,7 @@ listing — not an official partnership, endorsement or certification.
 
 ## Project Status
 
-**Alpha** (`0.1.0-alpha.2`). The API and CLI are experimental and may change
+**Alpha** (`0.1.0-alpha.3`). The API and CLI are experimental and may change
 without notice. Published to npm under the alpha dist-tag. Durable State and the Coordinatorium
 (`monolith durable`, `monolith mission`) are experimental and are not part of
 the Quick Start.

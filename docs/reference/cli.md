@@ -8,9 +8,10 @@ stability: volatile
 # CLI Reference
 
 Commands of the `monolith` CLI (`src/cli/index.ts`). MONOLITH is an alpha
-package and is **not published to npm**; build it from a clone (see the
-[README](../../README.md#quick-start)) and run `monolith` after `npm link`, or
-`node dist/cli/index.js`. The examples below use `monolith`.
+package published to npm under the `alpha` dist-tag
+(`npm install -g @latysh-development/monolith@alpha`, see the
+[README](../../README.md#quick-start)). From a clone, run `monolith` after
+`npm link`, or `node dist/cli/index.js`. The examples below use `monolith`.
 
 `monolith --help` is the authoritative usage text; `AGENTS.md` records scope.
 

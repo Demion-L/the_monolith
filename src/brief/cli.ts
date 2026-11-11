@@ -15,6 +15,7 @@
  * `--strict`, whose meaning (Completeness) belongs to the brief.
  */
 
+import { colorEnabled, paint, tintStatuses } from '../cli/style.js';
 import { collect } from './collect.js';
 import { render, DEFAULT_MAX_CHARS } from './render.js';
 import { reconcile, renderReconciliation } from './reconcile.js';
@@ -83,6 +84,12 @@ export function parseBriefArgs(args: string[]): BriefArgsResult {
   return reconcileMode ? { ok: true, maxChars, strict, reconcile: true } : { ok: true, maxChars, strict };
 }
 
+/** Interactive terminals only: tints the Freshness / Completeness verdict words; plain text otherwise (byte for byte). */
+function tintBrief(text: string): string {
+  const on = colorEnabled();
+  return tintStatuses(on ? text.replace(/^MONOLITH [A-Z ]+$/m, (h) => paint(h, 'head', true)) : text, on, ['Freshness', 'Completeness']);
+}
+
 export async function runBrief(args: string[], targetDir = process.cwd()): Promise<void> {
   const parsed = parseBriefArgs(args);
   if (!parsed.ok) {
@@ -95,13 +102,13 @@ export async function runBrief(args: string[], targetDir = process.cwd()): Promi
     if (!model.freshness || !model.freshnessEvidence) {
       throw new Error('monolith brief --reconcile: no freshness evidence could be collected.');
     }
-    process.stdout.write(renderReconciliation(reconcile(model.freshnessEvidence, model.freshness), parsed.maxChars).text);
+    process.stdout.write(tintBrief(renderReconciliation(reconcile(model.freshnessEvidence, model.freshness), parsed.maxChars).text));
     process.exit(0);
   }
 
   const { text, completeness } = render(model, parsed.maxChars);
 
-  process.stdout.write(text);
+  process.stdout.write(tintBrief(text));
 
   if (completeness === 'INCOMPLETE') {
     console.error('monolith brief: result is INCOMPLETE — see the Diagnostics section above.');

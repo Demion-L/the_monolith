@@ -69,7 +69,7 @@ function start(cwd: string, port: number): Promise<{ child: ChildProcess; url: s
     const t = setTimeout(() => rej(new Error(`no ready line: ${buf}`)), 10_000);
     child.stdout!.on('data', (c) => {
       buf += c;
-      const m = /Mission Control: (http:\/\/127\.0\.0\.1:\d+)/.exec(buf);
+      const m = /Open in your browser:\s+(http:\/\/127\.0\.0\.1:\d+)/.exec(buf);
       if (m) {
         clearTimeout(t);
         res({ child, url: m[1], exit });

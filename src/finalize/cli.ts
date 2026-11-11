@@ -10,6 +10,7 @@
 
 import { lstatSync, readFileSync } from 'fs';
 import { applyFinalization, planFinalization, type ApplyResult, type FinalizationPlan } from './core.js';
+import { colorEnabled, tintStatuses } from '../cli/style.js';
 import type { ConsistencyAssessment } from './consistency.js';
 import { parseProposal, type FinalizationProposal } from './proposal.js';
 
@@ -77,31 +78,33 @@ async function readProposal(src: string): Promise<FinalizationProposal> {
 
 function printConsistency(c: ConsistencyAssessment | undefined): void {
   if (c === undefined) return;
-  console.log(`\nState consistency (${c.projected ? 'projected after apply' : 'actual'}): ${c.status}`);
-  for (const f of c.findings) console.log(`  [CONFLICT] ${printable(f.message)}\n         → ${printable(f.remediation)}`);
-  for (const n of c.notVerified) console.log(`  [NOT_VERIFIED] ${printable(n)}`);
-  if (c.status !== 'CONSISTENT') console.log('  This does not change the outcome of the finalization; MONOLITH edits none of the documents above on its own.');
-  console.log(`  Scope: ${printable(c.scope)}`);
+  say(`\nState consistency (${c.projected ? 'projected after apply' : 'actual'}): ${c.status}`);
+  for (const f of c.findings) say(`  [CONFLICT] ${printable(f.message)}\n         → ${printable(f.remediation)}`);
+  for (const n of c.notVerified) say(`  [NOT_VERIFIED] ${printable(n)}`);
+  if (c.status !== 'CONSISTENT') say('  This does not change the outcome of the finalization; MONOLITH edits none of the documents above on its own.');
+  say(`  Scope: ${printable(c.scope)}`);
 }
 
+const say = (line: string): void => console.log(tintStatuses(line, colorEnabled(), ['Finalization plan for [^:]+', 'Finalization of [^:]+', 'State consistency [^:]+']));
+
 function printPlan(pl: FinalizationPlan): void {
-  console.log(`Finalization plan for ${printable(pl.storyId)}: ${pl.status}${pl.partial ? ' (PARTIAL: an earlier run was interrupted; apply rolls it forward)' : ''}`);
-  console.log('\nPreconditions:');
-  for (const c of pl.checks) console.log(`  [${c.status}] ${c.id}: ${printable(c.detail)}\n         source: ${printable(c.source)}`);
-  console.log('\nTargets (in write order, active.md last):');
-  for (const t of pl.targets) console.log(`  [${t.state}] ${t.id} → ${printable(t.path)}${t.state === 'done' ? '' : ` — ${printable(t.reason)}`}`);
-  for (const d of pl.diagnostics) console.log(`\nNote: ${printable(d)}`);
+  say(`Finalization plan for ${printable(pl.storyId)}: ${pl.status}${pl.partial ? ' (PARTIAL: an earlier run was interrupted; apply rolls it forward)' : ''}`);
+  say('\nPreconditions:');
+  for (const c of pl.checks) say(`  [${c.status}] ${c.id}: ${printable(c.detail)}\n         source: ${printable(c.source)}`);
+  say('\nTargets (in write order, active.md last):');
+  for (const t of pl.targets) say(`  [${t.state}] ${t.id} → ${printable(t.path)}${t.state === 'done' ? '' : ` — ${printable(t.reason)}`}`);
+  for (const d of pl.diagnostics) say(`\nNote: ${printable(d)}`);
   printConsistency(pl.consistency);
-  if (pl.status === 'READY') console.log(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}\nThe digest shows this plan is unchanged; it does not prove who approves it. Do not run apply unless the owner approved this exact plan.`);
+  if (pl.status === 'READY') say(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}\nThe digest shows this plan is unchanged; it does not prove who approves it. Do not run apply unless the owner approved this exact plan.`);
 }
 
 function printApply(r: ApplyResult): void {
-  console.log(`Finalization of ${printable(r.storyId)}: ${r.status}`);
-  if (r.applied.length > 0) console.log(`  written: ${r.applied.join(', ')}`);
-  if (r.status !== 'FINALIZED' && r.pending.length > 0) console.log(`  not written: ${r.pending.join(', ')}`);
-  if (r.failed) console.log(`  failed: ${r.failed.target}${r.failed.publication ? ` [${r.failed.publication}]` : ''}: ${printable(r.failed.message)}`);
-  for (const d of r.diagnostics) console.log(`  ${printable(d)}`);
-  if (r.status === 'REFUSED') for (const c of r.plan.checks.filter((x) => x.status !== 'PASS')) console.log(`  [${c.status}] ${c.id}: ${printable(c.detail)}`);
+  say(`Finalization of ${printable(r.storyId)}: ${r.status}`);
+  if (r.applied.length > 0) say(`  written: ${r.applied.join(', ')}`);
+  if (r.status !== 'FINALIZED' && r.pending.length > 0) say(`  not written: ${r.pending.join(', ')}`);
+  if (r.failed) say(`  failed: ${r.failed.target}${r.failed.publication ? ` [${r.failed.publication}]` : ''}: ${printable(r.failed.message)}`);
+  for (const d of r.diagnostics) say(`  ${printable(d)}`);
+  if (r.status === 'REFUSED') for (const c of r.plan.checks.filter((x) => x.status !== 'PASS')) say(`  [${c.status}] ${c.id}: ${printable(c.detail)}`);
   if (r.status === 'FINALIZED' || r.status === 'ALREADY_FINALIZED') printConsistency(r.plan.consistency);
 }
 

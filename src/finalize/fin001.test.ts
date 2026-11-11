@@ -124,3 +124,118 @@ describe('FIN-001 capsule formatting', () => {
     expect(capsuleCanonical('x\n\n\ny')).not.toBe(capsuleCanonical('x\n\ny'));
   });
 });
+
+describe('A4-FIN-01 — normalization is context-aware (whitespace that carries meaning is never ignored)', () => {
+  const eq = (a: string, b: string): void => expect(capsuleCanonical(a)).toBe(capsuleCanonical(b));
+  const ne = (a: string, b: string): void => expect(capsuleCanonical(a)).not.toBe(capsuleCanonical(b));
+
+  describe('hard line breaks', () => {
+    it('removing a hard break is a real change', () => ne('line one  \nline two', 'line one\nline two'));
+    it('any run of 2+ spaces is the same break; the break survives CRLF', () => {
+      eq('line one   \nline two', 'line one  \nline two');
+      eq('line one  \r\nline two\r\n', 'line one  \nline two');
+    });
+    it('trailing spaces that end a paragraph, a heading or the file are not breaks (still ignored)', () => {
+      eq('para  \n\nnext', 'para\n\nnext');
+      eq('# H  \ntext', '# H\n\ntext');
+      eq('last  ', 'last');
+    });
+    it('a single trailing space or a trailing tab is not a break', () => {
+      eq('a \nb', 'a\nb');
+      eq('a\t\nb', 'a\nb');
+    });
+    it('a backslash break is never ignored', () => ne('a\\\nb', 'a\nb'));
+  });
+
+  describe('fenced code blocks', () => {
+    it('trailing whitespace inside a fence is significant', () => {
+      ne('```\nrun  \n```', '```\nrun\n```');
+      ne('~~~\nrun \n~~~', '~~~\nrun\n~~~');
+    });
+    it('a blank line after a "# comment" inside a fence is significant (it is not a heading)', () => {
+      ne('```sh\n# comment\nrun\n```', '```sh\n# comment\n\nrun\n```');
+    });
+    it('blank lines at the end of an unterminated fence are content', () => ne('```\ncode\n\n', '```\ncode'));
+    it('a longer closing fence closes; text after it is plain prose again', () => {
+      ne('````\nx\n```\ny  \n````\n', '````\nx\n```\ny\n````\n');
+      eq('```\nx\n```\nprose  \n\n', '```\nx\n```\nprose');
+    });
+    it('CRLF vs LF inside a fence is still format-only', () => eq('```\r\nx\r\n```\r\n', '```\nx\n```'));
+    it('an inline-code triple backtick line is not a fence', () => eq('``` a`b\ntext  \n\nz', '``` a`b\ntext\n\nz'));
+  });
+
+  describe('YAML frontmatter', () => {
+    it('trailing whitespace in frontmatter is significant', () => {
+      ne('---\nkey: value  \n---\n\n# A', '---\nkey: value\n---\n\n# A');
+      ne('---\ntext: |\n  a \n---\n', '---\ntext: |\n  a\n---\n');
+    });
+    it('an unterminated frontmatter protects the whole file', () => ne('---\nkey: v  \nbody', '---\nkey: v\nbody'));
+    it('the body after a frontmatter is still normalised', () => eq('---\nk: v\n---\n# A\ntext  \n\n', '---\nk: v\n---\n# A\n\ntext'));
+    it('a "---" thematic break later in the file is not frontmatter', () => eq('# A\n\n---\nafter  \n\n', '# A\n\n---\nafter'));
+  });
+
+  describe('other whitespace-sensitive regions', () => {
+    it('indented code and tab-indented lines are compared as written', () => {
+      ne('text\n\n    code  \n', 'text\n\n    code\n');
+      ne('text\n\n\tcode \n', 'text\n\n\tcode\n');
+    });
+    it('HTML comments are compared as written', () => {
+      ne('<!--\nnote  \n-->\n', '<!--\nnote\n-->\n');
+      ne('<!-- note  -->  \nnext', '<!-- note  -->\nnext');
+    });
+  });
+
+  describe('compatibility is kept', () => {
+    it('Prettier-style layout of plain content and alpha.3 capsules stay equivalent', () => {
+      const alpha3 = '# STORY X\n## Objective\nobj\n\n## Tests\n10 pass\n';
+      const prettier = '# STORY X\n\n## Objective\n\nobj\n\n## Tests\n\n10 pass\n';
+      eq(alpha3, prettier);
+      eq(prettier.replace(/\n/g, '\r\n').replace('obj', 'obj  '), alpha3);
+    });
+    it('identical documents are always equivalent, hard breaks, fences and frontmatter included', () => {
+      const doc = '---\na: b \n---\n# T\n\nx  \ny\n\n```\n# c\nz  \n```\n\n    ind  \n\n<!--\nc  \n-->\n';
+      eq(doc, doc);
+      eq(doc.replace(/\n/g, '\r\n'), doc);
+    });
+  });
+
+  describe('through finalization', () => {
+    const richObjective = 'intro\n\n```sh\n# comment\nrun  \n```\n\nhard  \nbreak';
+    const setup = async () => {
+      const dir = await instance();
+      const p = proposal(richObjective);
+      expect((await applyFinalization(dir, p, planFinalization(dir, p).digest)).status).toBe('FINALIZED');
+      return { dir, p, text: readFileSync(join(dir, CAPSULE), 'utf8') };
+    };
+
+    it('a formatter-style pass over plain lines (CRLF, trailing spaces on prose) is ALREADY_FINALIZED and untouched', async () => {
+      const { dir, p, text } = await setup();
+      const reformatted = text.replace(/\n/g, '\r\n').replace('intro', 'intro   ');
+      writeFileSync(join(dir, CAPSULE), reformatted);
+      expect(planFinalization(dir, p).status).toBe('ALREADY_FINALIZED');
+      expect(readFileSync(join(dir, CAPSULE), 'utf8')).toBe(reformatted);
+    });
+
+    it.each([
+      ['hard break removed', (t: string) => t.replace('hard  \nbreak', 'hard\nbreak')],
+      ['trailing whitespace inside the code fence removed', (t: string) => t.replace('run  \n```', 'run\n```')],
+      ['blank line added inside the code fence', (t: string) => t.replace('# comment\nrun', '# comment\n\nrun')],
+      ['code line inside the fence changed', (t: string) => t.replace('run  ', 'rm -rf  ')],
+    ])('%s → conflict, never overwritten', async (_n, mutate) => {
+      const { dir, p, text } = await setup();
+      const changed = mutate(text);
+      expect(changed).not.toBe(text);
+      writeFileSync(join(dir, CAPSULE), changed);
+      const plan = planFinalization(dir, p);
+      expect(plan.targets.find((t) => t.id === 'capsule')!.state).toBe('conflict');
+      expect((await applyFinalization(dir, p, plan.digest)).status).toBe('REFUSED');
+      expect(readFileSync(join(dir, CAPSULE), 'utf8')).toBe(changed);
+    });
+
+    it('re-finalizing the unchanged capsule is idempotent', async () => {
+      const { dir, p, text } = await setup();
+      expect((await applyFinalization(dir, p, 'x')).status).toBe('ALREADY_FINALIZED');
+      expect(readFileSync(join(dir, CAPSULE), 'utf8')).toBe(text);
+    });
+  });
+});

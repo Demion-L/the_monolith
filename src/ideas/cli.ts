@@ -12,7 +12,7 @@ import { reportWriteWarning } from '../root/index.js';
 import { addIdea, getIdea, ideaStore, listIdeas } from './store.js';
 import { IDEA_LIMITS, IdeaError, type Idea } from './types.js';
 
-const ADD_USAGE = 'Usage: monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."] [--path <project-relative file or dir/> ...]';
+const ADD_USAGE = 'Usage: monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."] [--path <project-relative document file> ...]';
 /** UTF-8 needs at most 4 bytes per UTF-16 code unit's worth of text; anything larger cannot fit the description limit. */
 const STDIN_MAX_BYTES = IDEA_LIMITS.description * 4;
 const LIST_USAGE = 'Usage: monolith idea list';

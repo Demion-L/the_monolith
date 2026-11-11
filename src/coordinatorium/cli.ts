@@ -168,7 +168,23 @@ function formatCheckpoint(c: Checkpoint): string {
   return lines.join('\n');
 }
 
+const CHECKPOINT_VALUE_FLAGS: readonly string[] = ['--summary', '--remaining', '--context'];
+
+/** `mission checkpoint` takes only its documented options; an unknown `--option` is an error, not silently dropped. */
+function rejectUnknownCheckpointFlags(args: string[]): void {
+  for (let i = 1; i < args.length; i++) {
+    if (CHECKPOINT_VALUE_FLAGS.includes(args[i])) i++; // its value, whatever it looks like
+    else if (args[i].startsWith('--')) {
+      throw new Error(
+        `Unknown option ${JSON.stringify(args[i].slice(0, 40))} for mission checkpoint.\n` +
+          'Usage: monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]',
+      );
+    }
+  }
+}
+
 export async function runMissionCheckpoint(args: string[], targetDir = process.cwd()): Promise<void> {
+  rejectUnknownCheckpointFlags(args);
   const missionId = args[0];
   const summary = parseFlag(args, '--summary');
   if (!missionId || !summary) {

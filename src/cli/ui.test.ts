@@ -60,7 +60,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-function start(cwd: string, port: number): Promise<{ child: ChildProcess; url: string; exit: Promise<number | null> }> {
+function start(cwd: string, port: number): Promise<{ child: ChildProcess; url: string; exit: Promise<number | null>; firstLine: () => string }> {
   const child = spawn(process.execPath, [cli, 'ui', '--port', String(port)], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   const exit = new Promise<number | null>((r) => child.once('exit', (code) => r(code)));
@@ -69,10 +69,10 @@ function start(cwd: string, port: number): Promise<{ child: ChildProcess; url: s
     const t = setTimeout(() => rej(new Error(`no ready line: ${buf}`)), 10_000);
     child.stdout!.on('data', (c) => {
       buf += c;
-      const m = /Open in your browser:\s+(http:\/\/127\.0\.0\.1:\d+)/.exec(buf);
+      const m = /Mission Control: (http:\/\/127\.0\.0\.1:\d+)/.exec(buf); // the alpha.3 machine-readable line
       if (m) {
         clearTimeout(t);
-        res({ child, url: m[1], exit });
+        res({ child, url: m[1], exit, firstLine: () => buf.split('\n')[0] });
       }
     });
     child.once('exit', () => rej(new Error(`exited early: ${buf}`)));
@@ -190,7 +190,9 @@ describe('monolith ui (compiled CLI)', () => {
     const cwd = project();
     const before = snapshot(cwd);
     const port = await freePort();
-    const { child, exit } = await start(cwd, port);
+    const { child, exit, firstLine, url } = await start(cwd, port);
+    // A4-CLI-02: the alpha.3 machine-readable line is still the first line of stdout, byte for byte.
+    expect(firstLine()).toBe(`MONOLITH Mission Control: ${url}`);
 
     const page = await get(port, '/');
     expect(page.status).toBe(200);

@@ -210,11 +210,11 @@ describe('KA-001 review hardening (independent review round 1)', () => {
     expect((await verdict(dir)).report.independentKnowledge).toEqual([]);
   });
 
-  it('M1: non-ASCII / quoted paths cannot be judged and are not attributed; quotes are not valid in paths', async () => {
+  it('M1: paths are exact (git -z, never quoted): a non-ASCII file is judged like any other; quotes are not valid in registered paths', async () => {
     const dir = project({ 1: ['docs/'] });
     put(dir, 'docs/caf\u00e9 \\"q\\".md', '# x\n');
     commit(dir, 'docs: odd name IDEA-001');
-    expect((await verdict(dir)).fresh.status).toBe('UNKNOWN');
+    expect((await verdict(dir)).fresh.status).toBe('FRESH');
     expect(invalidArtifactPath('"docs/')).not.toBeNull();
   });
 

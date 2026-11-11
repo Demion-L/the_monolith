@@ -32,6 +32,7 @@ export type FreshnessReasonCode =
   | 'GIT_UNAVAILABLE'
   | 'STATE_NOT_IN_GIT'
   | 'GIT_HISTORY_TRUNCATED'
+  | 'GIT_HISTORY_SHALLOW'
   | 'UNATTRIBUTED_ACTIVITY'
   | 'NO_ACTIVITY_SINCE_STATE_UPDATE'
   | 'ACTIVITY_RECORDED';
@@ -53,7 +54,7 @@ export interface GitCommitSignal {
   files: string[];
 }
 
-export type GitUnavailableReason = 'GIT_NOT_INSTALLED' | 'NOT_A_GIT_REPOSITORY' | 'GIT_FAILED';
+export type GitUnavailableReason = 'GIT_NOT_INSTALLED' | 'NOT_A_GIT_REPOSITORY' | 'GIT_FAILED' | 'GIT_OUTPUT_INVALID';
 
 export type GitSignals =
   | { status: 'unavailable'; reason: GitUnavailableReason }
@@ -65,6 +66,8 @@ export type GitSignals =
       commitsSince: GitCommitSignal[];
       /** True when git history was cut at the read limit — the picture is partial. */
       truncated: boolean;
+      /** True in a shallow clone: history before the boundary is absent, so "no later activity" proves nothing. */
+      shallow?: boolean;
     };
 
 export type StoryClaim =
@@ -337,6 +340,7 @@ export function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult {
       GIT_NOT_INSTALLED: 'git is not installed or not runnable',
       NOT_A_GIT_REPOSITORY: 'the project is not inside a git repository',
       GIT_FAILED: 'git could not be queried',
+      GIT_OUTPUT_INVALID: 'git returned history that could not be parsed unambiguously',
     };
     reasons.push({ code: 'GIT_UNAVAILABLE', message: `Cannot compare state with history: ${why[ev.git.reason]}.` });
     gitVerdict = 'unknown';
@@ -374,6 +378,12 @@ export function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult {
       reasons.push({
         code: 'GIT_HISTORY_TRUNCATED',
         message: 'Git history after the last state update was cut at the read limit; the check is partial.',
+      });
+      gitVerdict = 'unknown';
+    } else if (ev.git.shallow === true) {
+      reasons.push({
+        code: 'GIT_HISTORY_SHALLOW',
+        message: 'The repository is a shallow clone: history before its boundary is not available, so the check cannot be complete.',
       });
       gitVerdict = 'unknown';
     } else if (unattributed > 0) {

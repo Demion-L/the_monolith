@@ -87,8 +87,8 @@ function judge(
   monolithRoot: string,
   readBlob: BlobReader,
 ): KnowledgeAttribution | KnowledgeRejection {
-  const unjudgeable = files.find((f) => f.startsWith('"') || /^\.?\.?\//.test(f));
-  if (unjudgeable !== undefined) return { reason: `a changed path (${unjudgeable.slice(0, 40)}) is quoted by git or not project-relative and cannot be judged` };
+  const unjudgeable = files.find((f) => /^\.?\.?\//.test(f));
+  if (unjudgeable !== undefined) return { reason: `a changed path (${unjudgeable.slice(0, 40)}) is not project-relative and cannot be judged` };
   const inRoot = (rootPrefix === '' ? files[0] : files.find((f) => f.toLowerCase().startsWith(rootPrefix.toLowerCase())));
   if (inRoot !== undefined) return { reason: `it changes ${inRoot}, inside the MONOLITH root; knowledge attribution never covers that` };
 

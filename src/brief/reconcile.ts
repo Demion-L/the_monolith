@@ -41,6 +41,7 @@ export type FindingCode =
   | 'GIT_UNAVAILABLE'
   | 'STATE_NOT_IN_GIT'
   | 'GIT_HISTORY_TRUNCATED'
+  | 'GIT_HISTORY_SHALLOW'
   | 'ACTIVE_STORY_UNKNOWN';
 
 export interface ReconciliationFinding {
@@ -210,6 +211,12 @@ export function reconcile(ev: FreshnessEvidence, result: FreshnessResult): Recon
       });
       review('active.md', 'no active story recorded while git shows later activity');
       actions.push('Review the active story: confirm whether any work is current. No active story does not mean the project is complete.');
+    }
+
+    if (ev.git.shallow === true) {
+      findings.push({ kind: 'unknown', code: 'GIT_HISTORY_SHALLOW', summary: reasonMessage(result, 'GIT_HISTORY_SHALLOW'), evidence: [] });
+      limitations.push('The repository is a shallow clone; history before its boundary is absent, so the report cannot show what happened earlier.');
+      actions.push('Deepen the clone (git fetch --unshallow) or run this from a full checkout, then re-run.');
     }
 
     if (ev.git.truncated) {

@@ -25,7 +25,7 @@ monolith brief      # deterministic, read-only project-state summary [--max-char
 monolith idea       # capture and recall deferred ideas: add|list|show (implemented, IDEA-001A)
 monolith update     # bring an existing instance up to the agent entry point + Idea Capture [--apply] (implemented, DX-UPDATE-001/003)
 monolith durable    # Durable State: list|show|assess|packet|verify|retention (implemented; see below)
-monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented)
+monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented); first stdout line: `MONOLITH Mission Control: <url>`
 monolith ui dev     # Mission Control with Vite hot reload [--port N] (implemented, source checkout only)
 monolith status     # active protocol, phase, story, drift summary (NOT implemented)
 monolith dry-run    # simulate finalization gate without writes (NOT implemented)
@@ -146,7 +146,10 @@ steps), mandatory protocols, the current story excerpt from
 `.monolith/memory/working/active.md`, and accepted ADRs. Each section names
 its source. It is strictly read-only (no files created, `state.json` read
 once, no LLM or network), and it supplements — does not replace — the
-Boot Sequence in `AGENTS.md`. `--reconcile` prints a read-only report of the
+Boot Sequence in `AGENTS.md`. Its freshness check runs read-only, local, offline git
+commands only: lazy fetch is disabled, so in a partial clone a missing object leaves
+`UNKNOWN` instead of being downloaded. A shallow clone and git output that cannot be
+parsed unambiguously are `UNKNOWN` too (details: `AGENTS.md` → Freshness). `--reconcile` prints a read-only report of the
 evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Project Brief.
 
 - The first line is `Completeness: COMPLETE` or `INCOMPLETE`. INCOMPLETE
@@ -186,7 +189,7 @@ evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Proje
 ## `monolith idea`
 
 ```
-monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."] [--path <file or dir/> ...]
+monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."] [--path <document file> ...]
 monolith idea list
 monolith idea show <id>
 ```
@@ -249,25 +252,35 @@ become anything.
   existing file is never overwritten, a hard-linked or special file is not read.
   A concurrent swap of directories by another local actor is **not** defended
   against (SEC-001B.3; threat model TM-C is unsupported).
-- **Independent knowledge (`--path`, alpha.4, KA-001):** `--path` (repeatable, at most 20)
-  registers the project-relative files or `dir/` prefixes of a knowledge artifact that
-  belongs to no work item (e.g. a strategy paper). Absolute paths, `..`, `.` or empty
-  segments, backslashes and glob characters are refused; the field is stored as
-  `paths: [...]` in the frontmatter (older readers ignore it, older files have none).
+- **Independent knowledge (`--path`, alpha.4, KA-001; narrowed by A4-SEC-03):** `--path`
+  (repeatable, at most 20) registers the **exact document files** of a knowledge artifact
+  that belongs to no work item (e.g. a strategy paper). A registered path must be one
+  file with a document extension (`.md .mdx .markdown .txt .rst .adoc`) and must lie
+  **outside** the MONOLITH root. Directory prefixes (`src/`, `docs/`, `./`), source or
+  configuration files (`src/pay.ts`, `package.json`) and anything under the MONOLITH root
+  are refused by `idea add`; absolute paths, `..`, `.` or empty segments, quotes,
+  backslashes and glob characters are refused as before. The field is stored as
+  `paths: [...]` in the frontmatter (older readers ignore it, older files have none and
+  are never rewritten).
   `monolith brief` then treats a commit as *explained* (not `UNATTRIBUTED_ACTIVITY`) only when
-  **all** of these hold: its subject names no work item; it names an `IDEA-NNN` whose file is
-  a valid idea **with `paths` in that commit's own tree** (registering later never legalises
-  older commits; a commit that registers or edits the idea is not explained by it); **every**
-  file it changes (state documents excepted) is covered by those paths; and none of them is
-  inside the MONOLITH root. Such commits can support `Freshness: FRESH` but never touch the
-  active story, a mission, the roadmap or any Definition of Done, and `brief --reconcile`
-  lists them under "Attributed to registered independent knowledge" and states why a
-  commit that named an idea was *not* attributed. An idea without `paths`, an unknown id, or
-  one extra file outside the paths leaves the previous behaviour untouched. Registering the
-  idea is itself a commit inside the MONOLITH root, so it counts as ordinary activity until
-  the next state-document commit; commit the registration together with a state-document
-  update (e.g. HANDOFF) to avoid an `UNKNOWN` in between. Declaring a broad path
-  (`src/`) is an owner decision and is visible in the idea file and in `--reconcile`.
+  **all** of these hold: its subject names no work item and at most 8 ideas; every idea it
+  names is a valid idea **with `paths` in that commit's own tree**, whose paths all pass the
+  rule above (registering later never legalises older commits; a commit that registers or
+  edits the idea is not explained by it; a hand-edited idea with a broad path attributes
+  nothing); **every** file the commit changes (state documents excepted) is exactly one of
+  those paths; and none of them is inside the MONOLITH root. Such commits can support
+  `Freshness: FRESH` but never touch the active story, a mission, the roadmap or any
+  Definition of Done, and `brief --reconcile` lists them under "Attributed to registered
+  independent knowledge" **together with the declared paths the attribution rests on**, and
+  states why a commit that named an idea was *not* attributed. An idea without `paths`, an
+  unknown id, an idea blob that is not available locally, or one extra file outside the paths
+  leaves the previous behaviour untouched (`UNKNOWN`). **Attribution is not approval:** it only
+  says a registered document explains the commit; it does not say the change was reviewed or
+  permitted. Registering the idea is itself a commit inside the MONOLITH root, so it counts as
+  ordinary activity until the next state-document commit; commit the registration together with
+  a state-document update (e.g. HANDOFF) to avoid an `UNKNOWN` in between. At most 64 idea
+  registrations are read per `brief` run (each is a git subprocess); beyond that commits stay
+  unattributed.
 - No LLM, network, search, reminders or automatic idea detection. Library entry:
   `import { ideas } from '@latysh-development/monolith'`.
 
@@ -485,6 +498,11 @@ read-only `GET /api/dashboard` API from one server on `127.0.0.1`, for the
 project in the current directory. It needs neither Vite nor any
 devDependency (`dist/ui` is tracked in Git and listed in the package `files`).
 Ctrl+C or SIGTERM stops it and frees the port.
+Once listening it prints a launch block. Its **first stdout line is unchanged from
+alpha.3**, `MONOLITH Mission Control: http://127.0.0.1:<port>` (`ui dev`:
+`MONOLITH Mission Control (dev, HMR): <url>`), so scripts that parse it keep working;
+`Status: READY`, the URL on its own line, the project and how to stop follow. Later
+lines are for people and may change; failures go to stderr with a non-zero exit code.
 
 `monolith ui dev` is for working on the interface: it starts the same API on
 a free loopback port and a Vite dev server (hot module reload) that proxies

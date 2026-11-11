@@ -134,7 +134,7 @@ Full sequence: `.monolith/protocols/boot/boot-sequence.md`
 | `src/brief/collect.ts`            | `collect()` — read-only gathering for `monolith brief` (state.json read once) |
 | `src/brief/render.ts`             | `render(model, maxChars)` — deterministic, budgeted, sanitized text output |
 | `src/brief/freshness.ts`          | `evaluateFreshness()` — pure FRESH/STALE/UNKNOWN verdict + state-document parsers (SELF-AWARENESS-001) |
-| `src/brief/git-signals.ts`        | `readGitSignals()` — read-only `git log` signals for the freshness check |
+| `src/brief/git-signals.ts`        | `readGitSignals()` / `readBlobAt()` — read-only, local, offline git signals for the freshness check; structural (`-z`) parsing, no lazy fetch (A4-SEC-01/02) |
 | `src/brief/reconcile.ts`          | `reconcile()` / `renderReconciliation()` — pure State Reconciliation Report for `monolith brief --reconcile` (SELF-AWARENESS-002) |
 | `src/brief/{docs,config,story,selectors,sanitize,types,cli}.ts` | Protocol/ADR discovery, `contextGateway` config, Story excerpt, selectors, sanitizer, types, CLI handler |
 | `src/brief/*.test.ts`             | Vitest test suite (185 tests, incl. end-to-end CLI runs on real directories) |
@@ -275,14 +275,27 @@ exit code, and never makes `--strict` fail.
 |---|---|
 | `STALE` | A concrete discrepancy: the state documents contradict each other (`active.md` vs `roadmap-index.md` vs `story-index.md`), or commits after the last state update reference work-item ids (e.g. `UI-002D`) that no state document mentions |
 | `FRESH` | Positive evidence only: git readable, last state update located, and every later commit either touches only state documents or references a work item the documents mention |
-| `UNKNOWN` | Anything else: no git / git unavailable, state never committed, history cut at the 500-commit read limit, or later commits that name no work item |
+| `UNKNOWN` | Anything else: no git / git unavailable, git output that cannot be parsed unambiguously, a shallow clone, state never committed, history cut at the 500-commit read limit, or later commits that name no work item |
 
 State documents (their last commit = "last state update"): `active.md`,
 `roadmap-index.md`, `story-index.md`, `HANDOFF.md`. Git is a signal, not the source of
 truth; commit dates are never compared with "now"; "no active story" is reported as
 "none recorded (this does not mean the project is complete)". The check runs only
-`git log`/`git rev-parse` (no shell, helper-launching config disabled, nothing written)
-and degrades to `UNKNOWN` if git fails. `monolith validate` deliberately does **not**
+read-only git commands (`rev-parse`, `log`, `rev-list`, `diff-tree`, `cat-file`; no shell,
+helper-launching config disabled, nothing written) and degrades to `UNKNOWN` if git
+fails or its output cannot be parsed unambiguously. Git output is parsed structurally
+(`-z`, commit metadata and file lists from separate commands, ids and dates validated,
+the commit list cross-checked with `git rev-list`), so control characters in a commit subject or
+file name are data, never record structure (A4-SEC-01). The check is **offline**: lazy fetch is
+disabled (`GIT_NO_LAZY_FETCH=1`, plus `GIT_ALLOW_PROTOCOL=none` for older git), so in a
+partial clone a missing object is an error (-> `UNKNOWN`), never a download, an
+object-store write or a program started from remote configuration (A4-SEC-02; verified
+against a local partial clone with a hostile `uploadpack` and git 2.53 — behaviour of
+other git versions is not verified). History limits that are *not* hidden:
+a shallow clone is `UNKNOWN`; a clean merge shows no changes of its own (the commits it
+brings in are examined individually) while changes made inside a merge are read as
+activity; history is bounded at 500 commits; the repository's own replace refs and
+grafts are honoured. `monolith validate` deliberately does **not**
 run it: validate is a static, file-only gate (SEC-002/ADR-011) with no subprocess, and
 freshness is advisory, not pass/fail. Limits: work-item ids are recognized by a narrow
 pattern (`UI-002D`, `SEC-001B.1-R`); uncommitted edits to state documents are invisible

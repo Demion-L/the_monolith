@@ -22,7 +22,7 @@
  */
 import { type FreshnessEvidence, type FreshnessResult, type FreshnessStatus } from './freshness.js';
 export type FindingKind = 'confirmed' | 'suspected' | 'unknown';
-export type FindingCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'UNATTRIBUTED_ACTIVITY' | 'ACTIVITY_WITHOUT_ACTIVE_STORY' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'ACTIVE_STORY_UNKNOWN';
+export type FindingCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'UNATTRIBUTED_ACTIVITY' | 'ACTIVITY_WITHOUT_ACTIVE_STORY' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'GIT_HISTORY_SHALLOW' | 'ACTIVE_STORY_UNKNOWN';
 export interface ReconciliationFinding {
     kind: FindingKind;
     code: FindingCode;
@@ -57,6 +57,7 @@ export interface ReconciliationReport {
     /** KA-001: commits explained by registered independent knowledge (not part of any work item). */
     independentKnowledge: {
         ideaIds: string[];
+        paths: string[];
         commits: string[];
     }[];
     documents: ReviewDocument[];

@@ -45,6 +45,7 @@ export function ideaStore(targetDir) {
     return {
         projectRoot: root.projectRoot,
         rootAbs: root.rootAbs,
+        monolithRoot: root.monolithRoot,
         dirAbs: join(root.rootAbs, IDEAS_REL),
         boundary: projectBoundary(root.projectRoot),
     };
@@ -115,7 +116,7 @@ function reserveId(markers, id, createdAt, opts) {
     }
 }
 export function addIdea(store, input, opts = {}) {
-    validateNewIdea(input);
+    validateNewIdea(input, store.monolithRoot);
     // `add` only creates `memory/long-term/ideas` inside an existing instance; it never invents `.monolith/`.
     let rootStat;
     try {

@@ -136,29 +136,95 @@ export function renderCapsule(p) {
     ].join('\n');
 }
 /**
- * Format-equivalence of a capsule (FIN-001). The capsule is created once and
- * never overwritten, so "already present" used to mean byte-identical; a
- * formatter pass (Prettier adds a blank line after every heading) then turned an
- * unchanged capsule into a CONFLICT. Equivalence is deliberately narrow and
- * NOT a general whitespace-insensitive comparison: only line endings, trailing
- * whitespace on a line, a single blank line directly after an ATX heading and
- * trailing blank lines at end of file are ignored. Every other character —
- * including blank lines elsewhere (paragraph breaks) — must match.
+ * Format-equivalence of a capsule (FIN-001, made context-aware by A4-FIN-01).
+ * The capsule is created once and never overwritten, so "already present" used
+ * to mean byte-identical; a formatter pass (Prettier adds a blank line after
+ * every heading) then turned an unchanged capsule into a CONFLICT. Equivalence
+ * is deliberately narrow and NOT a general whitespace-insensitive comparison.
+ * Ignored: line endings (CRLF/LF), trailing whitespace on a line that is plain
+ * prose, a single blank line directly after an ATX heading, and trailing blank
+ * lines at end of file. NOT ignored, because whitespace carries meaning there:
+ *  - anything inside a fenced code block (``` or ~~~), an indented code block /
+ *    4-space-or-tab-indented line, an HTML comment, or YAML frontmatter
+ *    (`---` ... `---` at the very top; an unterminated one protects the whole
+ *    file) — those lines are compared verbatim;
+ *  - a Markdown hard line break (two or more trailing spaces before a line that
+ *    continues the paragraph): kept as a break (any run of 2+ spaces is the
+ *    same break); a backslash break is not whitespace and is always compared;
+ *  - blank lines anywhere else (paragraph breaks).
  */
 export function capsuleCanonical(s) {
-    const lines = norm(s).split('\n').map((l) => l.replace(/[ \t]+$/, ''));
+    const lines = norm(s).split('\n');
+    const verbatim = lines.map(() => false);
+    const fenceOpen = (l) => {
+        const m = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(l);
+        return m !== null && !(m[1][0] === '`' && m[2].includes('`')) ? m : null;
+    };
+    let i = 0;
+    if (lines[0] === '---') {
+        const close = lines.findIndex((l, k) => k > 0 && (l === '---' || l === '...'));
+        const end = close === -1 ? lines.length - 1 : close; // unterminated: cannot tell where it ends
+        for (let k = 0; k <= end; k++)
+            verbatim[k] = true;
+        i = end + 1;
+    }
+    let fence = null;
+    let comment = false;
+    for (; i < lines.length; i++) {
+        const l = lines[i];
+        if (fence !== null) {
+            verbatim[i] = true;
+            const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(l);
+            if (close !== null && close[1][0] === fence.ch && close[1].length >= fence.len)
+                fence = null;
+        }
+        else if (comment) {
+            verbatim[i] = true;
+            if (l.includes('-->'))
+                comment = false;
+        }
+        else {
+            const open = fenceOpen(l);
+            if (open !== null) {
+                verbatim[i] = true;
+                fence = { ch: open[1][0], len: open[1].length };
+            }
+            else if (/^ {0,3}<!--/.test(l)) {
+                verbatim[i] = true;
+                if (!l.includes('-->', l.indexOf('<!--') + 4))
+                    comment = true;
+            }
+            else if (/^(?: {4}|\t)/.test(l)) {
+                verbatim[i] = true; // indented code block (or an indented continuation): compared as written
+            }
+        }
+    }
     const out = [];
-    let skippable = false; // a blank line right after a heading, at most one
-    for (const l of lines) {
+    const outVerbatim = [];
+    let skippable = false; // a blank line right after an ATX heading, at most one
+    for (let k = 0; k < lines.length; k++) {
+        let l = lines[k];
+        if (verbatim[k]) {
+            out.push(l);
+            outVerbatim.push(true);
+            skippable = false;
+            continue;
+        }
+        const next = k + 1 < lines.length ? lines[k + 1] : undefined;
+        const hardBreak = / {2}$/.test(l) && l.trim() !== '' && !/^#{1,6}\s/.test(l) && next !== undefined && next.trim() !== '' && !/^#{1,6}(\s|$)/.test(next) && fenceOpen(next) === null;
+        l = l.replace(/[ \t]+$/, '') + (hardBreak ? '  ' : '');
         if (l === '' && skippable) {
             skippable = false;
             continue;
         }
         skippable = /^#{1,6}\s/.test(l);
         out.push(l);
+        outVerbatim.push(false);
     }
-    while (out.length > 0 && out[out.length - 1] === '')
+    while (out.length > 0 && out[out.length - 1] === '' && !outVerbatim[outVerbatim.length - 1]) {
         out.pop();
+        outVerbatim.pop();
+    }
     return out.join('\n');
 }
 const capsulePathOf = (root, p) => `${root}/memory/working/phases/${p.story.phase}/stories/${p.story.slug}.md`;

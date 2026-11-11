@@ -51,14 +51,16 @@ export function assertMonolithProject(projectRoot) {
 /**
  * The launch block (CLI-UX-001). Printed only after the server is actually
  * listening, so READY is never shown for a failed start (failures throw before
- * this and are reported on stderr). The URL is on a line of its own; the CLI
- * does not open a browser and says so by asking the user to.
+ * this and are reported on stderr). The first line is the alpha.3 machine-readable
+ * `MONOLITH Mission Control: <url>` (scripts that parse it keep working); the URL
+ * also stands on a line of its own for copying. The CLI does not open a browser
+ * and says so by asking the user to.
  */
 function announce(log, info) {
     const on = colorEnabled();
     for (const line of [
-        paint(info.title, 'head', on),
-        '',
+        // Compatibility (A4-CLI-02): the first line stays the machine-readable `<title>: <url>` that alpha.3 scripts parse.
+        `${paint(info.title, 'head', on)}: ${info.url}`,
         `Status: ${statusWord('READY', on)}`,
         '',
         'Open in your browser:',

@@ -22,7 +22,7 @@
 import { maskNonContent } from './markdown-context.js';
 import type { KnowledgeEvidence } from './knowledge.js';
 export type FreshnessStatus = 'FRESH' | 'STALE' | 'UNKNOWN';
-export type FreshnessReasonCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'UNATTRIBUTED_ACTIVITY' | 'NO_ACTIVITY_SINCE_STATE_UPDATE' | 'ACTIVITY_RECORDED';
+export type FreshnessReasonCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'GIT_HISTORY_SHALLOW' | 'UNATTRIBUTED_ACTIVITY' | 'NO_ACTIVITY_SINCE_STATE_UPDATE' | 'ACTIVITY_RECORDED';
 export interface FreshnessReason {
     code: FreshnessReasonCode;
     message: string;
@@ -38,7 +38,7 @@ export interface GitCommitSignal {
     /** Paths changed by the commit, relative to the project directory. Empty for plain merges. */
     files: string[];
 }
-export type GitUnavailableReason = 'GIT_NOT_INSTALLED' | 'NOT_A_GIT_REPOSITORY' | 'GIT_FAILED';
+export type GitUnavailableReason = 'GIT_NOT_INSTALLED' | 'NOT_A_GIT_REPOSITORY' | 'GIT_FAILED' | 'GIT_OUTPUT_INVALID';
 export type GitSignals = {
     status: 'unavailable';
     reason: GitUnavailableReason;
@@ -53,6 +53,8 @@ export type GitSignals = {
     commitsSince: GitCommitSignal[];
     /** True when git history was cut at the read limit — the picture is partial. */
     truncated: boolean;
+    /** True in a shallow clone: history before the boundary is absent, so "no later activity" proves nothing. */
+    shallow?: boolean;
 };
 export type StoryClaim = {
     kind: 'none';

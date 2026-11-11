@@ -26,6 +26,8 @@ import { type Idea, type IdeaEntry, type NewIdea } from './types.js';
 export interface IdeaStore {
     projectRoot: string;
     rootAbs: string;
+    /** Validated relative MONOLITH root (`.monolith` by default). */
+    monolithRoot: string;
     dirAbs: string;
     boundary: WriteBoundary;
 }

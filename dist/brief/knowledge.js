@@ -12,17 +12,28 @@
  *      tree of that very commit** (so registering an idea later never
  *      legalises older commits, and a commit that registers or edits the idea
  *      is itself never attributed — its own files are not covered);
- *   3. the ideas it names declare `paths`, and EVERY file the commit changed
- *      (other than state documents) is covered by those paths;
- *   4. no changed file lies inside the MONOLITH root.
+ *   3. the ideas it names declare `paths`, every declared path passes the
+ *      attribution policy (exact document files only — no directory prefixes, no
+ *      source code, nothing inside the MONOLITH root; `attributionPathProblem`),
+ *      and EVERY file the commit changed (other than state documents) is covered
+ *      by those paths;
+ *   4. no changed file lies inside the MONOLITH root;
+ *   5. it names at most MAX_IDEA_IDS_PER_COMMIT ideas, and the run stays inside a
+ *      fixed budget of blob reads (each read is a git subprocess).
+ * Attribution only EXPLAINS a commit. It is not approval: a registered, correctly
+ * attributed change may still be wrong or unreviewed.
  * Anything else stays exactly what it was: unattributed activity. Nothing here
  * activates a story, touches the roadmap or marks anything done; it only
  * decides whether a commit is *explained*. No LLM, no network, read-only git.
  */
-import { artifactPathsCover, isIdeaId, parseIdea } from '../ideas/format.js';
+import { artifactPathsCover, attributionPathProblem, isIdeaId, parseIdea } from '../ideas/format.js';
 export const EMPTY_KNOWLEDGE = { attributed: new Map(), rejected: new Map() };
 /** Upper bound of commits examined; beyond it the rest simply stay unattributed. */
 export const MAX_KNOWLEDGE_COMMITS = 200;
+/** A subject naming more ideas than this is refused without any git call (A4-SEC-05). */
+export const MAX_IDEA_IDS_PER_COMMIT = 8;
+/** Total blob reads (git subprocesses) per run; beyond it commits stay unattributed. */
+export const MAX_KNOWLEDGE_BLOB_READS = 64;
 const IDEA_REF_RE = /(?<![A-Za-z0-9-])IDEA-\d{3,9}(?![A-Za-z0-9]|\.\d|-[A-Z0-9])/g;
 export function ideaIdsInSubject(subject) {
     return [...new Set(subject.match(IDEA_REF_RE) ?? [])].filter(isIdeaId);
@@ -35,6 +46,7 @@ export function attributeKnowledge(git, opts) {
     const root = opts.monolithRoot.replace(/^(\.\/)+/, '').replace(/\/+$/, '');
     const rootPrefix = root === '' || root === '.' ? '' : `${root}/`;
     let examined = 0;
+    const budget = { reads: MAX_KNOWLEDGE_BLOB_READS };
     for (const c of git.commitsSince) {
         const files = c.files.filter((f) => !opts.stateFiles.has(f));
         if (files.length === 0)
@@ -46,7 +58,11 @@ export function attributeKnowledge(git, opts) {
             continue;
         if (++examined > MAX_KNOWLEDGE_COMMITS)
             break;
-        const verdict = judge(c, files, named, rootPrefix, root, opts.readBlob);
+        if (named.length > MAX_IDEA_IDS_PER_COMMIT) {
+            rejected.set(c.sha, { reason: `it names ${named.length} ideas (more than ${MAX_IDEA_IDS_PER_COMMIT}); no registration was read` });
+            continue;
+        }
+        const verdict = judge(c, files, named, rootPrefix, root, opts.readBlob, budget);
         if ('ideaIds' in verdict)
             attributed.set(c.sha, verdict);
         else
@@ -54,10 +70,10 @@ export function attributeKnowledge(git, opts) {
     }
     return { attributed, rejected };
 }
-function judge(c, files, named, rootPrefix, monolithRoot, readBlob) {
-    const unjudgeable = files.find((f) => f.startsWith('"') || /^\.?\.?\//.test(f));
+function judge(c, files, named, rootPrefix, monolithRoot, readBlob, budget) {
+    const unjudgeable = files.find((f) => /^\.?\.?\//.test(f));
     if (unjudgeable !== undefined)
-        return { reason: `a changed path (${unjudgeable.slice(0, 40)}) is quoted by git or not project-relative and cannot be judged` };
+        return { reason: `a changed path (${unjudgeable.slice(0, 40)}) is not project-relative and cannot be judged` };
     const inRoot = (rootPrefix === '' ? files[0] : files.find((f) => f.toLowerCase().startsWith(rootPrefix.toLowerCase())));
     if (inRoot !== undefined)
         return { reason: `it changes ${inRoot}, inside the MONOLITH root; knowledge attribution never covers that` };
@@ -65,9 +81,14 @@ function judge(c, files, named, rootPrefix, monolithRoot, readBlob) {
     const paths = [];
     const problems = [];
     for (const id of named) {
+        if (budget.reads <= 0) {
+            problems.push(`${id} was not checked: the per-run limit of ${MAX_KNOWLEDGE_BLOB_READS} registration reads was reached`);
+            continue;
+        }
+        budget.reads--;
         const text = readBlob(c.sha, `${monolithRoot}/memory/long-term/ideas/${id}.md`);
         if (text === null) {
-            problems.push(`${id} is not a registered idea in this commit`);
+            problems.push(`${id} is not a registered idea in this commit (or its content is not available locally)`);
             continue;
         }
         try {
@@ -75,8 +96,15 @@ function judge(c, files, named, rootPrefix, monolithRoot, readBlob) {
             if (idea.paths === undefined || idea.paths.length === 0)
                 problems.push(`${id} declares no paths`);
             else {
+                const refused = idea.paths.map((p) => ({ p, why: attributionPathProblem(p, monolithRoot) })).find((x) => x.why !== null);
+                if (refused !== undefined) {
+                    problems.push(`${id} declares a path that cannot attribute knowledge (${refused.p.slice(0, 60)}): ${refused.why}`);
+                    continue;
+                }
                 valid.push(id);
-                paths.push(...idea.paths);
+                for (const p of idea.paths)
+                    if (!paths.includes(p))
+                        paths.push(p);
             }
         }
         catch {
@@ -91,5 +119,5 @@ function judge(c, files, named, rootPrefix, monolithRoot, readBlob) {
         const shown = outside.slice(0, 3).join(', ');
         return { reason: `${shown}${outside.length > 3 ? ` and ${outside.length - 3} more` : ''} not covered by the declared paths of ${valid.join(', ')}` };
     }
-    return { ideaIds: valid };
+    return { ideaIds: valid, paths };
 }

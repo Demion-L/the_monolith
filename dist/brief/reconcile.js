@@ -84,7 +84,12 @@ export function reconcile(ev, result) {
             const k = ids.length === 0 ? ev.knowledge?.attributed.get(c.sha) : undefined;
             if (k !== undefined) {
                 const key = k.ideaIds.join(', ');
-                knowledgeBy.set(key, [...(knowledgeBy.get(key) ?? []), commitLine(c)]);
+                const entry = knowledgeBy.get(key) ?? { paths: [], lines: [] };
+                entry.lines.push(commitLine(c));
+                for (const p of k.paths)
+                    if (!entry.paths.includes(p))
+                        entry.paths.push(p);
+                knowledgeBy.set(key, entry);
                 continue;
             }
             if (ids.length === 0)
@@ -132,13 +137,13 @@ export function reconcile(ev, result) {
             });
             actions.push(`Review the ${unattributed.length} commit(s) that name no work item and decide whether the recorded state covers them.`);
         }
-        for (const [ids, lines] of knowledgeBy) {
-            independentKnowledge.push({ ideaIds: ids.split(', '), commits: lines });
+        for (const [ids, entry] of knowledgeBy) {
+            independentKnowledge.push({ ideaIds: ids.split(', '), paths: entry.paths, commits: entry.lines });
         }
         if (knowledgeBy.size > 0) {
-            limitations.push('Commits attributed to independent knowledge are explained by a registered idea and its declared paths; they say nothing about any work item or the active story.');
+            limitations.push('Commits attributed to independent knowledge are explained by a registered idea and its declared document paths; this is attribution, not approval or review, and says nothing about any work item or the active story.');
         }
-        const explainedByKnowledge = [...knowledgeBy.values()].reduce((n, l) => n + l.length, 0);
+        const explainedByKnowledge = [...knowledgeBy.values()].reduce((n, e) => n + e.lines.length, 0);
         if (activity.length - explainedByKnowledge > 0 && ev.activeStory.kind === 'none') {
             findings.push({
                 kind: 'suspected',
@@ -148,6 +153,11 @@ export function reconcile(ev, result) {
             });
             review('active.md', 'no active story recorded while git shows later activity');
             actions.push('Review the active story: confirm whether any work is current. No active story does not mean the project is complete.');
+        }
+        if (ev.git.shallow === true) {
+            findings.push({ kind: 'unknown', code: 'GIT_HISTORY_SHALLOW', summary: reasonMessage(result, 'GIT_HISTORY_SHALLOW'), evidence: [] });
+            limitations.push('The repository is a shallow clone; history before its boundary is absent, so the report cannot show what happened earlier.');
+            actions.push('Deepen the clone (git fetch --unshallow) or run this from a full checkout, then re-run.');
         }
         if (ev.git.truncated) {
             findings.push({ kind: 'unknown', code: 'GIT_HISTORY_TRUNCATED', summary: reasonMessage(result, 'GIT_HISTORY_TRUNCATED'), evidence: [] });
@@ -242,6 +252,8 @@ export function renderReconciliation(report, maxChars) {
         const lines = [];
         for (const k of report.independentKnowledge.slice(0, MAX_LISTED_ITEMS)) {
             lines.push(`- ${san(k.ideaIds.join(', '))} (${k.commits.length} commit(s))`);
+            const shownPaths = k.paths.slice(0, MAX_LISTED_ITEMS).map(san).join(', ');
+            lines.push(`    declared paths: ${shownPaths}${k.paths.length > MAX_LISTED_ITEMS ? ` and ${k.paths.length - MAX_LISTED_ITEMS} more` : ''}`);
             for (const c of k.commits.slice(0, MAX_COMMITS_PER_ITEM))
                 lines.push(`    ${san(c)}`);
         }

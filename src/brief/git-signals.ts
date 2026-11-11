@@ -101,3 +101,18 @@ export function readGitSignals(targetDir: string, stateFiles: string[]): GitSign
     return { status: 'unavailable', reason: 'GIT_FAILED' };
   }
 }
+
+/**
+ * Contents of `relPath` (relative to `targetDir`) as of commit `sha`, or null
+ * when the file does not exist there or cannot be read. `git cat-file blob`
+ * only: read-only, no textconv, no shell. Used by KA-001 to judge an idea
+ * registration as it was when the commit was made.
+ */
+export function readBlobAt(targetDir: string, sha: string, relPath: string): string | null {
+  if (!/^[0-9a-f]{40,64}$/.test(sha) || relPath.includes('\0') || relPath.startsWith('-')) return null;
+  try {
+    return git(targetDir, ['cat-file', 'blob', `${sha}:./${relPath}`]);
+  } catch {
+    return null;
+  }
+}

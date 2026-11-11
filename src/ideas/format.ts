@@ -9,6 +9,7 @@
  *   createdAt: "2026-..."
  *   context: "..."          (optional)
  *   tags: ["a", "b"]        (optional)
+ *   paths: ["docs/x.md", "docs/dir/"]  (optional, KA-001: files / `dir/` prefixes of the registered artifact)
  *   ---
  *
  *   ## Description
@@ -29,6 +30,29 @@ const FILE_RE = /^(IDEA-\d{3,9})\.md$/;
 // C0 controls, DEL and C1 controls (a title is shown in a terminal).
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+
+/**
+ * KA-001: a registered artifact path. Project-relative, `/`-separated, no
+ * traversal, no globs; a trailing `/` makes it a directory prefix. Returns the
+ * reason it is invalid, or null.
+ */
+export function invalidArtifactPath(p: unknown): string | null {
+  if (typeof p !== 'string' || p === '') return 'path must be a non-empty string';
+  if (p.length > IDEA_LIMITS.pathLength) return `path is too long (> ${IDEA_LIMITS.pathLength} characters)`;
+  if (CONTROL_RE.test(p)) return 'path must not contain control characters';
+  if (p.includes('\\')) return 'path must use "/" separators';
+  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return 'path must be project-relative';
+  if (/[*?[\]{}]/.test(p)) return 'path must not contain glob characters';
+  if (p !== p.trim()) return 'path must not start or end with whitespace';
+  const segments = p.endsWith('/') ? p.slice(0, -1).split('/') : p.split('/');
+  if (segments.some((x) => x === '' || x === '.' || x === '..')) return 'path must not contain empty, "." or ".." segments';
+  return null;
+}
+
+/** True when `file` is covered by one of the registered `paths` (exact file, or `dir/` prefix). */
+export function artifactPathsCover(paths: readonly string[], file: string): boolean {
+  return paths.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
+}
 
 export function isIdeaId(value: string): boolean {
   return ID_RE.test(value);
@@ -82,6 +106,15 @@ export function validateNewIdea(input: NewIdea): NewIdea {
       throw invalid(`context is too long (${context.length} > ${IDEA_LIMITS.context} characters).`);
     }
   }
+  if (input.paths !== undefined) {
+    if (!Array.isArray(input.paths) || input.paths.length === 0) throw invalid('paths, when given, must be a non-empty list.');
+    if (input.paths.length > IDEA_LIMITS.paths) throw invalid(`too many paths (${input.paths.length} > ${IDEA_LIMITS.paths}).`);
+    for (const p of input.paths) {
+      const bad = invalidArtifactPath(p);
+      if (bad !== null) throw invalid(`paths: ${bad} (${JSON.stringify(String(p).slice(0, 80))}).`);
+    }
+    if (new Set(input.paths).size !== input.paths.length) throw invalid('paths must not repeat.');
+  }
   for (const [name, v] of [['title', title], ['description', description], ['context', context]] as const) {
     if (v !== undefined && !wellFormed(v)) throw invalid(`${name} contains an unpaired surrogate and cannot be stored losslessly.`);
   }
@@ -99,6 +132,7 @@ export function serializeIdea(idea: Idea): string {
   ];
   if (idea.context !== undefined) lines.push(`context: ${JSON.stringify(idea.context)}`);
   if (idea.tags !== undefined && idea.tags.length > 0) lines.push(`tags: ${JSON.stringify(idea.tags)}`);
+  if (idea.paths !== undefined && idea.paths.length > 0) lines.push(`paths: ${JSON.stringify(idea.paths)}`);
   lines.push('---');
   return `${lines.join('\n')}\n${BODY_HEADING}${idea.description}\n`;
 }
@@ -182,6 +216,18 @@ export function parseIdea(expectedId: string, text: string): Idea {
       throw corrupt(expectedId, '"tags" is not a JSON array of strings.');
     }
     idea.tags = tags as string[];
+  }
+  if ('paths' in fm) {
+    let paths: unknown;
+    try {
+      paths = JSON.parse(fm.paths);
+    } catch {
+      throw corrupt(expectedId, '"paths" is not a JSON array of strings.');
+    }
+    if (!Array.isArray(paths) || paths.length > IDEA_LIMITS.paths || !paths.every((x) => invalidArtifactPath(x) === null)) {
+      throw corrupt(expectedId, '"paths" is not a JSON array of valid project-relative paths.');
+    }
+    idea.paths = paths as string[];
   }
   return idea;
 }

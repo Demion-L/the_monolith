@@ -186,7 +186,7 @@ evidence behind the Freshness verdict. Full specification: `AGENTS.md` → Proje
 ## `monolith idea`
 
 ```
-monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]
+monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."] [--path <file or dir/> ...]
 monolith idea list
 monolith idea show <id>
 ```
@@ -249,6 +249,25 @@ become anything.
   existing file is never overwritten, a hard-linked or special file is not read.
   A concurrent swap of directories by another local actor is **not** defended
   against (SEC-001B.3; threat model TM-C is unsupported).
+- **Independent knowledge (`--path`, alpha.4, KA-001):** `--path` (repeatable, at most 20)
+  registers the project-relative files or `dir/` prefixes of a knowledge artifact that
+  belongs to no work item (e.g. a strategy paper). Absolute paths, `..`, `.` or empty
+  segments, backslashes and glob characters are refused; the field is stored as
+  `paths: [...]` in the frontmatter (older readers ignore it, older files have none).
+  `monolith brief` then treats a commit as *explained* (not `UNATTRIBUTED_ACTIVITY`) only when
+  **all** of these hold: its subject names no work item; it names an `IDEA-NNN` whose file is
+  a valid idea **with `paths` in that commit's own tree** (registering later never legalises
+  older commits; a commit that registers or edits the idea is not explained by it); **every**
+  file it changes (state documents excepted) is covered by those paths; and none of them is
+  inside the MONOLITH root. Such commits can support `Freshness: FRESH` but never touch the
+  active story, a mission, the roadmap or any Definition of Done, and `brief --reconcile`
+  lists them under "Attributed to registered independent knowledge" and states why a
+  commit that named an idea was *not* attributed. An idea without `paths`, an unknown id, or
+  one extra file outside the paths leaves the previous behaviour untouched. Registering the
+  idea is itself a commit inside the MONOLITH root, so it counts as ordinary activity until
+  the next state-document commit; commit the registration together with a state-document
+  update (e.g. HANDOFF) to avoid an `UNKNOWN` in between. Declaring a broad path
+  (`src/`) is an owner decision and is visible in the idea file and in `--reconcile`.
 - No LLM, network, search, reminders or automatic idea detection. Library entry:
   `import { ideas } from '@latysh-development/monolith'`.
 

@@ -22,6 +22,7 @@
 
 import { isIdeaId } from '../ideas/format.js';
 import { declaresNoActiveStory, maskNonContent } from './markdown-context.js';
+import type { KnowledgeEvidence } from './knowledge.js';
 
 export type FreshnessStatus = 'FRESH' | 'STALE' | 'UNKNOWN';
 
@@ -88,6 +89,8 @@ export interface FreshnessEvidence {
   recordedText: string;
   /** Repo-relative-to-project paths that are state documents (their own commits are not "activity"). */
   stateFiles: ReadonlySet<string>;
+  /** KA-001: commits explained by registered independent knowledge. Absent = none (older callers). */
+  knowledge?: KnowledgeEvidence;
 }
 
 export interface FreshnessResult {
@@ -349,9 +352,11 @@ export function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult {
 
     const referenced = new Set<string>();
     let unattributed = 0;
+    let knowledgeCommits = 0;
     for (const c of activity) {
       const ids = extractWorkItemIds(c.subject);
-      if (ids.length === 0) unattributed++;
+      if (ids.length === 0 && ev.knowledge?.attributed.has(c.sha)) knowledgeCommits++;
+      else if (ids.length === 0) unattributed++;
       for (const id of ids) referenced.add(id);
     }
     const unrecorded = [...referenced].filter((id) => !mentionsId(ev.recordedText, id)).sort();
@@ -388,12 +393,15 @@ export function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult {
     } else {
       reasons.push({
         code: 'ACTIVITY_RECORDED',
-        message: `All ${activity.length} commit(s) after the last state update reference work items that the state documents mention.`,
+        message:
+          knowledgeCommits === 0
+            ? `All ${activity.length} commit(s) after the last state update reference work items that the state documents mention.`
+            : `All ${activity.length} commit(s) after the last state update either reference work items that the state documents mention (${activity.length - knowledgeCommits}) or are attributed to registered independent knowledge (${knowledgeCommits}).`,
       });
       gitVerdict = 'fresh';
     }
 
-    if (activity.length > 0 && ev.activeStory.kind === 'none') {
+    if (activity.length - knowledgeCommits > 0 && ev.activeStory.kind === 'none') {
       warnings.push('Git activity exists after the last recorded state update, but no active story is recorded.');
     }
   }

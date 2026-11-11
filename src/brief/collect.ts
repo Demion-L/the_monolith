@@ -46,6 +46,7 @@ import type {
 import { ACTIVE_MD_REL, PARKED_IDEAS_LIMIT, PROTOCOLS_DIR, ROADMAP_INDEX_REL, STORY_INDEX_REL, HANDOFF_REL } from './constants.js';
 import {
   evaluateFreshness,
+  extractWorkItemIds,
   parseActiveStoryClaim,
   parseRoadmapActiveStory,
   parseRoadmapStatuses,
@@ -53,7 +54,8 @@ import {
   type FreshnessResult,
   type FreshnessEvidence,
 } from './freshness.js';
-import { readGitSignals } from './git-signals.js';
+import { readBlobAt, readGitSignals } from './git-signals.js';
+import { attributeKnowledge } from './knowledge.js';
 import { ideaStore, listIdeas } from '../ideas/index.js';
 import { ideaNumber } from '../ideas/format.js';
 
@@ -368,8 +370,15 @@ function collectFreshness(
   const roadmap = content.get(ROADMAP_INDEX_REL) ?? null;
   const storyIndex = content.get(STORY_INDEX_REL) ?? null;
 
+  const git = readGitSignals(targetDir, stateFiles);
   const evidence: FreshnessEvidence = {
-    git: readGitSignals(targetDir, stateFiles),
+    git,
+    knowledge: attributeKnowledge(git, {
+      monolithRoot,
+      stateFiles: new Set(stateFiles),
+      readBlob: (sha, rel) => readBlobAt(targetDir, sha, rel),
+      hasWorkItem: (subject) => extractWorkItemIds(subject).length > 0,
+    }),
     activeStory: story.fileExists && story.hasCurrentStorySection ? parseActiveStoryClaim(story.excerpt) : { kind: 'unknown' },
     roadmapActiveStory: roadmap === null ? null : parseRoadmapActiveStory(roadmap),
     roadmapStatuses: roadmap === null ? new Map() : parseRoadmapStatuses(roadmap),

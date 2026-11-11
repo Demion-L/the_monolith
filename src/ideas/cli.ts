@@ -12,7 +12,7 @@ import { reportWriteWarning } from '../root/index.js';
 import { addIdea, getIdea, ideaStore, listIdeas } from './store.js';
 import { IDEA_LIMITS, IdeaError, type Idea } from './types.js';
 
-const ADD_USAGE = 'Usage: monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."]';
+const ADD_USAGE = 'Usage: monolith idea add --title "..." (--description "..." | --description-stdin) [--context "..."] [--path <project-relative file or dir/> ...]';
 /** UTF-8 needs at most 4 bytes per UTF-16 code unit's worth of text; anything larger cannot fit the description limit. */
 const STDIN_MAX_BYTES = IDEA_LIMITS.description * 4;
 const LIST_USAGE = 'Usage: monolith idea list';
@@ -29,11 +29,13 @@ interface AddFlags {
   description?: string;
   context?: string;
   descriptionStdin?: boolean;
+  paths?: string[];
 }
 
 const ADD_FLAGS = ['--title', '--description', '--context'] as const;
 const STDIN_FLAG = '--description-stdin';
-const KNOWN_FLAGS: readonly string[] = [...ADD_FLAGS, STDIN_FLAG];
+const PATH_FLAG = '--path';
+const KNOWN_FLAGS: readonly string[] = [...ADD_FLAGS, STDIN_FLAG, PATH_FLAG];
 
 /** Strict: every flag needs a value, none may repeat, unknown flags and stray arguments are errors. */
 export function parseAddArgs(args: string[]): AddFlags {
@@ -46,6 +48,13 @@ export function parseAddArgs(args: string[]): AddFlags {
     if (flag === STDIN_FLAG) {
       if (out.descriptionStdin) throw new IdeaError('IDEA_INVALID_INPUT', `${flag} was given more than once.\n${ADD_USAGE}`);
       out.descriptionStdin = true;
+      continue;
+    }
+    if (flag === PATH_FLAG) {
+      const v = args[i + 1];
+      if (v === undefined || KNOWN_FLAGS.includes(v)) throw new IdeaError('IDEA_INVALID_INPUT', `${flag} needs a value.\n${ADD_USAGE}`);
+      (out.paths ??= []).push(v);
+      i++;
       continue;
     }
     const key = flag.slice(2) as 'title' | 'description' | 'context';
@@ -104,7 +113,7 @@ export async function runIdeaAdd(args: string[], targetDir = process.cwd(), stdi
   const store = ideaStore(targetDir);
   const { idea, path } = addIdea(
     store,
-    { title: flags.title as string, description, context: flags.context },
+    { title: flags.title as string, description, context: flags.context, ...(flags.paths !== undefined ? { paths: flags.paths } : {}) },
     { onWarning: (w) => reportWriteWarning(w) },
   );
   console.log(`Saved ${idea.id} [${idea.status}]: ${printable(idea.title)}`);
@@ -143,6 +152,7 @@ function formatIdea(i: Idea): string {
     `  createdAt:  ${i.createdAt}`,
   ];
   if (i.tags !== undefined && i.tags.length > 0) lines.push(`  tags:       ${i.tags.map(printable).join(', ')}`);
+  if (i.paths !== undefined && i.paths.length > 0) lines.push(`  paths:      ${i.paths.map(printable).join(', ')}`);
   lines.push('  context:    ' + (i.context === undefined ? '(none)' : ''));
   if (i.context !== undefined) lines.push(...i.context.split('\n').map((l) => `    ${l}`));
   lines.push('  description:');

@@ -13,7 +13,10 @@ import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { collect } from './collect.js';
 import { reconcile, renderReconciliation } from './reconcile.js';
-import { artifactPathsCover, invalidArtifactPath, parseIdea, serializeIdea, validateNewIdea } from '../ideas/format.js';
+import { attributeKnowledge, MAX_IDEA_IDS_PER_COMMIT } from './knowledge.js';
+import type { GitSignals } from './freshness.js';
+import { addIdea, ideaStore } from '../ideas/store.js';
+import { artifactPathsCover, attributionPathProblem, invalidArtifactPath, parseIdea, serializeIdea, validateNewIdea } from '../ideas/format.js';
 import { parseAddArgs } from '../ideas/cli.js';
 import type { Idea } from '../ideas/types.js';
 
@@ -32,9 +35,9 @@ const ENV = {
   GIT_COMMITTER_EMAIL: 'f@example.invalid',
 };
 let day = 0;
-const sh = (dir: string, args: string[]): void => {
+const sh = (dir: string, args: string[], input?: string): void => {
   const stamp = new Date(Date.UTC(2000, 1, 1, 12, 0, ++day)).toISOString();
-  execFileSync('git', args, { cwd: dir, env: { ...ENV, GIT_AUTHOR_DATE: stamp, GIT_COMMITTER_DATE: stamp }, stdio: 'ignore' });
+  execFileSync('git', args, { cwd: dir, env: { ...ENV, GIT_AUTHOR_DATE: stamp, GIT_COMMITTER_DATE: stamp }, stdio: ['pipe', 'ignore', 'ignore'], input });
 };
 const put = (dir: string, rel: string, content: string): void => {
   mkdirSync(dirname(join(dir, rel)), { recursive: true });
@@ -82,7 +85,8 @@ describe('KA-001 independent knowledge attribution (real git)', () => {
     expect(fresh.status).toBe('FRESH');
     expect(fresh.activeStory).toBe('recorded'); // STC-005 stays the active story
     expect(fresh.reasons.map((r) => r.message).join(' ')).toContain('independent knowledge');
-    expect(report.independentKnowledge).toEqual([{ ideaIds: ['IDEA-001'], commits: [expect.stringContaining('agent arena paper')] }]);
+    expect(report.independentKnowledge).toEqual([{ ideaIds: ['IDEA-001'], paths: [DOC], commits: [expect.stringContaining('agent arena paper')] }]);
+    expect(renderReconciliation(report, 6000).text).toContain(`declared paths: ${DOC}`);
     expect(report.untrackedWork).toEqual([]);
     expect(renderReconciliation(report, 6000).text).toContain('registered independent knowledge');
   });
@@ -151,14 +155,17 @@ describe('KA-001 independent knowledge attribution (real git)', () => {
     expect((await verdict(dir)).fresh.status).toBe('STALE');
   });
 
-  it('covered directory prefix works, a lookalike prefix does not', async () => {
-    const dir = project({ 1: ['docs/vision/'] });
-    put(dir, 'docs/vision/a/b.md', '# x\n');
-    commit(dir, 'docs: IDEA-001');
+  it('several specific documents of one idea are all attributable; a sibling that is not listed is not', async () => {
+    const dir = project({ 1: [DOC, 'docs/vision/second.md'] });
+    put(dir, DOC, '# a\n');
+    put(dir, 'docs/vision/second.md', '# b\n');
+    commit(dir, 'docs: both IDEA-001');
     expect((await verdict(dir)).fresh.status).toBe('FRESH');
-    put(dir, 'docs/vision-extra/c.md', '# y\n');
-    commit(dir, 'docs: more IDEA-001');
-    expect((await verdict(dir)).fresh.status).toBe('UNKNOWN');
+    put(dir, 'docs/vision/third.md', '# c\n');
+    commit(dir, 'docs: third IDEA-001');
+    const { fresh, report } = await verdict(dir);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(JSON.stringify(report.findings)).toContain('docs/vision/third.md');
   });
 });
 
@@ -194,7 +201,7 @@ describe('KA-001 idea format (backward compatible)', () => {
 
 describe('KA-001 review hardening (independent review round 1)', () => {
   it('H1: a rename out of the MONOLITH root or src/ into covered docs is not knowledge', async () => {
-    const dir = project({ 1: ['docs/'] });
+    const dir = project({ 1: ['docs/foo.md', 'docs/handoff.md'] });
     put(dir, 'src/foo.ts', 'export {};\n');
     commit(dir, 'feat(OLD-001): foo'); // pre-existing code, then state update
     put(dir, '.monolith/memory/working/story-index.md', '# Stories\n\nOLD-001 recorded\n');
@@ -211,8 +218,8 @@ describe('KA-001 review hardening (independent review round 1)', () => {
   });
 
   it('M1: paths are exact (git -z, never quoted): a non-ASCII file is judged like any other; quotes are not valid in registered paths', async () => {
-    const dir = project({ 1: ['docs/'] });
-    put(dir, 'docs/caf\u00e9 \\"q\\".md', '# x\n');
+    const dir = project({ 1: ['docs/caf\u00e9.md'] });
+    put(dir, 'docs/caf\u00e9.md', '# x\n');
     commit(dir, 'docs: odd name IDEA-001');
     expect((await verdict(dir)).fresh.status).toBe('FRESH');
     expect(invalidArtifactPath('"docs/')).not.toBeNull();
@@ -225,5 +232,159 @@ describe('KA-001 review hardening (independent review round 1)', () => {
     const { fresh, report } = await verdict(dir);
     expect(fresh.status).toBe('UNKNOWN');
     expect(JSON.stringify(report.findings)).toContain('IDEA-999');
+  });
+});
+
+
+/** Writes an idea file by hand, bypassing write-time validation (as an old or hostile file could). */
+describe('A4-SEC-03 — attribution scope is narrow: exact documents, never code, never governance', () => {
+  const handWritten = (paths: string[]): Record<number, string[]> => ({ 1: paths });
+
+  it.each([
+    ['a source directory', ['src/']],
+    ['the project root', ['./']],
+    ['a docs directory prefix', ['docs/']],
+    ['the MONOLITH root', ['.monolith/']],
+    ['a file inside the MONOLITH root', ['.monolith/protocols/governance/core-invariants.md']],
+    ['the MONOLITH root in other case', ['.MONOLITH/protocols/x.md']],
+    ['a source file', ['src/pay.ts']],
+    ['a document-looking script', ['docs/run.md.js']],
+    ['a configuration file', ['package.json']],
+  ])('%s declared by a hand-edited idea attributes nothing', async (_name, paths) => {
+    const dir = project(handWritten(paths));
+    put(dir, 'src/pay.ts', 'export const pay = 1;\n');
+    put(dir, 'docs/x.md', '# x\n');
+    commit(dir, 'feat: harmless IDEA-001');
+    const { fresh, report } = await verdict(dir);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(report.independentKnowledge).toEqual([]);
+  });
+
+  it('a directory-prefix registration is refused with a reason a person can read', async () => {
+    const dir = project(handWritten(['docs/']));
+    put(dir, 'docs/x.md', '# x\n');
+    commit(dir, 'docs: x IDEA-001');
+    const { fresh, report } = await verdict(dir);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(JSON.stringify(report.findings)).toContain('directory prefix is not allowed');
+  });
+
+  it('code smuggled next to a registered document is not explained by the idea', async () => {
+    const dir = project(handWritten([DOC]));
+    put(dir, DOC, '# x\n');
+    put(dir, 'src/pay.ts', 'export const x = 1;\n');
+    commit(dir, 'docs(vision): paper IDEA-001');
+    const { fresh, report } = await verdict(dir);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(JSON.stringify(report.findings)).toContain('src/pay.ts');
+    expect(report.independentKnowledge).toEqual([]);
+  });
+
+  it('existing ideas without paths are untouched (no rewrite, no attribution)', async () => {
+    const dir = project({ 1: undefined });
+    put(dir, DOC, '# x\n');
+    commit(dir, 'docs: paper IDEA-001');
+    expect((await verdict(dir)).fresh.status).toBe('UNKNOWN');
+    expect(parseIdea('IDEA-001', idea(1)).paths).toBeUndefined();
+  });
+
+  it('write-time policy: narrow documents anywhere are accepted; broad roots, code and governance paths are refused', () => {
+    for (const ok of ['docs/vision/agent-arena-verified-automation-marketplace.md', 'strategy/plan.txt', 'README.md', 'notes/ü.adoc', 'a/b/c.MD']) {
+      expect(attributionPathProblem(ok), ok).toBeNull();
+    }
+    for (const bad of ['src/', 'src', 'docs/', '.', './', '/', 'src/pay.ts', 'package.json', 'Makefile', '.monolith/x.md', '.Monolith/x.md', '.monolith', 'docs/x.md/']) {
+      expect(attributionPathProblem(bad), bad).not.toBeNull();
+    }
+    expect(attributionPathProblem('gov/x.md', 'gov')).not.toBeNull();
+    expect(attributionPathProblem('gov/x.md', '.monolith')).toBeNull();
+    expect(() => validateNewIdea({ title: 't', description: 'd', paths: ['src/'] })).toThrow(/directory prefix/);
+    expect(() => validateNewIdea({ title: 't', description: 'd', paths: ['gov/a.md'] }, 'gov')).toThrow(/MONOLITH root/);
+  });
+
+  it('`idea add` refuses a broad path in a real instance, writes nothing, and accepts a narrow one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'monolith-ka001-add-'));
+    dirs.push(dir);
+    mkdirSync(join(dir, '.monolith'), { recursive: true });
+    const store = ideaStore(dir);
+    expect(() => addIdea(store, { title: 't', description: 'd', paths: ['src/'] })).toThrow(/directory prefix/);
+    expect(() => addIdea(store, { title: 't', description: 'd', paths: ['.monolith/x.md'] })).toThrow(/MONOLITH root/);
+    expect(() => addIdea(store, { title: 't', description: 'd', paths: ['src/pay.ts'] })).toThrow(/document files/);
+    const ok = addIdea(store, { title: 't', description: 'd', paths: ['docs/vision/x.md'] });
+    expect(ok.idea.id).toBe('IDEA-001'); // the refused attempts consumed no id
+    expect(ok.idea.paths).toEqual(['docs/vision/x.md']);
+  });
+});
+
+describe('A4-SEC-05 — a subject naming many ideas costs no git work', () => {
+  const ok = (sha: string, subject: string, files: string[] = ['docs/a.md']): GitSignals => ({
+    status: 'ok',
+    lastStateUpdate: { sha: 'b'.repeat(40), date: 'd' },
+    commitsSince: [{ sha, date: 'd', subject, files }],
+    truncated: false,
+  });
+  const opts = (calls: { n: number }) => ({
+    monolithRoot: '.monolith',
+    stateFiles: new Set<string>(),
+    hasWorkItem: () => false,
+    readBlob: () => {
+      calls.n++;
+      return null;
+    },
+  });
+  const ids = (n: number): string => Array.from({ length: n }, (_, i) => `IDEA-${String(i + 1).padStart(3, '0')}`).join(' ');
+
+  it('thousands of ids: refused before any registration is read, with a diagnostic', () => {
+    const calls = { n: 0 };
+    const ev = attributeKnowledge(ok('a'.repeat(40), `docs: ${ids(5000)}`), opts(calls));
+    expect(calls.n).toBe(0);
+    expect(ev.attributed.size).toBe(0);
+    expect(ev.rejected.get('a'.repeat(40))?.reason).toContain('names 5000 ideas');
+  });
+
+  it(`exactly ${MAX_IDEA_IDS_PER_COMMIT} ids are still judged; one more is not`, () => {
+    const at = { n: 0 };
+    attributeKnowledge(ok('a'.repeat(40), `docs: ${ids(MAX_IDEA_IDS_PER_COMMIT)}`), opts(at));
+    expect(at.n).toBe(MAX_IDEA_IDS_PER_COMMIT);
+    const over = { n: 0 };
+    attributeKnowledge(ok('a'.repeat(40), `docs: ${ids(MAX_IDEA_IDS_PER_COMMIT + 1)}`), opts(over));
+    expect(over.n).toBe(0);
+  });
+
+  it('a total read budget bounds git work across many commits', () => {
+    const calls = { n: 0 };
+    const git: GitSignals = {
+      status: 'ok',
+      lastStateUpdate: { sha: 'b'.repeat(40), date: 'd' },
+      commitsSince: Array.from({ length: 200 }, (_, i) => ({ sha: i.toString(16).padStart(40, '0'), date: 'd', subject: `docs: ${ids(8)}`, files: ['docs/a.md'] })),
+      truncated: false,
+    };
+    attributeKnowledge(git, opts(calls));
+    expect(calls.n).toBeLessThanOrEqual(64);
+  });
+
+  const commitLong = (dir: string, msg: string): void => {
+    sh(dir, ['add', '-A']);
+    sh(dir, ['commit', '-q', '-F', '-'], msg); // too long for argv
+  };
+
+  it('a ~900 KB subject repeating one registered id is judged once, quickly (legitimately attributed)', async () => {
+    const dir = project({ 1: [DOC] });
+    put(dir, DOC, '# x\n');
+    commitLong(dir, `docs: ${'IDEA-001 '.repeat(100_000)}`);
+    const t0 = Date.now();
+    const { fresh } = await verdict(dir);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(fresh.status).toBe('FRESH');
+  });
+
+  it('a ~300 KB subject naming 20000 distinct ideas is refused: UNKNOWN, with the reason, in bounded time', async () => {
+    const dir = project({ 1: [DOC] });
+    put(dir, DOC, '# x\n');
+    commitLong(dir, `docs: IDEA-001 ${ids(20_000)}`);
+    const t0 = Date.now();
+    const { fresh, report } = await verdict(dir);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(JSON.stringify(report.findings)).toContain('names 20000 ideas');
   });
 });

@@ -73,7 +73,7 @@ export interface ReconciliationReport {
   /** Ids git references that some state document mentions. Mentioned is not correct. Sorted. */
   mentionedWork: string[];
   /** KA-001: commits explained by registered independent knowledge (not part of any work item). */
-  independentKnowledge: { ideaIds: string[]; commits: string[] }[];
+  independentKnowledge: { ideaIds: string[]; paths: string[]; commits: string[] }[];
   documents: ReviewDocument[];
   limitations: string[];
   actions: string[];
@@ -123,7 +123,7 @@ export function reconcile(ev: FreshnessEvidence, result: FreshnessResult): Recon
 
   // 2. Git-derived evidence.
   const untrackedWork: UntrackedWorkItem[] = [];
-  const independentKnowledge: { ideaIds: string[]; commits: string[] }[] = [];
+  const independentKnowledge: { ideaIds: string[]; paths: string[]; commits: string[] }[] = [];
   let mentionedWork: string[] = [];
   if (ev.git.status === 'unavailable') {
     findings.push({ kind: 'unknown', code: 'GIT_UNAVAILABLE', summary: reasonMessage(result, 'GIT_UNAVAILABLE'), evidence: [] });
@@ -137,13 +137,16 @@ export function reconcile(ev: FreshnessEvidence, result: FreshnessResult): Recon
     const activity: GitCommitSignal[] = ev.git.commitsSince.filter((c) => c.files.some((f) => !ev.stateFiles.has(f)));
     const byId = new Map<string, GitCommitSignal[]>();
     const unattributed: GitCommitSignal[] = [];
-    const knowledgeBy = new Map<string, string[]>();
+    const knowledgeBy = new Map<string, { paths: string[]; lines: string[] }>();
     for (const c of activity) {
       const ids = extractWorkItemIds(c.subject);
       const k = ids.length === 0 ? ev.knowledge?.attributed.get(c.sha) : undefined;
       if (k !== undefined) {
         const key = k.ideaIds.join(', ');
-        knowledgeBy.set(key, [...(knowledgeBy.get(key) ?? []), commitLine(c)]);
+        const entry = knowledgeBy.get(key) ?? { paths: [], lines: [] };
+        entry.lines.push(commitLine(c));
+        for (const p of k.paths) if (!entry.paths.includes(p)) entry.paths.push(p);
+        knowledgeBy.set(key, entry);
         continue;
       }
       if (ids.length === 0) unattributed.push(c);
@@ -192,16 +195,16 @@ export function reconcile(ev: FreshnessEvidence, result: FreshnessResult): Recon
       actions.push(`Review the ${unattributed.length} commit(s) that name no work item and decide whether the recorded state covers them.`);
     }
 
-    for (const [ids, lines] of knowledgeBy) {
-      independentKnowledge.push({ ideaIds: ids.split(', '), commits: lines });
+    for (const [ids, entry] of knowledgeBy) {
+      independentKnowledge.push({ ideaIds: ids.split(', '), paths: entry.paths, commits: entry.lines });
     }
     if (knowledgeBy.size > 0) {
       limitations.push(
-        'Commits attributed to independent knowledge are explained by a registered idea and its declared paths; they say nothing about any work item or the active story.',
+        'Commits attributed to independent knowledge are explained by a registered idea and its declared document paths; this is attribution, not approval or review, and says nothing about any work item or the active story.',
       );
     }
 
-    const explainedByKnowledge = [...knowledgeBy.values()].reduce((n, l) => n + l.length, 0);
+    const explainedByKnowledge = [...knowledgeBy.values()].reduce((n, e) => n + e.lines.length, 0);
     if (activity.length - explainedByKnowledge > 0 && ev.activeStory.kind === 'none') {
       findings.push({
         kind: 'suspected',
@@ -330,6 +333,8 @@ export function renderReconciliation(report: ReconciliationReport, maxChars: num
     const lines: string[] = [];
     for (const k of report.independentKnowledge.slice(0, MAX_LISTED_ITEMS)) {
       lines.push(`- ${san(k.ideaIds.join(', '))} (${k.commits.length} commit(s))`);
+      const shownPaths = k.paths.slice(0, MAX_LISTED_ITEMS).map(san).join(', ');
+      lines.push(`    declared paths: ${shownPaths}${k.paths.length > MAX_LISTED_ITEMS ? ` and ${k.paths.length - MAX_LISTED_ITEMS} more` : ''}`);
       for (const c of k.commits.slice(0, MAX_COMMITS_PER_ITEM)) lines.push(`    ${san(c)}`);
     }
     sections.push(bullets('Attributed to registered independent knowledge (no work item, active story unaffected):', lines));

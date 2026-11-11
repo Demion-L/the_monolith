@@ -50,6 +50,8 @@ const MAX_ALLOCATION_ATTEMPTS = 64;
 export interface IdeaStore {
   projectRoot: string;
   rootAbs: string;
+  /** Validated relative MONOLITH root (`.monolith` by default). */
+  monolithRoot: string;
   dirAbs: string;
   boundary: WriteBoundary;
 }
@@ -67,6 +69,7 @@ export function ideaStore(targetDir: string): IdeaStore {
   return {
     projectRoot: root.projectRoot,
     rootAbs: root.rootAbs,
+    monolithRoot: root.monolithRoot,
     dirAbs: join(root.rootAbs, IDEAS_REL),
     boundary: projectBoundary(root.projectRoot),
   };
@@ -148,7 +151,7 @@ function reserveId(markers: ParentRef, id: string, createdAt: string, opts: AddI
 }
 
 export function addIdea(store: IdeaStore, input: NewIdea, opts: AddIdeaOptions = {}): AddIdeaResult {
-  validateNewIdea(input);
+  validateNewIdea(input, store.monolithRoot);
 
   // `add` only creates `memory/long-term/ideas` inside an existing instance; it never invents `.monolith/`.
   let rootStat;

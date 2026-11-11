@@ -9,7 +9,7 @@
  *   createdAt: "2026-..."
  *   context: "..."          (optional)
  *   tags: ["a", "b"]        (optional)
- *   paths: ["docs/x.md", "docs/dir/"]  (optional, KA-001: files / `dir/` prefixes of the registered artifact)
+ *   paths: ["docs/x.md"]  (optional, KA-001: exact document files of the registered artifact; see attributionPathProblem)
  *   ---
  *
  *   ## Description
@@ -55,6 +55,41 @@ export function artifactPathsCover(paths: readonly string[], file: string): bool
   return paths.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
 }
 
+/**
+ * Extensions of documents that can be registered as independent knowledge.
+ * Deliberately an allow-list of *document* formats, not of directories: a
+ * strategy paper may live anywhere, but source code, configuration and
+ * scripts never qualify, whatever directory they are in.
+ */
+export const KNOWLEDGE_DOCUMENT_EXTENSIONS: readonly string[] = ['.md', '.mdx', '.markdown', '.txt', '.rst', '.adoc'];
+
+/**
+ * A4-SEC-03: the policy for a path that is to ATTRIBUTE commits to independent
+ * knowledge (stricter than `invalidArtifactPath`, which only says the path is
+ * well-formed). A registered path must be
+ *  - one exact file: a `dir/` prefix would turn every later change under it into
+ *    "knowledge" (`src/`, the project root, ...);
+ *  - a document (`KNOWLEDGE_DOCUMENT_EXTENSIONS`): registering `src/pay.ts` would
+ *    let an idea id launder ordinary code;
+ *  - outside the MONOLITH root (case-insensitive; `.monolith` is always refused
+ *    too): governance state is never independent knowledge.
+ * Returns the reason a path is refused, or null. Registration says WHICH file a
+ * commit may be explained by; it does not say the change was reviewed or allowed.
+ */
+export function attributionPathProblem(p: string, monolithRoot?: string): string | null {
+  const syntax = invalidArtifactPath(p);
+  if (syntax !== null) return syntax;
+  if (p.endsWith('/')) return 'a directory prefix is not allowed; register the exact document file';
+  const lower = p.toLowerCase();
+  for (const root of new Set(['.monolith', (monolithRoot ?? '.monolith').replace(/^(\.\/)+/, '').replace(/\/+$/, '').toLowerCase()])) {
+    if (root !== '' && root !== '.' && (lower === root || lower.startsWith(`${root}/`))) return `a path inside the MONOLITH root (${root}) is never independent knowledge`;
+  }
+  if (!KNOWLEDGE_DOCUMENT_EXTENSIONS.some((e) => lower.endsWith(e))) {
+    return `only document files (${KNOWLEDGE_DOCUMENT_EXTENSIONS.join(', ')}) can be registered, not source code or configuration`;
+  }
+  return null;
+}
+
 export function isIdeaId(value: string): boolean {
   return ID_RE.test(value);
 }
@@ -92,7 +127,7 @@ function wellFormed(s: string): boolean {
 }
 
 /** Validates user input; returns it unchanged (content is never trimmed or rewritten). */
-export function validateNewIdea(input: NewIdea): NewIdea {
+export function validateNewIdea(input: NewIdea, monolithRoot?: string): NewIdea {
   const { title, description, context } = input;
   if (typeof title !== 'string' || title.trim() === '') throw invalid('title must not be empty.');
   if (typeof description !== 'string' || description.trim() === '') throw invalid('description must not be empty.');
@@ -111,7 +146,7 @@ export function validateNewIdea(input: NewIdea): NewIdea {
     if (!Array.isArray(input.paths) || input.paths.length === 0) throw invalid('paths, when given, must be a non-empty list.');
     if (input.paths.length > IDEA_LIMITS.paths) throw invalid(`too many paths (${input.paths.length} > ${IDEA_LIMITS.paths}).`);
     for (const p of input.paths) {
-      const bad = invalidArtifactPath(p);
+      const bad = attributionPathProblem(p, monolithRoot);
       if (bad !== null) throw invalid(`paths: ${bad} (${JSON.stringify(String(p).slice(0, 80))}).`);
     }
     if (new Set(input.paths).size !== input.paths.length) throw invalid('paths must not repeat.');

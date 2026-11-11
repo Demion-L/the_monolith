@@ -185,6 +185,17 @@ describe('A4-FIN-01 — normalization is context-aware (whitespace that carries 
     });
   });
 
+  describe('review round 1', () => {
+    it('HTML blocks (a blank line ends them) are compared as written', () => {
+      ne('<div>\n# x\n\ntext\n', '<div>\n# x\ntext\n');
+      ne('<pre>\nraw  \n</pre>\n', '<pre>\nraw\n</pre>\n');
+    });
+    it('"#" followed by a non-breaking space is not a heading (no blank line is skipped)', () => {
+      ne('#\u00a0foo\n\nbar', '#\u00a0foo\nbar');
+    });
+    it('blockquoted code keeps its whitespace', () => ne('> ```\n> code \n> ```', '> ```\n> code\n> ```'));
+  });
+
   describe('compatibility is kept', () => {
     it('Prettier-style layout of plain content and alpha.3 capsules stay equivalent', () => {
       const alpha3 = '# STORY X\n## Objective\nobj\n\n## Tests\n10 pass\n';

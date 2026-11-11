@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'child_process';
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { collect } from './collect.js';
@@ -231,6 +231,64 @@ describe('A4-SEC-01/04 — unusual file names are preserved exactly', () => {
     writeFileSync(join(dir, '.git', 'HEAD'), 'garbage\n');
     const { fresh } = await verdict(dir);
     expect(fresh.status).not.toBe('FRESH');
+  });
+});
+
+describe('review round 1 — submodules, replace refs, subdirectory projects', () => {
+  it('a submodule bump stays visible even when .gitmodules says ignore = all', async () => {
+    const sub = mkTmp('monolith-sub-');
+    sh(sub, ['init', '-q', '-b', 'main']);
+    put(sub, 'a.txt', '1\n');
+    commit(sub, 'sub 1');
+    const dir = project();
+    sh(dir, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', `file://${sub}`, 'vendor']);
+    put(dir, '.gitmodules', `${readFileSync(join(dir, '.gitmodules'), 'utf8')}\tignore = all\n`);
+    commit(dir, 'chore: add vendor');
+    put(sub, 'a.txt', '2\n');
+    commit(sub, 'sub 2');
+    sh(join(dir, 'vendor'), ['-c', 'protocol.file.allow=always', 'pull', '-q', 'origin', 'main']);
+    const bump = commit(dir, 'chore: bump vendor');
+    const s = signals(dir);
+    expect(s.commitsSince.find((c) => c.sha === bump)!.files).toEqual(['vendor']);
+  });
+
+  it('a replace ref cannot change the subjects or files that are reported', () => {
+    const dir = project();
+    put(dir, 'src/a.ts', '1\n');
+    const real = commit(dir, 'feat: the real subject');
+    const tree = sh(dir, ['rev-parse', 'HEAD~1^{tree}']).trim();
+    const parent = sh(dir, ['rev-parse', 'HEAD~1']).trim();
+    const fake = sh(dir, ['commit-tree', tree, '-p', parent, '-m', 'innocent'] ).trim();
+    sh(dir, ['replace', real, fake]);
+    const s = signals(dir);
+    expect(s.commitsSince[0].subject).toBe('feat: the real subject');
+    expect(s.commitsSince[0].files).toEqual(['src/a.ts']);
+  });
+
+  it('a project in a subdirectory: merge-commit paths are project-relative and outside paths are dropped', () => {
+    const top = mkTmp('monolith-subdir-');
+    sh(top, ['init', '-q', '-b', 'main']);
+    put(top, 'proj/monolith.config.json', '{}');
+    put(top, 'proj/.monolith/memory/working/active.md', '# a\n');
+    put(top, 'proj/f', '0\n');
+    put(top, 'outside', '0\n');
+    commit(top, 'init');
+    const proj = join(top, 'proj');
+    sh(top, ['checkout', '-q', '-b', 'side']);
+    put(top, 'proj/f', 'side\n');
+    commit(top, 'side');
+    sh(top, ['checkout', '-q', 'main']);
+    put(top, 'proj/f', 'main\n');
+    commit(top, 'main');
+    try { sh(top, ['merge', '--no-ff', '-q', 'side', '-m', 'merge']); } catch { /* conflict expected */ }
+    put(top, 'proj/f', 'resolved\n');
+    put(top, 'outside', 'resolved\n');
+    sh(top, ['add', '-A']);
+    sh(top, ['commit', '-q', '-m', 'merge side']);
+    const s = readGitSignals(proj, ['.monolith/memory/working/active.md']);
+    if (s.status !== 'ok') throw new Error('unavailable');
+    const merge = s.commitsSince.find((c) => c.subject === 'merge side')!;
+    expect(merge.files).toEqual(['f']);
   });
 });
 

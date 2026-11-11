@@ -170,8 +170,17 @@ export function capsuleCanonical(s) {
     }
     let fence = null;
     let comment = false;
+    let htmlBlock = false; // an HTML block runs to the next blank line; its content is not Markdown
     for (; i < lines.length; i++) {
         const l = lines[i];
+        if (htmlBlock) {
+            if (l.trim() === '')
+                htmlBlock = false;
+            else {
+                verbatim[i] = true;
+                continue;
+            }
+        }
         if (fence !== null) {
             verbatim[i] = true;
             const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(l);
@@ -194,6 +203,13 @@ export function capsuleCanonical(s) {
                 if (!l.includes('-->', l.indexOf('<!--') + 4))
                     comment = true;
             }
+            else if (/^ {0,3}<[A-Za-z\/!?]/.test(l)) {
+                verbatim[i] = true;
+                htmlBlock = true;
+            }
+            else if (/^ {0,3}>/.test(l)) {
+                verbatim[i] = true; // blockquote: may hold fences/code whose whitespace we cannot track
+            }
             else if (/^(?: {4}|\t)/.test(l)) {
                 verbatim[i] = true; // indented code block (or an indented continuation): compared as written
             }
@@ -211,13 +227,13 @@ export function capsuleCanonical(s) {
             continue;
         }
         const next = k + 1 < lines.length ? lines[k + 1] : undefined;
-        const hardBreak = / {2}$/.test(l) && l.trim() !== '' && !/^#{1,6}\s/.test(l) && next !== undefined && next.trim() !== '' && !/^#{1,6}(\s|$)/.test(next) && fenceOpen(next) === null;
+        const hardBreak = / {2}$/.test(l) && l.trim() !== '' && !/^#{1,6}[ \t]/.test(l) && next !== undefined && next.trim() !== '' && !/^#{1,6}([ \t]|$)/.test(next) && fenceOpen(next) === null;
         l = l.replace(/[ \t]+$/, '') + (hardBreak ? '  ' : '');
         if (l === '' && skippable) {
             skippable = false;
             continue;
         }
-        skippable = /^#{1,6}\s/.test(l);
+        skippable = /^#{1,6}[ \t]/.test(l);
         out.push(l);
         outVerbatim.push(false);
     }

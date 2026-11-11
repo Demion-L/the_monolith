@@ -294,8 +294,8 @@ against a local partial clone with a hostile `uploadpack` and git 2.53 — behav
 other git versions is not verified). History limits that are *not* hidden:
 a shallow clone is `UNKNOWN`; a clean merge shows no changes of its own (the commits it
 brings in are examined individually) while changes made inside a merge are read as
-activity; history is bounded at 500 commits; the repository's own replace refs and
-grafts are honoured. `monolith validate` deliberately does **not**
+activity; submodule pointer changes are always listed (`.gitmodules` `ignore` is overridden);
+replace refs are ignored; history is bounded at 500 commits; legacy grafts are honoured. `monolith validate` deliberately does **not**
 run it: validate is a static, file-only gate (SEC-002/ADR-011) with no subprocess, and
 freshness is advisory, not pass/fail. Limits: work-item ids are recognized by a narrow
 pattern (`UI-002D`, `SEC-001B.1-R`); uncommitted edits to state documents are invisible

@@ -51,6 +51,10 @@ const SAFE_ENV = {
   GIT_NO_LAZY_FETCH: '1',
   /** Older git has no GIT_NO_LAZY_FETCH; refusing every transport stops the fetch itself. */
   GIT_ALLOW_PROTOCOL: 'none',
+  /** State-document names come from config: never git pathspec magic. */
+  GIT_LITERAL_PATHSPECS: '1',
+  /** Replace refs would change the history this check reports. */
+  GIT_NO_REPLACE_OBJECTS: '1',
 };
 
 class GitMissingError extends Error {}
@@ -113,7 +117,7 @@ function parseCommitTriples(out: string): { sha: string; date: string; subject: 
  * 40-hex string) can be mistaken for a commit id or a header. Commits without
  * changes (clean merges, empty commits) may be absent; order must be preserved.
  */
-function parseFileLists(out: string, expected: readonly string[]): Map<string, string[]> {
+function parseFileLists(out: string, expected: readonly string[], prefix: string): Map<string, string[]> {
   const t = nulTokens(out);
   const files = new Map<string, string[]>();
   let next = 0; // index into `expected` the next sha must be at or after
@@ -126,7 +130,10 @@ function parseFileLists(out: string, expected: readonly string[]): Map<string, s
     const list: string[] = [];
     while (i < t.length && t[i].startsWith(':')) {
       if (!RAW_HEADER_RE.test(t[i]) || i + 1 >= t.length) throw new GitOutputError('a raw diff entry is malformed');
-      list.push(t[i + 1]);
+      // `--relative` is ignored for combined (merge) entries, which start with `::`: make them project-relative here.
+      if (t[i].startsWith('::')) {
+        if (t[i + 1].startsWith(prefix)) list.push(t[i + 1].slice(prefix.length));
+      } else list.push(t[i + 1]);
       i += 2;
     }
     files.set(sha, list);
@@ -184,12 +191,13 @@ export function readGitSignals(targetDir: string, stateFiles: string[]): GitSign
 
     let fileLists = new Map<string, string[]>();
     if (commits.length > 0) {
+      const prefix = git(targetDir, ['rev-parse', '--show-prefix']).replace(/\n$/, '');
       const raw = git(
         targetDir,
-        ['diff-tree', '--stdin', '-z', '-r', '--raw', '-c', '--root', '--no-renames', '--no-ext-diff', '--no-textconv', '--relative'],
+        ['diff-tree', '--stdin', '-z', '-r', '--raw', '-c', '--root', '--no-renames', '--no-ext-diff', '--no-textconv', '--ignore-submodules=none', '--relative'],
         { input: `${commits.map((c) => c.sha).join('\n')}\n` },
       );
-      fileLists = parseFileLists(raw, commits.map((c) => c.sha));
+      fileLists = parseFileLists(raw, commits.map((c) => c.sha), prefix);
     }
 
     const signals: GitCommitSignal[] = commits.map((c) => ({ sha: c.sha, date: c.date, subject: c.subject, files: fileLists.get(c.sha) ?? [] }));

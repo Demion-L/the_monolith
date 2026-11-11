@@ -255,8 +255,10 @@ become anything.
 - **Independent knowledge (`--path`, alpha.4, KA-001; narrowed by A4-SEC-03):** `--path`
   (repeatable, at most 20) registers the **exact document files** of a knowledge artifact
   that belongs to no work item (e.g. a strategy paper). A registered path must be one
-  file with a document extension (`.md .mdx .markdown .txt .rst .adoc`) and must lie
-  **outside** the MONOLITH root. Directory prefixes (`src/`, `docs/`, `./`), source or
+  file with a document extension (`.md .mdx .markdown .adoc`) and must lie
+  **outside** the MONOLITH root. Agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `SKILL.md`, ...)
+  and tool/dependency directories (`.git`, `.claude`, `.github`, `node_modules`, ...) are refused too;
+  this is a deny-list, not a proof that a document is harmless. Directory prefixes (`src/`, `docs/`, `./`), source or
   configuration files (`src/pay.ts`, `package.json`) and anything under the MONOLITH root
   are refused by `idea add`; absolute paths, `..`, `.` or empty segments, quotes,
   backslashes and glob characters are refused as before. The field is stored as

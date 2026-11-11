@@ -65,7 +65,11 @@ export function artifactPathsCover(paths, file) {
  * strategy paper may live anywhere, but source code, configuration and
  * scripts never qualify, whatever directory they are in.
  */
-export const KNOWLEDGE_DOCUMENT_EXTENSIONS = ['.md', '.mdx', '.markdown', '.txt', '.rst', '.adoc'];
+export const KNOWLEDGE_DOCUMENT_EXTENSIONS = ['.md', '.mdx', '.markdown', '.adoc'];
+/** Directories whose documents steer tools, agents or dependencies; never knowledge (compared lower-case). */
+const KNOWLEDGE_DENIED_DIRS = ['.git', '.claude', '.cursor', '.github', '.vscode', '.husky', 'node_modules'];
+/** Agent-instruction file names (compared lower-case): changing them changes agent behaviour. */
+const KNOWLEDGE_DENIED_NAMES = ['agents.md', 'claude.md', 'gemini.md', 'skill.md', 'copilot-instructions.md', '.cursorrules'];
 /**
  * A4-SEC-03: the policy for a path that is to ATTRIBUTE commits to independent
  * knowledge (stricter than `invalidArtifactPath`, which only says the path is
@@ -90,6 +94,14 @@ export function attributionPathProblem(p, monolithRoot) {
         if (root !== '' && root !== '.' && (lower === root || lower.startsWith(`${root}/`)))
             return `a path inside the MONOLITH root (${root}) is never independent knowledge`;
     }
+    if (/[\u200b-\u200f\u2028-\u202e\u2060-\u2064\ufeff\u00a0]/.test(p))
+        return 'path must not contain invisible or look-alike whitespace characters';
+    const segs = lower.split('/');
+    const hiddenDir = segs.slice(0, -1).find((x) => KNOWLEDGE_DENIED_DIRS.includes(x));
+    if (hiddenDir !== undefined)
+        return `a path under ${hiddenDir}/ configures tools or dependencies and is never independent knowledge`;
+    if (KNOWLEDGE_DENIED_NAMES.includes(segs[segs.length - 1]))
+        return 'agent-instruction files cannot be registered as independent knowledge';
     if (!KNOWLEDGE_DOCUMENT_EXTENSIONS.some((e) => lower.endsWith(e))) {
         return `only document files (${KNOWLEDGE_DOCUMENT_EXTENSIONS.join(', ')}) can be registered, not source code or configuration`;
     }

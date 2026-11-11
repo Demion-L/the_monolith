@@ -69,7 +69,7 @@ export const KNOWLEDGE_DOCUMENT_EXTENSIONS = ['.md', '.mdx', '.markdown', '.adoc
 /** Directories whose documents steer tools, agents or dependencies; never knowledge (compared lower-case). */
 const KNOWLEDGE_DENIED_DIRS = ['.git', '.claude', '.cursor', '.github', '.vscode', '.husky', 'node_modules'];
 /** Agent-instruction file names (compared lower-case): changing them changes agent behaviour. */
-const KNOWLEDGE_DENIED_NAMES = ['agents.md', 'claude.md', 'gemini.md', 'skill.md', 'copilot-instructions.md', '.cursorrules'];
+const KNOWLEDGE_DENIED_NAMES = ['agents.md', 'agent.md', 'claude.md', 'gemini.md', 'skill.md', 'conventions.md', 'codeowners.md', 'copilot-instructions.md', '.cursorrules', '.windsurfrules.md'];
 /**
  * A4-SEC-03: the policy for a path that is to ATTRIBUTE commits to independent
  * knowledge (stricter than `invalidArtifactPath`, which only says the path is
@@ -97,9 +97,9 @@ export function attributionPathProblem(p, monolithRoot) {
     if (/[\u200b-\u200f\u2028-\u202e\u2060-\u2064\ufeff\u00a0]/.test(p))
         return 'path must not contain invisible or look-alike whitespace characters';
     const segs = lower.split('/');
-    const hiddenDir = segs.slice(0, -1).find((x) => KNOWLEDGE_DENIED_DIRS.includes(x));
+    const hiddenDir = segs.slice(0, -1).find((x) => x.startsWith('.') || KNOWLEDGE_DENIED_DIRS.includes(x));
     if (hiddenDir !== undefined)
-        return `a path under ${hiddenDir}/ configures tools or dependencies and is never independent knowledge`;
+        return `a path under ${hiddenDir}/ (hidden or tool/dependency directory) configures tools or dependencies and is never independent knowledge`;
     if (KNOWLEDGE_DENIED_NAMES.includes(segs[segs.length - 1]))
         return 'agent-instruction files cannot be registered as independent knowledge';
     if (!KNOWLEDGE_DOCUMENT_EXTENSIONS.some((e) => lower.endsWith(e))) {

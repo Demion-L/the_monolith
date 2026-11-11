@@ -292,7 +292,7 @@ describe('A4-SEC-03 — attribution scope is narrow: exact documents, never code
     for (const ok of ['docs/vision/agent-arena-verified-automation-marketplace.md', 'strategy/plan.adoc', 'README.md', 'notes/ü.adoc', 'a/b/c.MD']) {
       expect(attributionPathProblem(ok), ok).toBeNull();
     }
-    for (const bad of ['AGENTS.md', 'docs/CLAUDE.md', '.claude/skills/x/SKILL.md', '.github/copilot-instructions.md', '.git/hooks/pre-commit.md', 'node_modules/x/index.md', 'requirements.txt', 'CMakeLists.txt', 'notes.txt', 'docs/x\u200b.md', 'docs/x\u00a0.md', 'src/', 'src', 'docs/', '.', './', '/', 'src/pay.ts', 'package.json', 'Makefile', '.monolith/x.md', '.Monolith/x.md', '.monolith', 'docs/x.md/']) {
+    for (const bad of ['AGENTS.md', 'docs/CLAUDE.md', '.claude/skills/x/SKILL.md', '.github/copilot-instructions.md', '.git/hooks/pre-commit.md', 'node_modules/x/index.md', 'AGENT.md', 'CONVENTIONS.md', '.windsurf/rules/x.md', '.agents/x.md', '.devcontainer/README.md', '.idea/x.md', 'requirements.txt', 'CMakeLists.txt', 'notes.txt', 'docs/x\u200b.md', 'docs/x\u00a0.md', 'src/', 'src', 'docs/', '.', './', '/', 'src/pay.ts', 'package.json', 'Makefile', '.monolith/x.md', '.Monolith/x.md', '.monolith', 'docs/x.md/']) {
       expect(attributionPathProblem(bad), bad).not.toBeNull();
     }
     expect(attributionPathProblem('gov/x.md', 'gov')).not.toBeNull();

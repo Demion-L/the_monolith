@@ -256,9 +256,9 @@ become anything.
   (repeatable, at most 20) registers the **exact document files** of a knowledge artifact
   that belongs to no work item (e.g. a strategy paper). A registered path must be one
   file with a document extension (`.md .mdx .markdown .adoc`) and must lie
-  **outside** the MONOLITH root. Agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `SKILL.md`, ...)
-  and tool/dependency directories (`.git`, `.claude`, `.github`, `node_modules`, ...) are refused too;
-  this is a deny-list, not a proof that a document is harmless. Directory prefixes (`src/`, `docs/`, `./`), source or
+  **outside** the MONOLITH root. Well-known agent-instruction file names (`AGENTS.md`, `CLAUDE.md`, `SKILL.md`, ...),
+  any path under a hidden (dot) directory and `node_modules` are refused too;
+  this is a best-effort deny-list (other instruction files may exist), not a proof that a document is harmless. Directory prefixes (`src/`, `docs/`, `./`), source or
   configuration files (`src/pay.ts`, `package.json`) and anything under the MONOLITH root
   are refused by `idea add`; absolute paths, `..`, `.` or empty segments, quotes,
   backslashes and glob characters are refused as before. The field is stored as

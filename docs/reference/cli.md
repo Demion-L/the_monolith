@@ -309,6 +309,22 @@ appended text) stays a `conflict`. This is deliberately not a general whitespace
 comparison, and capsules written by earlier versions are recognised but never rewritten.
 No formatter is run or required by MONOLITH.
 
+**State consistency (alpha.4).** `finalize` writes only the capsule, `execution-history.md`,
+`story-index.md`, `active.md`, HANDOFF and the documents you list in `docUpdates`. It does not
+own `roadmap-index.md`, so a roadmap row that still says `IN PROGRESS` for the story you just
+finalized used to go unnoticed. `plan` and `apply` now report a `consistency` block
+(also in `--json`): `CONSISTENT`, `INCONSISTENT` (each finding names the documents and, for
+documents this finalization does not write, a remediation that is advice only) or
+`NOT_VERIFIED` (a state document is missing or unreadable, or the active story cannot be
+read). In `plan` it is projected from the text the plan would write; in `apply` it is read
+from disk after the write. It uses the same rules as `monolith brief` (one shared
+`findContradictions`), covers only active.md, roadmap-index.md and story-index.md, and never
+changes the plan/apply status, the digest or the exit code, and never edits a document. A
+roadmap row `IN PROGRESS` while no story is active is **not** reported: nothing defines
+`IN PROGRESS` as "the active story", so that needs a human decision. To fix a drifting
+external document within finalization, list it in `finalization.allowedDocs` and pass a
+`docUpdates` entry.
+
 A capsule left with two hard links by a process killed between `link()` and the
 removal of its staging name is reported by `plan` as `FILE_HARDLINKED`. When the
 second name is exactly that staging residue (same file, identical content, no

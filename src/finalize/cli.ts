@@ -10,6 +10,7 @@
 
 import { lstatSync, readFileSync } from 'fs';
 import { applyFinalization, planFinalization, type ApplyResult, type FinalizationPlan } from './core.js';
+import type { ConsistencyAssessment } from './consistency.js';
 import { parseProposal, type FinalizationProposal } from './proposal.js';
 
 const USAGE = `Usage:
@@ -74,6 +75,15 @@ async function readProposal(src: string): Promise<FinalizationProposal> {
   return parsed.proposal;
 }
 
+function printConsistency(c: ConsistencyAssessment | undefined): void {
+  if (c === undefined) return;
+  console.log(`\nState consistency (${c.projected ? 'projected after apply' : 'actual'}): ${c.status}`);
+  for (const f of c.findings) console.log(`  [CONFLICT] ${printable(f.message)}\n         → ${printable(f.remediation)}`);
+  for (const n of c.notVerified) console.log(`  [NOT_VERIFIED] ${printable(n)}`);
+  if (c.status !== 'CONSISTENT') console.log('  This does not change the outcome of the finalization; MONOLITH edits none of the documents above on its own.');
+  console.log(`  Scope: ${printable(c.scope)}`);
+}
+
 function printPlan(pl: FinalizationPlan): void {
   console.log(`Finalization plan for ${printable(pl.storyId)}: ${pl.status}${pl.partial ? ' (PARTIAL: an earlier run was interrupted; apply rolls it forward)' : ''}`);
   console.log('\nPreconditions:');
@@ -81,6 +91,7 @@ function printPlan(pl: FinalizationPlan): void {
   console.log('\nTargets (in write order, active.md last):');
   for (const t of pl.targets) console.log(`  [${t.state}] ${t.id} → ${printable(t.path)}${t.state === 'done' ? '' : ` — ${printable(t.reason)}`}`);
   for (const d of pl.diagnostics) console.log(`\nNote: ${printable(d)}`);
+  printConsistency(pl.consistency);
   if (pl.status === 'READY') console.log(`\nDigest: ${pl.digest}\nOwner approval: monolith finalize apply --proposal <same file> --approve ${pl.digest}\nThe digest shows this plan is unchanged; it does not prove who approves it. Do not run apply unless the owner approved this exact plan.`);
 }
 
@@ -91,6 +102,7 @@ function printApply(r: ApplyResult): void {
   if (r.failed) console.log(`  failed: ${r.failed.target}${r.failed.publication ? ` [${r.failed.publication}]` : ''}: ${printable(r.failed.message)}`);
   for (const d of r.diagnostics) console.log(`  ${printable(d)}`);
   if (r.status === 'REFUSED') for (const c of r.plan.checks.filter((x) => x.status !== 'PASS')) console.log(`  [${c.status}] ${c.id}: ${printable(c.detail)}`);
+  if (r.status === 'FINALIZED' || r.status === 'ALREADY_FINALIZED') printConsistency(r.plan.consistency);
 }
 
 export async function runFinalizeCommand(args: string[], targetDir = process.cwd()): Promise<number> {

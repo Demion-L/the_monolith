@@ -40,6 +40,7 @@ import {
 import { acquireLock, type LockOptions } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
 import { declaresNoActiveStory, maskNonContent } from '../brief/markdown-context.js';
+import { assessConsistency, type ConsistencyAssessment } from './consistency.js';
 import { validDate, validateRelPath, type FinalizationProposal } from './proposal.js';
 
 export type CheckStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
@@ -79,6 +80,12 @@ export interface FinalizationPlan {
   checks: Check[];
   targets: PlannedTarget[];
   diagnostics: string[];
+  /**
+   * FIN-002: whether the state documents agree with each other in the state
+   * this plan leads to (projected before apply, actual once every target is
+   * done). Informational: it never changes `status`, the digest or exit codes.
+   */
+  consistency?: ConsistencyAssessment;
 }
 
 export interface ApplyResult {
@@ -790,7 +797,21 @@ function plan(ctx: Context, p: FinalizationProposal): { plan: FinalizationPlan; 
     }),
   );
 
-  return { plan: { status, storyId: p.story.id, digest, partial: someDone && !allDone, checks, targets, diagnostics }, internals };
+  const finalText = (rel: string): string | null => {
+    const it = internals.find((i) => i.target.path === rel);
+    if (it?.write) return it.write.content;
+    const d = readDoc(ctx.projectRoot, rel);
+    return d.kind === 'present' ? d.content : null;
+  };
+  const consistency = assessConsistency({
+    active: finalText(`${ctx.root}/memory/working/active.md`),
+    roadmap: finalText(`${ctx.root}/context/maps/roadmap-index.md`),
+    storyIndex: finalText(`${ctx.root}/memory/working/story-index.md`),
+    writtenPaths: targets.filter((t) => t.kind !== 'capsule' && t.kind !== 'execution-history' && (t.state === 'pending' || t.state === 'done')).map((t) => t.path),
+    projected: !allDone,
+  });
+
+  return { plan: { status, storyId: p.story.id, digest, partial: someDone && !allDone, checks, targets, diagnostics, consistency }, internals };
 }
 
 export function planFinalization(targetDir: string, proposal: FinalizationProposal): FinalizationPlan {

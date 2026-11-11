@@ -255,12 +255,17 @@ function isDone(status: string | undefined): boolean {
   return status === 'COMPLETED' || status === 'DONE';
 }
 
-interface Contradiction {
+export interface Contradiction {
   message: string;
   documents: string[];
 }
 
-function findContradictions(ev: FreshnessEvidence): Contradiction[] {
+/**
+ * Contradictions between the state documents. Shared by `brief` (freshness /
+ * `--reconcile`) and `finalize` (FIN-002 consistency assessment) so that there
+ * is exactly one definition of "these documents disagree".
+ */
+export function findContradictions(ev: Pick<FreshnessEvidence, 'activeStory' | 'roadmapActiveStory' | 'roadmapStatuses' | 'storyIndexStatuses'>): Contradiction[] {
   const out: Contradiction[] = [];
 
   if (ev.activeStory.kind === 'unknown' && ev.activeStory.contradiction !== undefined) {

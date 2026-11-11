@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import { existsSync, readdirSync } from 'fs';
+import { colorEnabled, paint, statusWord } from '../cli/style.js';
 import { isAbsolute, join, resolve, relative, sep } from 'path';
 import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, findWriteArtifacts, describeWriteArtifacts, } from '../root/index.js';
 const DEFINITION_FILE_NAME = 'project.definition.mjs';
@@ -148,7 +149,7 @@ function checkTemplates(targetDir, monolithRoot) {
 }
 function formatRow(result) {
     const label = result.label.padEnd(COL_WIDTH);
-    const status = result.passed ? 'PASS' : 'FAIL';
+    const status = statusWord(result.passed ? 'PASS' : 'FAIL', colorEnabled());
     const tail = result.error ? `  ${result.error}` : '';
     return `${label}${status}${tail}`;
 }
@@ -194,13 +195,13 @@ export async function runValidate(options) {
     }
     else {
         console.log('');
-        console.log('MONOLITH validate');
+        console.log(paint('MONOLITH validate', 'head', colorEnabled()));
         console.log('');
         for (const r of results) {
             console.log(formatRow(r));
         }
         console.log('');
-        console.log(`Result: ${passed ? 'PASS' : 'FAIL'}`);
+        console.log(`Result: ${statusWord(passed ? 'PASS' : 'FAIL', colorEnabled())}`);
         if (configResult.passed && configResult.note)
             console.log(`Note: ${configResult.note}`);
         // Read-only warning (SEC-001B.2): never affects the result or the exit code.

@@ -14,4 +14,11 @@ export declare const MAX_COMMITS_SINCE = 500;
  * @param stateFiles state documents, relative to `targetDir`. Only existing ones need be passed.
  */
 export declare function readGitSignals(targetDir: string, stateFiles: string[]): GitSignals;
+/**
+ * Contents of `relPath` (relative to `targetDir`) as of commit `sha`, or null
+ * when the file does not exist there or cannot be read. `git cat-file blob`
+ * only: read-only, no textconv, no shell. Used by KA-001 to judge an idea
+ * registration as it was when the commit was made.
+ */
+export declare function readBlobAt(targetDir: string, sha: string, relPath: string): string | null;
 //# sourceMappingURL=git-signals.d.ts.map

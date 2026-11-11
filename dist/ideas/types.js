@@ -11,6 +11,9 @@ export const IDEA_LIMITS = {
     title: 300,
     description: 100_000,
     context: 20_000,
+    /** KA-001: at most this many `paths` per idea, each at most `pathLength` characters. */
+    paths: 20,
+    pathLength: 300,
     /** Upper bound of one idea file, in bytes (frontmatter + body). */
     fileBytes: 256 * 1024,
 };

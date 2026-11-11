@@ -19,18 +19,28 @@ export interface Idea {
     status: IdeaStatus;
     context?: string;
     tags?: string[];
+    /**
+     * KA-001: project-relative files (or directories, ending in `/`) of the
+     * independent knowledge artifact this idea registers. Optional; an idea
+     * without `paths` attributes nothing in `monolith brief`.
+     */
+    paths?: string[];
 }
 /** What a caller supplies; `id`, `createdAt` and `status` are assigned by the store. */
 export interface NewIdea {
     title: string;
     description: string;
     context?: string;
+    paths?: string[];
 }
 /** Limits are protective ceilings (a CLI argument, not a document store). */
 export declare const IDEA_LIMITS: {
     readonly title: 300;
     readonly description: 100000;
     readonly context: 20000;
+    /** KA-001: at most this many `paths` per idea, each at most `pathLength` characters. */
+    readonly paths: 20;
+    readonly pathLength: 300;
     /** Upper bound of one idea file, in bytes (frontmatter + body). */
     readonly fileBytes: number;
 };

@@ -20,6 +20,7 @@
  *            absence of an active story never means "project complete".
  */
 import { maskNonContent } from './markdown-context.js';
+import type { KnowledgeEvidence } from './knowledge.js';
 export type FreshnessStatus = 'FRESH' | 'STALE' | 'UNKNOWN';
 export type FreshnessReasonCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'UNATTRIBUTED_ACTIVITY' | 'NO_ACTIVITY_SINCE_STATE_UPDATE' | 'ACTIVITY_RECORDED';
 export interface FreshnessReason {
@@ -80,6 +81,8 @@ export interface FreshnessEvidence {
     recordedText: string;
     /** Repo-relative-to-project paths that are state documents (their own commits are not "activity"). */
     stateFiles: ReadonlySet<string>;
+    /** KA-001: commits explained by registered independent knowledge. Absent = none (older callers). */
+    knowledge?: KnowledgeEvidence;
 }
 export interface FreshnessResult {
     status: FreshnessStatus;
@@ -128,5 +131,15 @@ export declare function parseRoadmapActiveStory(content: string): string | null;
 export declare function parseRoadmapStatuses(content: string): Map<string, string>;
 /** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md (outside code fences and comments). */
 export declare function parseStoryIndexStatuses(content: string): Map<string, string>;
+export interface Contradiction {
+    message: string;
+    documents: string[];
+}
+/**
+ * Contradictions between the state documents. Shared by `brief` (freshness /
+ * `--reconcile`) and `finalize` (FIN-002 consistency assessment) so that there
+ * is exactly one definition of "these documents disagree".
+ */
+export declare function findContradictions(ev: Pick<FreshnessEvidence, 'activeStory' | 'roadmapActiveStory' | 'roadmapStatuses' | 'storyIndexStatuses'>): Contradiction[];
 export declare function evaluateFreshness(ev: FreshnessEvidence): FreshnessResult;
 //# sourceMappingURL=freshness.d.ts.map

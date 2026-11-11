@@ -62,6 +62,7 @@ export function reconcile(ev, result) {
     }
     // 2. Git-derived evidence.
     const untrackedWork = [];
+    const independentKnowledge = [];
     let mentionedWork = [];
     if (ev.git.status === 'unavailable') {
         findings.push({ kind: 'unknown', code: 'GIT_UNAVAILABLE', summary: reasonMessage(result, 'GIT_UNAVAILABLE'), evidence: [] });
@@ -77,8 +78,15 @@ export function reconcile(ev, result) {
         const activity = ev.git.commitsSince.filter((c) => c.files.some((f) => !ev.stateFiles.has(f)));
         const byId = new Map();
         const unattributed = [];
+        const knowledgeBy = new Map();
         for (const c of activity) {
             const ids = extractWorkItemIds(c.subject);
+            const k = ids.length === 0 ? ev.knowledge?.attributed.get(c.sha) : undefined;
+            if (k !== undefined) {
+                const key = k.ideaIds.join(', ');
+                knowledgeBy.set(key, [...(knowledgeBy.get(key) ?? []), commitLine(c)]);
+                continue;
+            }
             if (ids.length === 0)
                 unattributed.push(c);
             for (const id of ids)
@@ -117,11 +125,21 @@ export function reconcile(ev, result) {
                 kind: 'suspected',
                 code: 'UNATTRIBUTED_ACTIVITY',
                 summary: `${unattributed.length} commit(s) after the last state update change project files without naming a work item; whether the state documents cover them cannot be determined.`,
-                evidence: unattributed.slice(0, MAX_COMMITS_PER_ITEM).map(commitLine),
+                evidence: unattributed.slice(0, MAX_COMMITS_PER_ITEM).map((c) => {
+                    const why = ev.knowledge?.rejected.get(c.sha);
+                    return why === undefined ? commitLine(c) : `${commitLine(c)} — names an idea but is not attributed: ${why.reason}`;
+                }),
             });
             actions.push(`Review the ${unattributed.length} commit(s) that name no work item and decide whether the recorded state covers them.`);
         }
-        if (activity.length > 0 && ev.activeStory.kind === 'none') {
+        for (const [ids, lines] of knowledgeBy) {
+            independentKnowledge.push({ ideaIds: ids.split(', '), commits: lines });
+        }
+        if (knowledgeBy.size > 0) {
+            limitations.push('Commits attributed to independent knowledge are explained by a registered idea and its declared paths; they say nothing about any work item or the active story.');
+        }
+        const explainedByKnowledge = [...knowledgeBy.values()].reduce((n, l) => n + l.length, 0);
+        if (activity.length - explainedByKnowledge > 0 && ev.activeStory.kind === 'none') {
             findings.push({
                 kind: 'suspected',
                 code: 'ACTIVITY_WITHOUT_ACTIVE_STORY',
@@ -156,6 +174,7 @@ export function reconcile(ev, result) {
         findings,
         untrackedWork,
         mentionedWork,
+        independentKnowledge,
         documents,
         limitations,
         actions,
@@ -218,6 +237,15 @@ export function renderReconciliation(report, maxChars) {
                 lines.push(`    ${san(e)}`);
         }
         sections.push(bullets(title, lines));
+    }
+    if (report.independentKnowledge.length > 0) {
+        const lines = [];
+        for (const k of report.independentKnowledge.slice(0, MAX_LISTED_ITEMS)) {
+            lines.push(`- ${san(k.ideaIds.join(', '))} (${k.commits.length} commit(s))`);
+            for (const c of k.commits.slice(0, MAX_COMMITS_PER_ITEM))
+                lines.push(`    ${san(c)}`);
+        }
+        sections.push(bullets('Attributed to registered independent knowledge (no work item, active story unaffected):', lines));
     }
     if (report.documents.length > 0) {
         const lines = [];

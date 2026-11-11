@@ -59,7 +59,7 @@ Mission usage:
   monolith mission list
   monolith mission show <id>
   monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
-  monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
+  monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."] [--path <file or dir/> ...]
   monolith mission checkpoints <missionId>
 
 Brief usage:

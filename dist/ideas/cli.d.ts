@@ -11,6 +11,7 @@ interface AddFlags {
     description?: string;
     context?: string;
     descriptionStdin?: boolean;
+    paths?: string[];
 }
 /** Strict: every flag needs a value, none may repeat, unknown flags and stray arguments are errors. */
 export declare function parseAddArgs(args: string[]): AddFlags;

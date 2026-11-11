@@ -164,6 +164,8 @@ export function addIdea(store, input, opts = {}) {
         const idea = { id, title: input.title, description: input.description, createdAt, status: 'inbox' };
         if (input.context !== undefined)
             idea.context = input.context;
+        if (input.paths !== undefined)
+            idea.paths = input.paths;
         const text = serializeIdea(idea);
         // The character limits do not bound the file (UTF-8 and JSON escaping expand text), and the reader refuses
         // files over `fileBytes`: refuse here, before an id is reserved, so nothing is saved that cannot be read back.

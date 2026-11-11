@@ -21,6 +21,7 @@
  */
 import { type ConfigRead, type FsOps, type WriteWarning } from '../root/index.js';
 import { type LockOptions } from '../coordinatorium/lock.js';
+import { type ConsistencyAssessment } from './consistency.js';
 import { type FinalizationProposal } from './proposal.js';
 export type CheckStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
 export type TargetKind = 'capsule' | 'execution-history' | 'story-index' | 'doc' | 'handoff' | 'active';
@@ -56,6 +57,12 @@ export interface FinalizationPlan {
     checks: Check[];
     targets: PlannedTarget[];
     diagnostics: string[];
+    /**
+     * FIN-002: whether the state documents agree with each other in the state
+     * this plan leads to (projected before apply, actual once every target is
+     * done). Informational: it never changes `status`, the digest or exit codes.
+     */
+    consistency?: ConsistencyAssessment;
 }
 export interface ApplyResult {
     status: ApplyStatus;
@@ -86,6 +93,17 @@ export interface FinalizeConfig {
 }
 export declare function readFinalizeConfig(config: ConfigRead): FinalizeConfig;
 export declare function renderCapsule(p: FinalizationProposal): string;
+/**
+ * Format-equivalence of a capsule (FIN-001). The capsule is created once and
+ * never overwritten, so "already present" used to mean byte-identical; a
+ * formatter pass (Prettier adds a blank line after every heading) then turned an
+ * unchanged capsule into a CONFLICT. Equivalence is deliberately narrow and
+ * NOT a general whitespace-insensitive comparison: only line endings, trailing
+ * whitespace on a line, a single blank line directly after an ATX heading and
+ * trailing blank lines at end of file are ignored. Every other character —
+ * including blank lines elsewhere (paragraph breaks) — must match.
+ */
+export declare function capsuleCanonical(s: string): string;
 /** Evidence older than this many days before the finalization date is not accepted. */
 export declare const EVIDENCE_MAX_AGE_DAYS = 7;
 export type ActiveIdentity = {

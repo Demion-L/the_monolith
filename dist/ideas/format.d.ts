@@ -9,6 +9,7 @@
  *   createdAt: "2026-..."
  *   context: "..."          (optional)
  *   tags: ["a", "b"]        (optional)
+ *   paths: ["docs/x.md", "docs/dir/"]  (optional, KA-001: files / `dir/` prefixes of the registered artifact)
  *   ---
  *
  *   ## Description
@@ -21,6 +22,14 @@
  * The description is the body: no escaping, no trimming.
  */
 import { type Idea, type NewIdea } from './types.js';
+/**
+ * KA-001: a registered artifact path. Project-relative, `/`-separated, no
+ * traversal, no globs; a trailing `/` makes it a directory prefix. Returns the
+ * reason it is invalid, or null.
+ */
+export declare function invalidArtifactPath(p: unknown): string | null;
+/** True when `file` is covered by one of the registered `paths` (exact file, or `dir/` prefix). */
+export declare function artifactPathsCover(paths: readonly string[], file: string): boolean;
 export declare function isIdeaId(value: string): boolean;
 export declare function ideaNumber(id: string): number;
 export declare function formatIdeaId(n: number): string;

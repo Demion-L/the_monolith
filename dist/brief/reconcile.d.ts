@@ -54,6 +54,11 @@ export interface ReconciliationReport {
     untrackedWork: UntrackedWorkItem[];
     /** Ids git references that some state document mentions. Mentioned is not correct. Sorted. */
     mentionedWork: string[];
+    /** KA-001: commits explained by registered independent knowledge (not part of any work item). */
+    independentKnowledge: {
+        ideaIds: string[];
+        commits: string[];
+    }[];
     documents: ReviewDocument[];
     limitations: string[];
     actions: string[];

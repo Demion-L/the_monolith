@@ -17,6 +17,7 @@ import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { startDashboardServer, loadUiAssets, UiAssetsError } from '../http/index.js';
 import { RootContainmentError, resolveMonolithRoot } from '../root/index.js';
+import { colorEnabled, paint, statusWord } from './style.js';
 import { DEFAULT_DEV_UI_PORT, DEFAULT_UI_PORT, UI_DEV_USAGE, UI_USAGE, parseUiArgs } from './ui-args.js';
 /** Thrown for expected, user-fixable failures. */
 export class UiLaunchError extends Error {
@@ -45,6 +46,29 @@ export function assertMonolithProject(projectRoot) {
     }
     if (!isDir) {
         throw new UiLaunchError(`No MONOLITH instance found in ${projectRoot} (expected directory ${rootAbs}). Run 'monolith init' here, or cd into a MONOLITH project.`);
+    }
+}
+/**
+ * The launch block (CLI-UX-001). Printed only after the server is actually
+ * listening, so READY is never shown for a failed start (failures throw before
+ * this and are reported on stderr). The URL is on a line of its own; the CLI
+ * does not open a browser and says so by asking the user to.
+ */
+function announce(log, info) {
+    const on = colorEnabled();
+    for (const line of [
+        paint(info.title, 'head', on),
+        '',
+        `Status: ${statusWord('READY', on)}`,
+        '',
+        'Open in your browser:',
+        `  ${info.url}`,
+        '',
+        `Project: ${info.projectRoot}`,
+        info.note,
+        'Press Ctrl+C to stop.',
+    ]) {
+        log(line);
     }
 }
 async function listen(projectRoot, port, assets) {
@@ -77,9 +101,7 @@ export async function launchUi(opts) {
         throw err;
     }
     const server = await listen(projectRoot, opts.port, assets);
-    log(`MONOLITH Mission Control: ${server.url}`);
-    log(`Project: ${projectRoot}`);
-    log('Read-only. Listening on 127.0.0.1 only. Press Ctrl+C to stop.');
+    announce(log, { title: 'MONOLITH Mission Control', url: server.url, projectRoot, note: 'Read-only. Listening on 127.0.0.1 only.' });
     return {
         url: server.url,
         stop: () => server.close(),
@@ -124,9 +146,12 @@ export async function launchUiDev(opts) {
         await stop();
         return code;
     });
-    log(`MONOLITH Mission Control (dev, HMR): http://127.0.0.1:${opts.port}`);
-    log(`Project: ${projectRoot}  (dashboard API on ${api.url}, read-only)`);
-    log('Listening on 127.0.0.1 only. Press Ctrl+C to stop.');
+    announce(log, {
+        title: 'MONOLITH Mission Control (dev, HMR)',
+        url: `http://127.0.0.1:${opts.port}`,
+        projectRoot,
+        note: `Read-only dashboard API on ${api.url}. Listening on 127.0.0.1 only.`,
+    });
     return { url: `http://127.0.0.1:${opts.port}`, stop, ended };
 }
 /** CLI entry for `monolith ui ...`. Resolves with the process exit code once the launch has ended. */

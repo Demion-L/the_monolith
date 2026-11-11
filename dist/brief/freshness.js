@@ -163,7 +163,12 @@ function listIds(ids) {
 function isDone(status) {
     return status === 'COMPLETED' || status === 'DONE';
 }
-function findContradictions(ev) {
+/**
+ * Contradictions between the state documents. Shared by `brief` (freshness /
+ * `--reconcile`) and `finalize` (FIN-002 consistency assessment) so that there
+ * is exactly one definition of "these documents disagree".
+ */
+export function findContradictions(ev) {
     const out = [];
     if (ev.activeStory.kind === 'unknown' && ev.activeStory.contradiction !== undefined) {
         out.push({
@@ -241,9 +246,12 @@ export function evaluateFreshness(ev) {
         base.activityCount = activity.length;
         const referenced = new Set();
         let unattributed = 0;
+        let knowledgeCommits = 0;
         for (const c of activity) {
             const ids = extractWorkItemIds(c.subject);
-            if (ids.length === 0)
+            if (ids.length === 0 && ev.knowledge?.attributed.has(c.sha))
+                knowledgeCommits++;
+            else if (ids.length === 0)
                 unattributed++;
             for (const id of ids)
                 referenced.add(id);
@@ -283,11 +291,13 @@ export function evaluateFreshness(ev) {
         else {
             reasons.push({
                 code: 'ACTIVITY_RECORDED',
-                message: `All ${activity.length} commit(s) after the last state update reference work items that the state documents mention.`,
+                message: knowledgeCommits === 0
+                    ? `All ${activity.length} commit(s) after the last state update reference work items that the state documents mention.`
+                    : `All ${activity.length} commit(s) after the last state update either reference work items that the state documents mention (${activity.length - knowledgeCommits}) or are attributed to registered independent knowledge (${knowledgeCommits}).`,
             });
             gitVerdict = 'fresh';
         }
-        if (activity.length > 0 && ev.activeStory.kind === 'none') {
+        if (activity.length - knowledgeCommits > 0 && ev.activeStory.kind === 'none') {
             warnings.push('Git activity exists after the last recorded state update, but no active story is recorded.');
         }
     }

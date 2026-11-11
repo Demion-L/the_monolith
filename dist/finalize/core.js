@@ -26,6 +26,7 @@ import { RootContainmentError, SafeWriteError, createFile, openParent, projectBo
 import { acquireLock } from '../coordinatorium/lock.js';
 import { extractCurrentStory } from '../brief/story.js';
 import { declaresNoActiveStory, maskNonContent } from '../brief/markdown-context.js';
+import { assessConsistency } from './consistency.js';
 import { validDate, validateRelPath } from './proposal.js';
 const MAX_DOC_BYTES = 4 * 1024 * 1024;
 const LOCK_NAME = 'finalize.lock';
@@ -105,27 +106,60 @@ export function renderCapsule(p) {
         `# STORY ${s.id} — ${s.title}`,
         '',
         '## Objective',
+        '',
         w.objective,
         '',
         '## Implementation Summary',
+        '',
         w.implementationSummary,
         '',
         '## Files Changed',
+        '',
         bullets(w.filesChanged),
         '',
         '## Tests',
+        '',
         w.tests,
         '',
         '## Key Decisions',
+        '',
         w.keyDecisions,
         '',
         '## ADRs Written',
+        '',
         bullets(w.adrs),
         '',
         '## Lessons Learned',
+        '',
         w.lessons,
         '',
     ].join('\n');
+}
+/**
+ * Format-equivalence of a capsule (FIN-001). The capsule is created once and
+ * never overwritten, so "already present" used to mean byte-identical; a
+ * formatter pass (Prettier adds a blank line after every heading) then turned an
+ * unchanged capsule into a CONFLICT. Equivalence is deliberately narrow and
+ * NOT a general whitespace-insensitive comparison: only line endings, trailing
+ * whitespace on a line, a single blank line directly after an ATX heading and
+ * trailing blank lines at end of file are ignored. Every other character —
+ * including blank lines elsewhere (paragraph breaks) — must match.
+ */
+export function capsuleCanonical(s) {
+    const lines = norm(s).split('\n').map((l) => l.replace(/[ \t]+$/, ''));
+    const out = [];
+    let skippable = false; // a blank line right after a heading, at most one
+    for (const l of lines) {
+        if (l === '' && skippable) {
+            skippable = false;
+            continue;
+        }
+        skippable = /^#{1,6}\s/.test(l);
+        out.push(l);
+    }
+    while (out.length > 0 && out[out.length - 1] === '')
+        out.pop();
+    return out.join('\n');
 }
 const capsulePathOf = (root, p) => `${root}/memory/working/phases/${p.story.phase}/stories/${p.story.slug}.md`;
 function historyHeading(p) {
@@ -496,6 +530,8 @@ function buildInternals(ctx, p) {
         }
         else if (d.content === content)
             out.push({ target: { ...t, state: 'done', reason: 'capsule already present with identical content', base: 'DONE' } });
+        else if (capsuleCanonical(d.content) === capsuleCanonical(content))
+            out.push({ target: { ...t, state: 'done', reason: 'capsule already present; differs from the rendered form only in formatting (line endings, trailing whitespace, blank lines after headings) — left untouched', base: 'DONE' } });
         else
             out.push({ target: { ...t, state: 'conflict', reason: 'a different file already exists at the capsule path; it is never overwritten', base: d.sha } });
     }
@@ -667,7 +703,28 @@ function plan(ctx, p) {
         evidence: [integrity.sha, governance.sha],
         config: [ctx.config.requiredDocs, ctx.config.allowedDocs],
     }));
-    return { plan: { status, storyId: p.story.id, digest, partial: someDone && !allDone, checks, targets, diagnostics }, internals };
+    const finalText = (rel) => {
+        const it = internals.find((i) => i.target.path === rel);
+        if (it?.write)
+            return it.write.content;
+        const d = readDoc(ctx.projectRoot, rel);
+        return d.kind === 'present' ? d.content : null;
+    };
+    let consistency;
+    try {
+        consistency = assessConsistency({
+            active: finalText(`${ctx.root}/memory/working/active.md`),
+            roadmap: finalText(`${ctx.root}/context/maps/roadmap-index.md`),
+            storyIndex: finalText(`${ctx.root}/memory/working/story-index.md`),
+            writtenPaths: targets.filter((t) => t.kind !== 'capsule' && t.kind !== 'execution-history' && (t.state === 'pending' || t.state === 'done')).map((t) => t.path),
+            projected: !allDone,
+            managedRoot: ctx.root,
+        });
+    }
+    catch (err) {
+        consistency = { status: 'NOT_VERIFIED', projected: !allDone, findings: [], notVerified: [`the assessment failed: ${err.message}`], scope: 'not assessed' };
+    }
+    return { plan: { status, storyId: p.story.id, digest, partial: someDone && !allDone, checks, targets, diagnostics, consistency }, internals };
 }
 export function planFinalization(targetDir, proposal) {
     const c = makeContext(targetDir);

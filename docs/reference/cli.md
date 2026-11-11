@@ -297,6 +297,18 @@ malformed field makes `expected-state` FAIL (plan `NOT_READY`, apply `REFUSED`) 
 active.md is never rewritten automatically. An `active.md` that predates this field needs
 that one line added by the owner before it can be finalized.
 
+**Capsule formatting (alpha.4).** MONOLITH renders the Story Capsule in a layout that
+Prettier's Markdown formatter leaves unchanged (a blank line after every heading); the
+text you put into the proposal is passed through as-is, so a proposal whose own text
+Prettier would rewrite (e.g. `*` bullets) is not covered. A capsule is created once and never
+overwritten. An existing capsule counts as "already present" when it is byte-identical
+**or** differs from the rendered form only in line endings (CRLF), trailing whitespace on a
+line, a single blank line directly after a heading, or trailing blank lines at the end of the
+file. Anything else (a changed word, a removed or merged paragraph break, a changed status,
+appended text) stays a `conflict`. This is deliberately not a general whitespace-insensitive
+comparison, and capsules written by earlier versions are recognised but never rewritten.
+No formatter is run or required by MONOLITH.
+
 A capsule left with two hard links by a process killed between `link()` and the
 removal of its staging name is reported by `plan` as `FILE_HARDLINKED`. When the
 second name is exactly that staging residue (same file, identical content, no

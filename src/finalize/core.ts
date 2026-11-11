@@ -186,27 +186,55 @@ export function renderCapsule(p: FinalizationProposal): string {
     `# STORY ${s.id} — ${s.title}`,
     '',
     '## Objective',
+    '',
     w.objective,
     '',
     '## Implementation Summary',
+    '',
     w.implementationSummary,
     '',
     '## Files Changed',
+    '',
     bullets(w.filesChanged),
     '',
     '## Tests',
+    '',
     w.tests,
     '',
     '## Key Decisions',
+    '',
     w.keyDecisions,
     '',
     '## ADRs Written',
+    '',
     bullets(w.adrs),
     '',
     '## Lessons Learned',
+    '',
     w.lessons,
     '',
   ].join('\n');
+}
+
+/**
+ * Format-equivalence of a capsule (FIN-001). The capsule is created once and
+ * never overwritten, so "already present" used to mean byte-identical; a
+ * formatter pass (Prettier adds a blank line after every heading) then turned an
+ * unchanged capsule into a CONFLICT. Equivalence is deliberately narrow and
+ * NOT a general whitespace-insensitive comparison: only line endings, trailing
+ * whitespace on a line, a single blank line directly after an ATX heading and
+ * trailing blank lines at end of file are ignored. Every other character —
+ * including blank lines elsewhere (paragraph breaks) — must match.
+ */
+export function capsuleCanonical(s: string): string {
+  const lines = norm(s).split('\n').map((l) => l.replace(/[ \t]+$/, ''));
+  const out: string[] = [];
+  for (const l of lines) {
+    if (l === '' && out.length > 0 && /^#{1,6}\s/.test(out[out.length - 1])) continue;
+    out.push(l);
+  }
+  while (out.length > 0 && out[out.length - 1] === '') out.pop();
+  return out.join('\n');
 }
 
 const capsulePathOf = (root: string, p: FinalizationProposal): string => `${root}/memory/working/phases/${p.story.phase}/stories/${p.story.slug}.md`;
@@ -589,6 +617,7 @@ function buildInternals(ctx: Context, p: FinalizationProposal): Internal[] {
       const why = d.code === 'FILE_HARDLINKED' ? `${d.code}: ${diagnoseCapsuleResidue(ctx, path, content)}` : `${d.code}: ${d.detail}`;
       out.push({ target: { ...t, state: 'unreadable', reason: why, base: 'UNREADABLE' } });
     } else if (d.content === content) out.push({ target: { ...t, state: 'done', reason: 'capsule already present with identical content', base: 'DONE' } });
+    else if (capsuleCanonical(d.content) === capsuleCanonical(content)) out.push({ target: { ...t, state: 'done', reason: 'capsule already present; differs from the rendered form only in formatting (line endings, trailing whitespace, blank lines after headings) — left untouched', base: 'DONE' } });
     else out.push({ target: { ...t, state: 'conflict', reason: 'a different file already exists at the capsule path; it is never overwritten', base: d.sha } });
   }
 

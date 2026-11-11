@@ -113,6 +113,11 @@ describe('FIN-001 capsule formatting', () => {
     expect(readFileSync(join(dir, CAPSULE), 'utf8')).toBe(changed);
   });
 
+  it('capsuleCanonical: two blank lines after a heading, or a blank inside a paragraph, are not equivalent', () => {
+    expect(capsuleCanonical('# A\n\n\nx')).not.toBe(capsuleCanonical('# A\nx'));
+    expect(capsuleCanonical('# A\nx\n\ny')).not.toBe(capsuleCanonical('# A\nx\ny'));
+  });
+
   it('capsuleCanonical ignores only the documented classes', () => {
     expect(capsuleCanonical('# A\r\n\r\nx  \r\n\r\n')).toBe(capsuleCanonical('# A\nx'));
     expect(capsuleCanonical('x\n\ny')).not.toBe(capsuleCanonical('x\ny'));

@@ -236,8 +236,13 @@ export function renderCapsule(p: FinalizationProposal): string {
 export function capsuleCanonical(s: string): string {
   const lines = norm(s).split('\n').map((l) => l.replace(/[ \t]+$/, ''));
   const out: string[] = [];
+  let skippable = false; // a blank line right after a heading, at most one
   for (const l of lines) {
-    if (l === '' && out.length > 0 && /^#{1,6}\s/.test(out[out.length - 1])) continue;
+    if (l === '' && skippable) {
+      skippable = false;
+      continue;
+    }
+    skippable = /^#{1,6}\s/.test(l);
     out.push(l);
   }
   while (out.length > 0 && out[out.length - 1] === '') out.pop();
@@ -803,13 +808,19 @@ function plan(ctx: Context, p: FinalizationProposal): { plan: FinalizationPlan; 
     const d = readDoc(ctx.projectRoot, rel);
     return d.kind === 'present' ? d.content : null;
   };
-  const consistency = assessConsistency({
+  let consistency: ConsistencyAssessment;
+  try {
+    consistency = assessConsistency({
     active: finalText(`${ctx.root}/memory/working/active.md`),
     roadmap: finalText(`${ctx.root}/context/maps/roadmap-index.md`),
     storyIndex: finalText(`${ctx.root}/memory/working/story-index.md`),
     writtenPaths: targets.filter((t) => t.kind !== 'capsule' && t.kind !== 'execution-history' && (t.state === 'pending' || t.state === 'done')).map((t) => t.path),
     projected: !allDone,
-  });
+    managedRoot: ctx.root,
+    });
+  } catch (err) {
+    consistency = { status: 'NOT_VERIFIED', projected: !allDone, findings: [], notVerified: [`the assessment failed: ${(err as Error).message}`], scope: 'not assessed' };
+  }
 
   return { plan: { status, storyId: p.story.id, digest, partial: someDone && !allDone, checks, targets, diagnostics, consistency }, internals };
 }

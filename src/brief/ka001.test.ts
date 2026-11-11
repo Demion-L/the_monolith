@@ -191,3 +191,39 @@ describe('KA-001 idea format (backward compatible)', () => {
     expect(() => parseAddArgs(['--title', 't', '--title', 'u', '--description', 'd'])).toThrow();
   });
 });
+
+describe('KA-001 review hardening (independent review round 1)', () => {
+  it('H1: a rename out of the MONOLITH root or src/ into covered docs is not knowledge', async () => {
+    const dir = project({ 1: ['docs/'] });
+    put(dir, 'src/foo.ts', 'export {};\n');
+    commit(dir, 'feat(OLD-001): foo'); // pre-existing code, then state update
+    put(dir, '.monolith/memory/working/story-index.md', '# Stories\n\nOLD-001 recorded\n');
+    commit(dir, 'docs: state OLD-001');
+    mkdirSync(join(dir, 'docs'), { recursive: true });
+    sh(dir, ['mv', 'src/foo.ts', 'docs/foo.md']);
+    commit(dir, 'docs: move IDEA-001');
+    const { fresh, report } = await verdict(dir);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(report.independentKnowledge).toEqual([]);
+    sh(dir, ['mv', '.monolith/context/boot/HANDOFF.md', 'docs/handoff.md']);
+    commit(dir, 'docs: move2 IDEA-001');
+    expect((await verdict(dir)).report.independentKnowledge).toEqual([]);
+  });
+
+  it('M1: non-ASCII / quoted paths cannot be judged and are not attributed; quotes are not valid in paths', async () => {
+    const dir = project({ 1: ['docs/'] });
+    put(dir, 'docs/caf\u00e9 \\"q\\".md', '# x\n');
+    commit(dir, 'docs: odd name IDEA-001');
+    expect((await verdict(dir)).fresh.status).toBe('UNKNOWN');
+    expect(invalidArtifactPath('"docs/')).not.toBeNull();
+  });
+
+  it('M2: one invalid idea id among several rejects the commit', async () => {
+    const dir = project({ 1: [DOC] });
+    put(dir, DOC, '# x\n');
+    commit(dir, 'docs: paper IDEA-001 IDEA-999');
+    const { fresh, report } = await verdict(dir);
+    expect(fresh.status).toBe('UNKNOWN');
+    expect(JSON.stringify(report.findings)).toContain('IDEA-999');
+  });
+});

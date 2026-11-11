@@ -51,11 +51,13 @@ export interface ConsistencyInput {
   /** Project-relative paths this finalization writes (or has written). */
   writtenPaths: string[];
   projected: boolean;
+  /** The MONOLITH root (project-relative); documents are matched by their full canonical path. */
+  managedRoot?: string;
 }
 
 const SCOPE = 'Checks only structural agreement between active.md, roadmap-index.md and story-index.md (the same rules as `monolith brief`). It does not read prose, HANDOFF.md, or any other project document.';
 
-const baseName = (p: string): string => p.slice(p.lastIndexOf('/') + 1);
+const DOC_DIR: Record<string, string> = { 'active.md': 'memory/working/', 'story-index.md': 'memory/working/', 'roadmap-index.md': 'context/maps/' };
 
 export function assessConsistency(input: ConsistencyInput): ConsistencyAssessment {
   const notVerified: string[] = [];
@@ -74,9 +76,9 @@ export function assessConsistency(input: ConsistencyInput): ConsistencyAssessmen
     storyIndexStatuses: input.storyIndex === null ? new Map() : parseStoryIndexStatuses(input.storyIndex),
   });
 
-  const written = new Set(input.writtenPaths.map(baseName));
+  const written = new Set(input.writtenPaths);
   const findings: ConsistencyFinding[] = found.map((c) => {
-    const externalDocuments = c.documents.filter((d) => !written.has(d));
+    const externalDocuments = c.documents.filter((d) => !(input.managedRoot !== undefined && written.has(`${input.managedRoot}/${DOC_DIR[d] ?? ''}${d}`)));
     return {
       message: c.message,
       documents: c.documents,

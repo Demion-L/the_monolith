@@ -61,7 +61,8 @@ export function attributeKnowledge(
   if (git.status !== 'ok') return EMPTY_KNOWLEDGE;
   const attributed = new Map<string, KnowledgeAttribution>();
   const rejected = new Map<string, KnowledgeRejection>();
-  const rootPrefix = `${opts.monolithRoot.replace(/\/+$/, '')}/`;
+  const root = opts.monolithRoot.replace(/^(\.\/)+/, '').replace(/\/+$/, '');
+  const rootPrefix = root === '' || root === '.' ? '' : `${root}/`;
   let examined = 0;
 
   for (const c of git.commitsSince) {
@@ -71,7 +72,7 @@ export function attributeKnowledge(
     const named = ideaIdsInSubject(c.subject);
     if (named.length === 0) continue;
     if (++examined > MAX_KNOWLEDGE_COMMITS) break;
-    const verdict = judge(c, files, named, rootPrefix, opts.monolithRoot, opts.readBlob);
+    const verdict = judge(c, files, named, rootPrefix, root, opts.readBlob);
     if ('ideaIds' in verdict) attributed.set(c.sha, verdict);
     else rejected.set(c.sha, verdict);
   }
@@ -86,7 +87,9 @@ function judge(
   monolithRoot: string,
   readBlob: BlobReader,
 ): KnowledgeAttribution | KnowledgeRejection {
-  const inRoot = files.find((f) => f.startsWith(rootPrefix));
+  const unjudgeable = files.find((f) => f.startsWith('"') || /^\.?\.?\//.test(f));
+  if (unjudgeable !== undefined) return { reason: `a changed path (${unjudgeable.slice(0, 40)}) is quoted by git or not project-relative and cannot be judged` };
+  const inRoot = (rootPrefix === '' ? files[0] : files.find((f) => f.toLowerCase().startsWith(rootPrefix.toLowerCase())));
   if (inRoot !== undefined) return { reason: `it changes ${inRoot}, inside the MONOLITH root; knowledge attribution never covers that` };
 
   const valid: string[] = [];
@@ -109,7 +112,8 @@ function judge(
       problems.push(`${id} is not a readable idea in this commit`);
     }
   }
-  if (valid.length === 0) return { reason: problems.join('; ') };
+  // Strict: every idea the subject names must be valid; a bad id is never silently ignored.
+  if (problems.length > 0) return { reason: problems.join('; ') };
   const outside = files.filter((f) => !artifactPathsCover(paths, f));
   if (outside.length > 0) {
     const shown = outside.slice(0, 3).join(', ');

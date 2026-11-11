@@ -40,6 +40,7 @@ export function invalidArtifactPath(p: unknown): string | null {
   if (typeof p !== 'string' || p === '') return 'path must be a non-empty string';
   if (p.length > IDEA_LIMITS.pathLength) return `path is too long (> ${IDEA_LIMITS.pathLength} characters)`;
   if (CONTROL_RE.test(p)) return 'path must not contain control characters';
+  if (p.includes('"')) return 'path must not contain a double quote';
   if (p.includes('\\')) return 'path must use "/" separators';
   if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return 'path must be project-relative';
   if (/[*?[\]{}]/.test(p)) return 'path must not contain glob characters';

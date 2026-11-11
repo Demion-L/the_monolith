@@ -20,6 +20,7 @@ const SAFE_CONFIG = [
   '-c', 'core.pager=cat',
   '-c', 'log.showSignature=false',
   '-c', 'diff.external=',
+  '-c', 'core.quotepath=off',
 ];
 
 class GitMissingError extends Error {}
@@ -80,6 +81,7 @@ export function readGitSignals(targetDir: string, stateFiles: string[]): GitSign
       `-n${MAX_COMMITS_SINCE + 1}`,
       '--no-ext-diff',
       '--no-textconv',
+      '--no-renames',
       '--relative',
       '--name-only',
       `--format=${RS}%H${US}%cI${US}%s`,

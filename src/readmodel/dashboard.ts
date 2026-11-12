@@ -41,6 +41,7 @@ import { MAX_ACTIVE_CONTEXT_BYTES } from '../brief/collect.js';
 import { ACTIVE_MD_REL } from '../brief/constants.js';
 import { extractCurrentStory } from '../brief/story.js';
 import { parseActiveStoryClaim } from '../brief/freshness.js';
+import { parseRoadmapPhases } from './roadmap.js';
 import {
   hasCheckpointOrderMismatch,
   selectActiveMissions,
@@ -54,6 +55,7 @@ import type {
   ReadNote,
   RoadmapData,
   StoryClaimView,
+  StructuredRoadmapView,
   Section,
   SourceErrorCode,
   SourceId,
@@ -273,7 +275,17 @@ function buildModel(projectRoot: string): DashboardReadModel {
     };
   }
 
-  const roadmap: RoadmapData | null = roadmapLoaded.content === null ? null : { text: roadmapLoaded.content };
+  let roadmap: RoadmapData | null = null;
+  if (roadmapLoaded.content !== null) {
+    let structured: StructuredRoadmapView;
+    try {
+      structured = parseRoadmapPhases(roadmapLoaded.content);
+    } catch {
+      // A parser fault is reported as such, never as an empty roadmap.
+      structured = { state: 'error', phases: [], activePhase: { kind: 'not_declared' }, diagnostics: [{ code: 'INTERNAL', severity: 'warn', phaseIndex: null }] };
+    }
+    roadmap = { text: roadmapLoaded.content, structured };
+  }
 
   return {
     projectOverview: section(overview, [config.report, stateResult.report, storyLoaded.report]),

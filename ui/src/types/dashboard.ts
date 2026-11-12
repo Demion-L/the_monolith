@@ -7,6 +7,10 @@
  * rendered as UNKNOWN.
  */
 
+/** Core's interpretation of the roadmap (UI-003C). The UI displays it; it never parses Markdown itself. */
+export type { StructuredRoadmapView, RoadmapPhaseView, ActivePhaseView, RoadmapDiagnosticCode } from '../../../src/readmodel/types';
+import type { StructuredRoadmapView } from '../../../src/readmodel/types';
+
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
 /**
@@ -75,6 +79,8 @@ export interface DashboardData {
   checkpoints: Checkpoint[] | null;
   /** Raw roadmap text, shown verbatim. */
   roadmapText: string | null;
+  /** Core's structured roadmap. `undefined` = the source predates it (legacy DTO) or is a demo: fall back to the raw text. */
+  roadmap?: StructuredRoadmapView;
   diagnostics: Diagnostic[];
 }
 

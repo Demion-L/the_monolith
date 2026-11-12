@@ -534,3 +534,34 @@ describe('readDashboardModel — project root argument (F-4)', () => {
     expect(m.diagnostics.sources.every((s) => s.status !== 'available')).toBe(true);
   });
 });
+
+describe('readDashboardModel — structured roadmap (UI-003C)', () => {
+  it('carries Core\'s interpretation next to the raw text', () => {
+    fullProject();
+    write(`.monolith/${ROADMAP_REL}`, '## Phases\n\n### Phase 1 — A\n\n**Status:** PLANNED\n\n## Current Focus\n\nActive Phase: 1\n');
+    const d = readDashboardModel(dir).roadmap.data!;
+    expect(d.text).toContain('### Phase 1');
+    expect(d.structured!.state).toBe('ok');
+    expect(d.structured!.phases[0].status).toEqual({ value: 'PLANNED', recognized: true, provenance: 'REPORTED' });
+    expect(d.structured!.activePhase).toEqual({ kind: 'phase', id: '1' });
+  });
+
+  it('an unparseable roadmap is not an empty success', () => {
+    fullProject();
+    const d = readDashboardModel(dir).roadmap.data!;
+    expect(d.structured!.state).toBe('unrecognized');
+    expect(d.structured!.phases).toEqual([]);
+  });
+
+  it('unavailable roadmap source: no data, hence no structure', () => {
+    fullProject();
+    rmSync(join(dir, '.monolith', ROADMAP_REL));
+    expect(readDashboardModel(dir).roadmap.data).toBeNull();
+  });
+
+  it('is deterministic and JSON-serializable', () => {
+    fullProject();
+    const a = readDashboardModel(dir);
+    expect(JSON.parse(JSON.stringify(a))).toEqual(readDashboardModel(dir));
+  });
+});

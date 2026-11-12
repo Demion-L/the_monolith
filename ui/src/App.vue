@@ -114,7 +114,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           <ProjectOverview v-if="section === 'overview'" key="overview" :overview="data.overview" />
           <CurrentMission v-else-if="section === 'mission'" key="mission" :missions="data.missions" />
           <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
-          <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" />
+          <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" />
           <DiagnosticsPanel v-else key="diagnostics" :data="data" />
         </Transition>
       </main>

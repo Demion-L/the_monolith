@@ -127,6 +127,7 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
 
 .status { font-size: var(--fs-meta); padding: 1px 8px; border-radius: 10px; border: 1px solid var(--ok); color: var(--ok); }
 
+.tag.tag-neutral { color: var(--muted); border-color: var(--muted); }
 .steps ul { margin: 0; padding-left: 20px; }
 .tag {
   font-weight: 400; font-size: var(--fs-label); color: var(--warn);
@@ -138,6 +139,23 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
   white-space: pre-wrap; overflow-wrap: anywhere;
   font-size: var(--fs-mono); line-height: 1.55;
 }
+
+/* Structured roadmap (UI-003C) */
+.phases { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
+.phase { min-width: 0; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; }
+.phase-active { border-color: var(--accent); border-left-width: 4px; }
+.panel .phase-title { margin: 0 0 4px; font-size: var(--fs-h3); line-height: var(--lh-heading); }
+.phase-meta { margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* Neutral on purpose: a REPORTED status is the document's claim, not a success signal. */
+.status-badge { font-size: var(--fs-meta); padding: 1px 8px; border-radius: 10px; border: 1px solid var(--control-border); color: var(--text); }
+.status-badge.status-unrecognized { border-color: var(--warn); color: var(--warn); }
+.phase-meta .tag { margin-left: 0; border-color: var(--accent); color: var(--accent); }
+.phase-goal { margin: 4px 0; }
+.phase-details, .raw { margin-top: 8px; }
+.phase-details summary, .raw summary { cursor: pointer; color: var(--accent); }
+.phase-details summary:focus-visible, .raw summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.phase-details .roadmap, .raw .roadmap { margin-top: 8px; overflow-x: auto; }
+.roadmap-diag { margin-top: 12px; }
 
 .diag li { min-width: 0; }
 .diag { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

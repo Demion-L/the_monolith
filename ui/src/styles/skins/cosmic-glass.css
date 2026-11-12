@@ -101,6 +101,16 @@
   box-shadow: var(--glass-edge);
   line-height: 1.55;
 }
+:root[data-skin="cosmic-glass"] .phase {
+  background: var(--surface-2);
+  border-radius: 8px;
+  box-shadow: var(--glass-edge);
+  line-height: 1.55;
+}
+:root[data-skin="cosmic-glass"] .phase-active { border-color: var(--accent); }
+:root[data-skin="cosmic-glass"] .status-badge { background: rgba(255, 255, 255, 0.06); }
+:root[data-skin="cosmic-glass"] .status-badge.status-unrecognized { background: rgba(240, 192, 64, 0.1); }
+:root[data-skin="cosmic-glass"] .phase-meta .tag { background: rgba(88, 166, 255, 0.12); }
 :root[data-skin="cosmic-glass"] .facts dt { font-size: var(--fs-secondary); }
 /* Long-form text sits on a denser surface than the rest. */
 :root[data-skin="cosmic-glass"] .roadmap,

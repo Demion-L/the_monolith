@@ -87,6 +87,8 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
           }],
     ),
     roadmapText: roadmap === null ? null : roadmap.text,
+    // Present only when Core supplied it; an older DTO yields `undefined` (legacy fallback), never invented phases.
+    roadmap: roadmap?.structured,
     diagnostics,
   };
 }

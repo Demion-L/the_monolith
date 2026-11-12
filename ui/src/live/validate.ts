@@ -67,6 +67,54 @@ function isStoryClaim(v: unknown): boolean {
   return isObj(v) && (v.kind === 'none' || v.kind === 'unknown' || (v.kind === 'ids' && isArr(v.ids, isStr) && v.ids.length > 0));
 }
 
+const PARSE_STATES = ['ok', 'partial', 'empty', 'no_phases', 'unrecognized', 'error'];
+const DIAG_SEVERITIES = ['info', 'warn'];
+
+function isPhase(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStrOrNull(v.id) &&
+    isStrOrNull(v.title) &&
+    isObj(v.status) &&
+    isStrOrNull(v.status.value) &&
+    typeof v.status.recognized === 'boolean' &&
+    (v.status.value !== null || v.status.recognized === false) &&
+    v.status.provenance === 'REPORTED' &&
+    isStrOrNull(v.goal) &&
+    (v.goalTruncated === undefined || typeof v.goalTruncated === 'boolean') &&
+    isStrOrNull(v.details)
+  );
+}
+
+function isActivePhase(v: unknown, phases: unknown[]): boolean {
+  if (!isObj(v)) return false;
+  if (v.kind === 'phase') {
+    // Must point at exactly one phase of this very payload: no dangling or duplicated binding.
+    return isStr(v.id) && phases.filter((p) => isObj(p) && p.id === v.id).length === 1;
+  }
+  return v.kind === 'none' || v.kind === 'not_declared' || v.kind === 'unmatched' || v.kind === 'ambiguous';
+}
+
+/** The optional structured roadmap (absent in DTOs from older servers). */
+function isStructuredRoadmap(v: unknown): boolean {
+  if (!isObj(v) || !isStr(v.state) || !PARSE_STATES.includes(v.state)) return false;
+  if (!Array.isArray(v.phases) || !v.phases.every(isPhase)) return false;
+  // A failed or unrecognised parse never carries phases (it must not look like a roadmap).
+  if (v.phases.length > 0 && !(v.state === 'ok' || v.state === 'partial')) return false;
+  return (
+    isActivePhase(v.activePhase, v.phases) &&
+    Array.isArray(v.diagnostics) &&
+    v.diagnostics.every(
+      (d) =>
+        isObj(d) &&
+        isStr(d.code) &&
+        isStr(d.severity) &&
+        DIAG_SEVERITIES.includes(d.severity) &&
+        (d.phaseIndex === null || (isCount(d.phaseIndex) && d.phaseIndex < (v.phases as unknown[]).length)),
+    )
+  );
+}
+
 function isOverview(d: unknown): boolean {
   return (
     isObj(d) &&
@@ -94,7 +142,7 @@ export function isDashboardReadModel(v: unknown): v is DashboardReadModel {
           (m) => isObj(m) && isStr(m.missionId) && isNum(m.count) && (m.latest === null || isCheckpoint(m.latest)),
         ),
     ) &&
-    isSection(v.roadmap, (d) => isObj(d) && isStr(d.text)) &&
+    isSection(v.roadmap, (d) => isObj(d) && isStr(d.text) && (d.structured === undefined || isStructuredRoadmap(d.structured))) &&
     isObj(diag) &&
     Array.isArray(diag.sources) &&
     diag.sources.every(isSourceReport) &&

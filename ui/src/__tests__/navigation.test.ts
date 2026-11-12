@@ -190,7 +190,7 @@ describe('section navigation', () => {
 
 describe('section navigation in LIVE', () => {
   const dto = {
-    projectOverview: { data: { name: 'P', monolithRoot: '.monolith', monolithRootSource: 'default', stateSchemaVersionOnDisk: 2, stateRevision: 1, activeMissionCount: 0, finishedMissionCount: 0, currentStory: null }, sources: [] },
+    projectOverview: { data: { name: 'P', monolithRoot: '.monolith', monolithRootSource: 'default', stateSchemaVersionOnDisk: 2, stateRevision: 1, activeMissionCount: 0, finishedMissionCount: 0, currentStory: null, storyClaim: null }, sources: [] },
     currentMissions: { data: { active: [] }, sources: [] },
     checkpoints: { data: { byActiveMission: [] }, sources: [] },
     roadmap: { data: { text: 'road' }, sources: [] },

@@ -21,6 +21,7 @@ function model(over: Partial<DashboardReadModel> = {}): DashboardReadModel {
         activeMissionCount: 1,
         finishedMissionCount: 0,
         currentStory: { excerpt: '<img src=x onerror=alert(1)>\nStory text', lineRange: '3-4' },
+        storyClaim: { kind: 'unknown' },
       },
       sources: [src('config')],
     },
@@ -112,6 +113,51 @@ describe('fetchDashboard', () => {
     bad2.checkpoints.data!.byActiveMission[0].latest!.remainingSteps = 'x' as never;
     stubFetch(json(bad2));
     await expect(fetchDashboard()).rejects.toThrow(/unexpected data shape/);
+  });
+});
+
+describe('UI-003B-1A: overview validation hardening', () => {
+  const withOverview = (over: Record<string, unknown>) => {
+    const m = model();
+    Object.assign(m.projectOverview.data as object, over);
+    return m;
+  };
+
+  it('rejects an empty or non-string story id list', async () => {
+    for (const storyClaim of [{ kind: 'ids', ids: [] }, { kind: 'ids', ids: [1] }, { kind: 'ids', ids: ['A', null] }, { kind: 'ids' }]) {
+      stubFetch(json(withOverview({ storyClaim })));
+      await expect(fetchDashboard()).rejects.toThrow(/unexpected data shape/);
+    }
+  });
+
+  it('accepts a non-empty id list, none/unknown/null claims and a legacy DTO without the field', async () => {
+    for (const storyClaim of [{ kind: 'ids', ids: ['UI-003B-1A'] }, { kind: 'none' }, { kind: 'unknown' }, null]) {
+      stubFetch(json(withOverview({ storyClaim })));
+      await expect(fetchDashboard()).resolves.toBeDefined();
+    }
+    const legacy = model();
+    const data = legacy.projectOverview.data as unknown as Record<string, unknown>;
+    delete data.storyClaim;
+    delete data.activeMissionCount;
+    delete data.finishedMissionCount;
+    stubFetch(json(legacy));
+    await expect(fetchDashboard()).resolves.toBeDefined();
+  });
+
+  it.each(['activeMissionCount', 'finishedMissionCount'])('%s rejects negative, fractional, non-finite and string values', async (field) => {
+    // NaN/Infinity cannot survive JSON.stringify (they become null), so they are sent as raw JSON-invalid-free equivalents via 1e999.
+    for (const raw of ['-1', '1.5', '"3"', '1e999', 'true']) {
+      const body = JSON.stringify(withOverview({ [field]: 0 })).replace(`"${field}":0`, `"${field}":${raw}`);
+      stubFetch(json(body));
+      await expect(fetchDashboard()).rejects.toThrow(/unexpected data shape/);
+    }
+  });
+
+  it.each(['activeMissionCount', 'finishedMissionCount'])('%s accepts 0, a large integer and null', async (field) => {
+    for (const v of [0, 7, 9_007_199_254_740_991, null]) {
+      stubFetch(json(withOverview({ [field]: v })));
+      await expect(fetchDashboard()).resolves.toBeDefined();
+    }
   });
 });
 

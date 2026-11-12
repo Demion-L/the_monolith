@@ -62,6 +62,14 @@ export interface Section<T> {
   sources: SourceReport[];
 }
 
+/**
+ * Identity of the current story as classified by Core's `parseActiveStoryClaim`
+ * (UI-003B-1A). `none` = the section declares no active story; `ids` = a
+ * structural identity; `unknown` = the section cannot be classified (including
+ * a self-contradicting one). Free text (e.g. contradiction values) is not carried.
+ */
+export type StoryClaimView = { kind: 'none' } | { kind: 'ids'; ids: string[] } | { kind: 'unknown' };
+
 export interface ProjectOverview {
   /** `project.name` from `monolith.config.json`; null when absent or not a non-empty string. */
   name: string | null;
@@ -76,6 +84,8 @@ export interface ProjectOverview {
   finishedMissionCount: number | null;
   /** Verbatim `## Current Story` section of `active.md`; null when the section cannot be shown. */
   currentStory: { excerpt: string; lineRange: string } | null;
+  /** Classification of `currentStory`; null when there is no readable Current Story section. */
+  storyClaim: StoryClaimView | null;
 }
 
 export interface CurrentMissions {

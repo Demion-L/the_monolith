@@ -15,6 +15,9 @@ const isStr = (v: unknown): v is string => typeof v === 'string';
 const isStrOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string';
 const isNumOrNull = (v: unknown): v is number | null => v === null || (typeof v === 'number' && Number.isFinite(v));
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+/** Mission counter: finite, integer, non-negative. */
+const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+const isCountOrNull = (v: unknown): v is number | null => v === null || isCount(v);
 const isArr = <T>(v: unknown, item: (x: unknown) => x is T): v is T[] => Array.isArray(v) && v.every(item);
 
 const MISSION_STATUSES = ['in_progress', 'completed', 'failed', 'cancelled'];
@@ -60,11 +63,18 @@ function isCheckpoint(v: unknown): boolean {
   );
 }
 
+function isStoryClaim(v: unknown): boolean {
+  return isObj(v) && (v.kind === 'none' || v.kind === 'unknown' || (v.kind === 'ids' && isArr(v.ids, isStr) && v.ids.length > 0));
+}
+
 function isOverview(d: unknown): boolean {
   return (
     isObj(d) &&
     isStrOrNull(d.name) &&
     isNumOrNull(d.stateRevision) &&
+    (d.activeMissionCount === undefined || isCountOrNull(d.activeMissionCount)) &&
+    (d.finishedMissionCount === undefined || isCountOrNull(d.finishedMissionCount)) &&
+    (d.storyClaim === undefined || d.storyClaim === null || isStoryClaim(d.storyClaim)) &&
     (d.currentStory === null || (isObj(d.currentStory) && isStr(d.currentStory.excerpt) && isStr(d.currentStory.lineRange)))
   );
 }

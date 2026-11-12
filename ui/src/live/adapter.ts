@@ -1,5 +1,5 @@
 import type { DashboardReadModel, SourceReport } from '../../../src/readmodel/types';
-import type { Checkpoint, DashboardData, Diagnostic, DiagnosticSeverity } from '../types/dashboard';
+import type { Checkpoint, DashboardData, Diagnostic, DiagnosticSeverity, StoryState } from '../types/dashboard';
 
 /**
  * Presentation adapter: `DashboardReadModel` (API) -> `DashboardData` (the
@@ -20,6 +20,24 @@ const SOURCE_SEVERITY: Record<SourceReport['status'], DiagnosticSeverity> = {
 function sourceMessage(s: SourceReport): string {
   const where = s.path === null ? 'path unknown' : s.path;
   return `${s.id} (${where}): ${s.status}${s.code === null ? '' : ` [${s.code}]`}`;
+}
+
+/**
+ * Derives the story state from the Core-classified claim and the activeStory
+ * source report. A missing `storyClaim` (older DTO) never invents a classification.
+ */
+function toStoryState(model: DashboardReadModel): StoryState {
+  const src = model.diagnostics.sources.find((s) => s.id === 'activeStory');
+  if (src === undefined) return { kind: 'source', status: 'unavailable', code: null };
+  if (src.status !== 'available') return { kind: 'source', status: src.status, code: src.code };
+  const o = model.projectOverview.data;
+  if (o === null) return { kind: 'source', status: 'unavailable', code: null };
+  const excerpt = o.currentStory?.excerpt ?? null;
+  if (o.currentStory === null) return { kind: 'no_section' };
+  const claim = o.storyClaim;
+  if (claim === undefined || claim === null) return { kind: 'unknown', excerpt };
+  if (claim.kind === 'ids') return { kind: 'active', ids: claim.ids, excerpt };
+  return { kind: claim.kind, excerpt };
 }
 
 export function toDashboardData(model: DashboardReadModel): DashboardData {
@@ -43,6 +61,9 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
       name: overview?.name ?? null,
       stateRevision: overview?.stateRevision ?? null,
       currentStory: overview === null ? null : (overview.currentStory?.excerpt ?? null),
+      story: toStoryState(model),
+      activeMissionCount: overview?.activeMissionCount ?? null,
+      finishedMissionCount: overview?.finishedMissionCount ?? null,
     },
     missions: missions === null ? null : missions.active.map((m) => ({
       id: m.id,

@@ -197,3 +197,7 @@ button:disabled { opacity: 0.5; cursor: default; }
   /* No start/end states either, or the new section would flash at opacity 0 for a frame. */
   .section-fade-enter-from, .section-fade-leave-to { opacity: 1; transform: none; }
 }
+
+/* Project Overview blocks (UI-003B-1A): stacked groups; the grid inside .facts already collapses on narrow screens. */
+.ov-block + .ov-block { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--border); }
+.ov-block h3 { margin-top: 8px; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-secondary); color: var(--muted); }

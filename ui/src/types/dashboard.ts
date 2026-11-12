@@ -9,6 +9,21 @@
 
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
+/**
+ * Current-story state. The five cases are never collapsed into one `null`:
+ *  - `active`:  a structural story identity exists
+ *  - `none`:    the section declares no active story (NOT "project complete")
+ *  - `unknown`: a section exists but cannot be classified (or the source is a legacy DTO)
+ *  - `no_section`: the source is readable but has no usable `## Current Story` section
+ *  - `source`:  the source is absent / corrupt / forbidden / unreadable
+ */
+export type StoryState =
+  | { kind: 'active'; ids: string[]; excerpt: string | null }
+  | { kind: 'none'; excerpt: string | null }
+  | { kind: 'unknown'; excerpt: string | null }
+  | { kind: 'no_section' }
+  | { kind: 'source'; status: 'absent' | 'corrupt' | 'forbidden' | 'unreadable' | 'unavailable'; code: string | null };
+
 export interface ProjectOverview {
   name: string | null;
   /** `undefined` = the data source has no such field (the row is not shown); `null` = unknown. */
@@ -17,6 +32,11 @@ export interface ProjectOverview {
   stateRevision: number | null;
   /** Verbatim `## Current Story` excerpt (untrusted text). `undefined` = not provided by the source (row hidden). */
   currentStory?: string | null;
+  /** Structured story state. `undefined` = the source does not provide it (falls back to the excerpt row). */
+  story?: StoryState;
+  /** Mission counters. `null` = unknown (state unusable); `undefined` = not provided (row hidden). */
+  activeMissionCount?: number | null;
+  finishedMissionCount?: number | null;
 }
 
 export interface Mission {

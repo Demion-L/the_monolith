@@ -65,6 +65,7 @@ describe('readDashboardModel — functional', () => {
       name: 'Demo', monolithRoot: '.monolith', monolithRootSource: 'default',
       stateSchemaVersionOnDisk: 2, stateRevision: 7, activeMissionCount: 1, finishedMissionCount: 1,
       currentStory: { excerpt: 'Story text here.', lineRange: '5-5' },
+      storyClaim: { kind: 'unknown' },
     });
     expect(m.currentMissions.data!.active.map((x) => x.id)).toEqual(['MIS-0001']);
     const cp = m.checkpoints.data!.byActiveMission;
@@ -128,10 +129,28 @@ describe('readDashboardModel — functional', () => {
     const m = readDashboardModel(dir);
     expect(m.diagnostics.sources.map((s) => s.status)).toEqual(['absent', 'absent', 'absent', 'absent']);
     expect(m.projectOverview.data).toMatchObject({
-      name: null, activeMissionCount: 0, finishedMissionCount: 0, stateRevision: null, stateSchemaVersionOnDisk: null, currentStory: null,
+      name: null, activeMissionCount: 0, finishedMissionCount: 0, stateRevision: null, stateSchemaVersionOnDisk: null, currentStory: null, storyClaim: null,
     });
     expect(m.currentMissions.data).toEqual({ active: [] });
     expect(m.roadmap.data).toBeNull();
+  });
+
+  it.each([
+    ['**Story:** S-1 — title', { kind: 'ids', ids: ['S-1'] }],
+    ['No active story recorded.', { kind: 'none' }],
+    ['free text, no identity', { kind: 'unknown' }],
+    ['No active story recorded.\n**Story:** S-1', { kind: 'unknown' }],
+  ])('storyClaim classifies %j via Core parseActiveStoryClaim', (body, claim) => {
+    writeState([{ id: 'MIS-0001' }]);
+    write('.monolith/memory/working/active.md', `# Active\n\n## Current Story\n\n${body}\n\n---\n`);
+    expect(readDashboardModel(dir).projectOverview.data!.storyClaim).toEqual(claim);
+  });
+
+  it('storyClaim is null when the section is missing or the source is absent', () => {
+    writeState([{ id: 'MIS-0001' }]);
+    expect(readDashboardModel(dir).projectOverview.data!.storyClaim).toBeNull();
+    write('.monolith/memory/working/active.md', '# Active\n\nNo heading.\n');
+    expect(readDashboardModel(dir).projectOverview.data!.storyClaim).toBeNull();
   });
 
   it('partial state: active.md without a Current Story section keeps the rest', () => {

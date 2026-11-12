@@ -40,6 +40,7 @@ import {
 import { MAX_ACTIVE_CONTEXT_BYTES } from '../brief/collect.js';
 import { ACTIVE_MD_REL } from '../brief/constants.js';
 import { extractCurrentStory } from '../brief/story.js';
+import { parseActiveStoryClaim } from '../brief/freshness.js';
 import {
   hasCheckpointOrderMismatch,
   selectActiveMissions,
@@ -52,6 +53,7 @@ import type {
   ProjectOverview,
   ReadNote,
   RoadmapData,
+  StoryClaimView,
   Section,
   SourceErrorCode,
   SourceId,
@@ -230,10 +232,14 @@ function buildModel(projectRoot: string): DashboardReadModel {
   if (active.length > 1) notes.push({ code: 'MULTIPLE_ACTIVE_MISSIONS', severity: 'info' });
 
   let currentStory: ProjectOverview['currentStory'] = null;
+  let storyClaim: StoryClaimView | null = null;
   if (storyLoaded.content !== null) {
     const extraction = extractCurrentStory(storyLoaded.content);
     if (extraction.hasCurrentStorySection && extraction.excerpt !== null && extraction.lineRange !== null) {
       currentStory = { excerpt: extraction.excerpt, lineRange: extraction.lineRange };
+      // Core's existing parser; no second Story parser in the read model.
+      const claim = parseActiveStoryClaim(extraction.excerpt);
+      storyClaim = claim.kind === 'ids' ? { kind: 'ids', ids: [...claim.ids] } : { kind: claim.kind };
     } else {
       notes.push({ code: 'ACTIVE_MD_NO_CURRENT_STORY', severity: 'info' });
     }
@@ -248,6 +254,7 @@ function buildModel(projectRoot: string): DashboardReadModel {
     activeMissionCount: stateUsable ? active.length : null,
     finishedMissionCount: stateUsable ? missions.length - active.length : null,
     currentStory,
+    storyClaim,
   };
 
   const currentMissions: CurrentMissions | null = stateUsable ? { active } : null;

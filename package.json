@@ -12,6 +12,7 @@
   "bugs": {
     "url": "https://github.com/Demion-L/the_monolith/issues"
   },
+  "packageManager": "pnpm@10.34.9",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,7 +41,9 @@
     "dev:ui": "vite --config ui/vite.config.ts",
     "typecheck:ui": "vue-tsc -p ui/tsconfig.json --noEmit",
     "build:ui": "vite build --config ui/vite.config.ts",
-    "test:ui": "vitest run --config ui/vitest.config.ts"
+    "test:ui": "vitest run --config ui/vitest.config.ts",
+    "check:build-integrity": "node scripts/check-build-integrity.mjs",
+    "check:package": "node scripts/validate-package.mjs"
   },
   "keywords": [
     "monolith",

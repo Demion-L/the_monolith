@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'release/**'
+
+# Read-only. No secrets, no publish, no deploy, no commits.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (typecheck, tests, build integrity, package)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: src/coordinatorium/checkpoint.test.ts runs
+          # `git show 681d88d:...` (pre-COORDINATORIUM-002 sources). A shallow
+          # clone (default depth 1) makes that test fail.
+          fetch-depth: 0
+
+      # pnpm version comes from package.json "packageManager" (single source of
+      # truth; verified: frozen install of pnpm-lock.yaml works with 10.34.9).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22 # package.json engines: >=20; CI pins the 22 LTS line
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Core typecheck
+        run: pnpm run typecheck
+
+      - name: Vue typecheck
+        run: pnpm run typecheck:ui
+
+      - name: Core tests
+        run: pnpm run test
+
+      - name: UI tests
+        run: pnpm run test:ui
+
+      # Remove generated output first (ephemeral runner checkout, nothing is
+      # committed) so artifacts whose source no longer exists cannot survive the
+      # rebuild unnoticed: they show up as DELETED in the gate below.
+      # Guarded: only runs inside the CI checkout (GITHUB_WORKSPACE == repo root)
+      # and never outside it. tsconfig.tsbuildinfo is removed too (composite
+      # build) so tsc cannot skip emit based on stale incremental state.
+      - name: Remove generated dist/ before rebuild
+        run: |
+          test "${GITHUB_ACTIONS:-}" = "true"
+          test "$(git rev-parse --show-toplevel)" = "$GITHUB_WORKSPACE"
+          test -f package.json
+          rm -rf -- dist tsconfig.tsbuildinfo
+
+      - name: Core build
+        run: pnpm run build
+
+      # tsc emits 0644; git tracks the bin entry point as 0755 (npm also sets
+      # it on install). Reproduce the tracked mode so the gate compares content
+      # AND mode honestly instead of failing on a known, benign difference.
+      - name: Set executable bit on package bin entries
+        run: node -e "for (const p of Object.values(require('./package.json').bin)) require('fs').chmodSync(p, 0o755)"
+
+      - name: UI build
+        run: pnpm run build:ui
+
+      - name: Build Integrity Gate (tracked dist/ must equal fresh build)
+        run: pnpm run check:build-integrity
+
+      - name: Package validation (npm pack --dry-run manifest)
+        run: pnpm run check:package

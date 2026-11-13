@@ -28,6 +28,8 @@ import { CONFIG_FILE_NAME, MAX_PROJECT_FILE_BYTES, isReadSecurityViolation, Root
 import { MAX_ACTIVE_CONTEXT_BYTES } from '../brief/collect.js';
 import { ACTIVE_MD_REL } from '../brief/constants.js';
 import { extractCurrentStory } from '../brief/story.js';
+import { parseActiveStoryClaim } from '../brief/freshness.js';
+import { parseRoadmapPhases } from './roadmap.js';
 import { hasCheckpointOrderMismatch, selectActiveMissions, selectLatestCheckpoint, } from '../brief/selectors.js';
 export const ROADMAP_REL = 'context/maps/roadmap-index.md';
 /** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
@@ -178,10 +180,14 @@ function buildModel(projectRoot) {
     if (active.length > 1)
         notes.push({ code: 'MULTIPLE_ACTIVE_MISSIONS', severity: 'info' });
     let currentStory = null;
+    let storyClaim = null;
     if (storyLoaded.content !== null) {
         const extraction = extractCurrentStory(storyLoaded.content);
         if (extraction.hasCurrentStorySection && extraction.excerpt !== null && extraction.lineRange !== null) {
             currentStory = { excerpt: extraction.excerpt, lineRange: extraction.lineRange };
+            // Core's existing parser; no second Story parser in the read model.
+            const claim = parseActiveStoryClaim(extraction.excerpt);
+            storyClaim = claim.kind === 'ids' ? { kind: 'ids', ids: [...claim.ids] } : { kind: claim.kind };
         }
         else {
             notes.push({ code: 'ACTIVE_MD_NO_CURRENT_STORY', severity: 'info' });
@@ -196,6 +202,7 @@ function buildModel(projectRoot) {
         activeMissionCount: stateUsable ? active.length : null,
         finishedMissionCount: stateUsable ? missions.length - active.length : null,
         currentStory,
+        storyClaim,
     };
     const currentMissions = stateUsable ? { active } : null;
     let checkpoints = null;
@@ -211,7 +218,18 @@ function buildModel(projectRoot) {
             }),
         };
     }
-    const roadmap = roadmapLoaded.content === null ? null : { text: roadmapLoaded.content };
+    let roadmap = null;
+    if (roadmapLoaded.content !== null) {
+        let structured;
+        try {
+            structured = parseRoadmapPhases(roadmapLoaded.content);
+        }
+        catch {
+            // A parser fault is reported as such, never as an empty roadmap.
+            structured = { state: 'error', phases: [], activePhase: { kind: 'not_declared' }, diagnostics: [{ code: 'INTERNAL', severity: 'warn', phaseIndex: null }] };
+        }
+        roadmap = { text: roadmapLoaded.content, structured };
+    }
     return {
         projectOverview: section(overview, [config.report, stateResult.report, storyLoaded.report]),
         currentMissions: section(currentMissions, [stateResult.report]),

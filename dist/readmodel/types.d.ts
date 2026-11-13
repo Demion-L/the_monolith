@@ -38,6 +38,20 @@ export interface Section<T> {
     /** The sources this section depends on, in fixed order. */
     sources: SourceReport[];
 }
+/**
+ * Identity of the current story as classified by Core's `parseActiveStoryClaim`
+ * (UI-003B-1A). `none` = the section declares no active story; `ids` = a
+ * structural identity; `unknown` = the section cannot be classified (including
+ * a self-contradicting one). Free text (e.g. contradiction values) is not carried.
+ */
+export type StoryClaimView = {
+    kind: 'none';
+} | {
+    kind: 'ids';
+    ids: string[];
+} | {
+    kind: 'unknown';
+};
 export interface ProjectOverview {
     /** `project.name` from `monolith.config.json`; null when absent or not a non-empty string. */
     name: string | null;
@@ -55,6 +69,8 @@ export interface ProjectOverview {
         excerpt: string;
         lineRange: string;
     } | null;
+    /** Classification of `currentStory`; null when there is no readable Current Story section. */
+    storyClaim: StoryClaimView | null;
 }
 export interface CurrentMissions {
     /** Every `in_progress` mission, ordered by (startedAt, id). More than one is reported, never collapsed. */
@@ -75,9 +91,81 @@ export interface CheckpointsData {
     /** One entry per active mission, same order as `CurrentMissions.active`. */
     byActiveMission: MissionCheckpoints[];
 }
+/**
+ * Structured roadmap (UI-003C), interpreted by Core's `parseRoadmapPhases`.
+ * Every status is REPORTED (the document's own claim), never CONFIRMED, and is
+ * unrelated to Reconciliation. Diagnostics are fixed codes; no document text.
+ */
+export interface RoadmapPhaseView {
+    /** Id from an explicit `### Phase <id>` heading. */
+    id: string | null;
+    /** Title after the dash; null when the heading has none (e.g. `### Phase 2+`). Untrusted text. */
+    title: string | null;
+    status: {
+        /** Verbatim (whitespace-normalized) value; null when missing, empty or self-contradicting. */
+        value: string | null;
+        /** True only for a value the documents themselves declare (PLANNED, IN PROGRESS, COMPLETE(D), NOT DEFINED). */
+        recognized: boolean;
+        provenance: 'REPORTED';
+    };
+    goal: string | null;
+    /**
+     * True when Core shortened `goal` to its length limit. Computed in Core only.
+     * Always present from this Core; absent in DTOs from older servers, where it means "unknown", not "complete".
+     */
+    goalTruncated?: boolean;
+    /** Remaining body of the phase section, verbatim and untrusted; null when empty. */
+    details: string | null;
+}
+/**
+ * - none:         the document says explicitly there is no active phase
+ * - not_declared: no `Active Phase:` pointer at all
+ * - phase:        one explicit pointer matching exactly one recognised phase
+ * - unmatched:    the pointer names no recognised phase
+ * - ambiguous:    contradictory pointers, or the pointed id is duplicated
+ */
+export type ActivePhaseView = {
+    kind: 'none';
+} | {
+    kind: 'not_declared';
+} | {
+    kind: 'phase';
+    id: string;
+} | {
+    kind: 'unmatched';
+} | {
+    kind: 'ambiguous';
+};
+export type RoadmapDiagnosticCode = 'DOCUMENT_EMPTY' | 'PHASES_SECTION_MISSING' | 'PHASES_SECTION_DUPLICATED' | 'NO_PHASES_FOUND' | 'PHASE_HEADING_MALFORMED' | 'PHASES_TRUNCATED' | 'PHASE_STATUS_MISSING' | 'PHASE_STATUS_EMPTY' | 'PHASE_STATUS_CONFLICT' | 'PHASE_STATUS_UNRECOGNIZED' | 'PHASE_DETAILS_TRUNCATED' | 'PHASE_ID_DUPLICATE' | 'ACTIVE_PHASE_CONFLICT' | 'ACTIVE_PHASE_UNMATCHED' | 'ACTIVE_PHASE_AMBIGUOUS_ID' | 'ACTIVE_PHASE_REPORTED_COMPLETE' | 'INTERNAL';
+export interface RoadmapDiagnosticView {
+    code: RoadmapDiagnosticCode;
+    severity: 'info' | 'warn';
+    /** Index into `phases` when the diagnostic concerns one phase. */
+    phaseIndex: number | null;
+}
+/**
+ * - ok:           phases recognised, nothing structural lost
+ * - partial:      phases recognised, but some content could not be (malformed heading, truncation)
+ * - empty:        the document is available but blank
+ * - no_phases:    a `## Phases` section exists without any phase
+ * - unrecognized: non-empty document without a `## Phases` section
+ * - error:        processing failed; the structure must not be trusted
+ */
+export type RoadmapParseState = 'ok' | 'partial' | 'empty' | 'no_phases' | 'unrecognized' | 'error';
+export interface StructuredRoadmapView {
+    state: RoadmapParseState;
+    phases: RoadmapPhaseView[];
+    activePhase: ActivePhaseView;
+    diagnostics: RoadmapDiagnosticView[];
+}
 export interface RoadmapData {
     /** Raw, unparsed text of `roadmap-index.md`. Untrusted: must be shown escaped, never rendered or executed. */
     text: string;
+    /**
+     * Core's interpretation of `text`. Additive: DTOs from older servers lack it,
+     * and consumers must then fall back to `text` without inventing phases.
+     */
+    structured?: StructuredRoadmapView;
 }
 export type NoteCode = 'STATE_LEGACY_SCHEMA_MIGRATED' | 'MULTIPLE_ACTIVE_MISSIONS' | 'CHECKPOINT_ORDER_MISMATCH' | 'ACTIVE_MD_NO_CURRENT_STORY';
 export interface ReadNote {

@@ -21,11 +21,19 @@ The active section is kept in the URL hash, e.g. `#roadmap`.
 
 | Section | Shows |
 |---|---|
-| Project Overview | Project name, instance root, `state.json` schema/revision, mission counts |
+| Project Overview | Project name, instance root, `state.json` schema/revision, active and finished mission counts, and the Current Story section of `active.md` with its classification: no active story, story id(s), or `UNKNOWN` when the section cannot be classified |
 | Current Mission | Active missions |
 | Checkpoints | Latest checkpoints per active mission |
-| Roadmap | Roadmap index of the instance |
+| Roadmap | Structured roadmap: phases from `roadmap-index.md` with their status, goal and details, and the active phase when the document names one explicitly. The original Markdown stays available under "View original Markdown" |
 | Diagnostics | Per-source read status (absent / forbidden / corrupt / unreadable) and notes |
+
+### Structured Roadmap
+
+Phases and statuses are shown as **reported** by the document; Mission Control does not
+confirm or derive them. A missing, contradictory or unmatched active-phase pointer is
+shown as such. If the roadmap cannot be fully read, the panel shows a partial or error
+notice with fixed diagnostic messages and the original Markdown, and the rest of the
+interface keeps working. The roadmap cannot be edited from the UI (see Limitations).
 
 ## LIVE and DEMO
 

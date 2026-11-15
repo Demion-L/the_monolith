@@ -468,11 +468,16 @@ describe('failure injection: before publication (NOT_PUBLISHED)', () => {
 
   it('error on close: NOT_PUBLISHED', () => {
     seeded();
-    const c = (() => {
+    // ADR-012 / SAFEWRITE-005: the WRITING descriptor is closed before publication,
+    // so a close error forbids publishing. The injected close really closes the
+    // descriptor first, so no real fd leaks from the test.
+    const c = ((fd: number) => {
+      realFsOps.closeSync(fd);
       throw errno('EIO');
     }) as unknown as FsOps['closeSync'];
-    expectCode(() => replaceFile(parentOf(), 'state.json', 'NEW', { ...OPTS, ops: { closeSync: c } }), 'WRITE_FAILED');
-    // the fd was leaked by the injected close; the temp file itself must still be removed
+    const r = counted('renameSync');
+    expectCode(() => replaceFile(parentOf(), 'state.json', 'NEW', { ...OPTS, ops: { closeSync: c, renameSync: r.fn } }), 'WRITE_FAILED');
+    expect(r.calls()).toBe(0);
     untouched();
   });
 
@@ -728,7 +733,7 @@ describe('after publication: warnings, never errors', () => {
     expect(full.calls()).toBe(2);
   });
 
-  it('the documented order holds: write, fchmod, fstat, fsync(file), close, publish, fsync(dir)', () => {
+  it('the documented order holds: write, fchmod, fstat, fsync(file), close(writing), publish, close(identity), fsync(dir)', () => {
     const seq: string[] = [];
     const wrap = <K extends keyof FsOps>(name: K, tag: string): FsOps[K] =>
       ((...a: unknown[]) => {
@@ -746,8 +751,9 @@ describe('after publication: warnings, never errors', () => {
         renameSync: wrap('renameSync', 'rename'),
       },
     });
-    // create (fstat records identity) -> write -> fchmod -> verify (fstat) -> fsync(file) -> close -> publish -> fsync(dir) -> close(dir)
-    expect(seq).toEqual(['fstat', 'write', 'fchmod', 'fstat', 'fsync', 'close', 'rename', 'fsync', 'close']);
+    // create (fstat records identity) -> fstat(writing) mode inspection -> open identity fd, fstat x2 (writing vs identity) -> write -> fchmod -> verify (fstat)
+    // -> fsync(file) -> close(writing) -> fstat(identity) -> publish -> close(identity) -> fsync(dir) -> close(dir)
+    expect(seq).toEqual(['fstat', 'fstat', 'fstat', 'fstat', 'write', 'fchmod', 'fstat', 'fsync', 'close', 'fstat', 'rename', 'close', 'fsync', 'close']);
   });
 });
 

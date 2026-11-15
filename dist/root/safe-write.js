@@ -18,7 +18,11 @@
  *    temp name, never from an error code. UNKNOWN is never retried and never
  *    silently downgraded;
  *  - identity-checked cleanup: only a temp file THIS call created, and only if
- *    the name still shows the `dev/ino` recorded from the descriptor.
+ *    the name still shows the inode of a separate read-only IDENTITY descriptor,
+ *    which stays open until publication and cleanup are finished (an open
+ *    descriptor pins the inode, so it cannot be recycled for a foreign file: no
+ *    ABA). The WRITING descriptor is closed before publication (ADR-012). The
+ *    `lstat` -> `unlink` step itself remains non-atomic (residual race, ADR-012).
  *
  * Not routed through here: lock release and stale-lock recovery (`lock.ts`)
  * unlink the lock path directly, and `trusted-directory` scope creates its
@@ -484,13 +488,25 @@ function safeClose(ctx, fd) {
     }
 }
 /**
- * Remove `token`'s file iff the name still shows the recorded identity. Never
- * removes anything else. The unlink itself is not conditional (no `unlinkat`):
- * a name swapped between the check and the unlink is a residual race.
+ * Does `st` (an `lstat` of the temp name) show the file this call created?
+ * Throws if the proof itself cannot be obtained (fstat failed, or the
+ * descriptor no longer shows the recorded identity): callers treat a throw as
+ * "ownership NOT shown".
  */
-export function disposeOwned(parent, token, opts = {}) {
-    const ctx = ctxOf(opts);
-    const path = join(pdata(parent).path, token.name);
+function showsOwned(ctx, held, st) {
+    if (!st.isFile())
+        return false;
+    if (held.fd === null)
+        return sameId(st, held.token.dev, held.token.ino);
+    if (held.closed)
+        throw new Error('descriptor already released; ownership cannot be proven');
+    const live = ctx.ops.fstatSync(held.fd, { bigint: true });
+    if (!live.isFile() || !sameId(live, held.token.dev, held.token.ino))
+        throw new Error('descriptor identity changed');
+    return sameId(st, live.dev, live.ino);
+}
+function disposeHeld(parent, held, ctx) {
+    const path = join(pdata(parent).path, held.token.name);
     let st;
     try {
         st = bigLstatOrNull(ctx, path);
@@ -500,7 +516,14 @@ export function disposeOwned(parent, token, opts = {}) {
     }
     if (st === null)
         return 'absent';
-    if (!st.isFile() || !sameId(st, token.dev, token.ino))
+    let ours;
+    try {
+        ours = showsOwned(ctx, held, st);
+    }
+    catch {
+        return 'failed'; // ownership could not be established: do NOT unlink
+    }
+    if (!ours)
         return 'not-owned';
     try {
         ctx.ops.unlinkSync(path);
@@ -509,6 +532,42 @@ export function disposeOwned(parent, token, opts = {}) {
     catch (err) {
         return errnoOf(err) === 'ENOENT' ? 'absent' : 'failed';
     }
+}
+/**
+ * Remove `token`'s file iff the name still shows the recorded identity. Never
+ * removes anything else. This token-only form has no live descriptor and so
+ * cannot exclude inode reuse after the caller closed its own; the writes in
+ * this module use `disposeHeld`. The unlink itself is not conditional (no
+ * `unlinkat`): a name swapped between the check and the unlink is a residual race.
+ */
+export function disposeOwned(parent, token, opts = {}) {
+    return disposeHeld(parent, { token, fd: null, closed: true }, ctxOf(opts));
+}
+/** Close the held descriptor exactly once. Never throws; returns the close error, if any. */
+function releaseHeld(ctx, held) {
+    if (held.fd === null || held.closed)
+        return undefined;
+    held.closed = true;
+    try {
+        ctx.ops.closeSync(held.fd);
+    }
+    catch (err) {
+        return err;
+    }
+    return undefined;
+}
+/** Keep the original failure; mention a failed release of the descriptor. */
+function withCloseNote(err, closeErr) {
+    if (closeErr === undefined || !(err instanceof SafeWriteError))
+        return err;
+    return new SafeWriteError(`${err.message} The identity descriptor also failed to close: ${errMsg(closeErr)}.`, {
+        code: err.code,
+        phase: err.phase,
+        publication: err.publication,
+        path: err.path,
+        tmp: err.tmp,
+        cause: err.cause,
+    });
 }
 function tmpInfo(res, name) {
     switch (res) {
@@ -587,22 +646,70 @@ function inspectTarget(parent, name, ctx, mode) {
     return { existing: st };
 }
 /**
- * Steps 1-5b of the durability order: create, write, fchmod, verify the
- * descriptor, fsync the file, close. Any failure leaves the destination
- * untouched and removes the temp file only if ownership still verifies.
+ * Flags of the identity descriptor: `O_RDONLY|O_NOFOLLOW|O_NONBLOCK`. Without
+ * `O_NOFOLLOW` (Windows, best-effort per ADR-012) the flag is simply absent and
+ * `stage` compensates with an `lstat` check; that is NOT equivalent protection.
+ * `O_NONBLOCK` keeps a swapped-in FIFO from blocking the open.
+ */
+function identityFlags(ctx) {
+    const c = fs.constants;
+    const nonBlock = typeof c.O_NONBLOCK === 'number' ? c.O_NONBLOCK : 0;
+    // On POSIX a missing O_NONBLOCK would allow a blocking open of a swapped FIFO: refuse.
+    if (nonBlock === 0 && ctx.caps.posix)
+        return null;
+    return c.O_RDONLY | (ctx.caps.noFollow ? c.O_NOFOLLOW : 0) | nonBlock;
+}
+/**
+ * Steps of the durability order (ADR-012) with TWO descriptors:
+ *
+ *  - WRITING fd (from `createExclusive`): write, fchmod, verify, fsync, then
+ *    CLOSED before publication (a deferred write error surfaces at `close` and
+ *    must make the write NOT_PUBLISHED);
+ *  - IDENTITY fd (separate read-only `open`, not `dup`): opened right after the
+ *    create while the writing fd is open, proven to be the same inode, and
+ *    returned STILL OPEN. Its owner from here on is the caller, which releases
+ *    it with `releaseHeld` after publication and cleanup. It pins the inode
+ *    (no ABA) for verification and cleanup.
+ *
+ * Any failure leaves the destination untouched, removes the temp file only if
+ * ownership still verifies against a live descriptor, and closes every
+ * descriptor still owned here exactly once (`releaseHeld` marks before closing,
+ * so a failed close is never repeated).
  */
 function stage(parent, finalName, data, finalMode, createMode, fsyncFile, ctx) {
     const dir = pdata(parent).path;
     const owned = createExclusive(parent, tempName(finalName), createMode, { ops: ctx.ops, caps: ctx.caps });
     const { fd, token } = owned;
     const tmpPath = join(dir, token.name);
-    let closed = false;
+    const writing = { token, fd, closed: false };
+    let identity = null;
+    let identityProven = false; // until proven, only the writing descriptor vouches for ownership
+    // Owner-read elevation (ALPHA4-SEC-SAFEWRITE-008): the mode the file really had
+    // after creation, set ONLY while `0o400` was temporarily added so the read-only
+    // identity descriptor can be opened. `null` = no elevation outstanding.
+    let restoreMode = null;
     const abort = (code, phase, what, cause) => {
-        if (!closed)
-            safeClose(ctx, fd);
-        closed = true;
-        const info = tmpInfo(disposeOwned(parent, token, { ops: ctx.ops, caps: ctx.caps }), token.name);
-        throw new SafeWriteError(`${what}: ${errMsg(cause)}.${residueNote(info, dir)}`, {
+        // Put the mode back first, while the writing descriptor is still open. A
+        // failure here never replaces the original error; it is reported in the message.
+        let modeNote = '';
+        let modeRestoreFailed = false;
+        if (restoreMode !== null && !writing.closed) {
+            try {
+                ctx.ops.fchmodSync(fd, restoreMode);
+                restoreMode = null;
+            }
+            catch (restoreErr) {
+                modeRestoreFailed = true;
+                modeNote = ` The original mode of the temporary file could not be restored after the temporary owner-read elevation: ${errMsg(restoreErr)}.`;
+            }
+        }
+        // Cleanup next, while a live descriptor still proves what the name must show.
+        const info = tmpInfo(disposeHeld(parent, identityProven && identity ? identity : writing, ctx), token.name);
+        if (modeRestoreFailed && info.owned && !info.removed)
+            modeNote += ' The temporary file was left with the owner-read permission added.';
+        const closeErrs = [releaseHeld(ctx, writing), identity ? releaseHeld(ctx, identity) : undefined].filter((e) => e !== undefined);
+        const note = closeErrs.length === 0 ? '' : ` A descriptor also failed to close: ${closeErrs.map(errMsg).join('; ')}.`;
+        throw new SafeWriteError(`${what}: ${errMsg(cause)}.${residueNote(info, dir)}${modeNote}${note}`, {
             code,
             phase,
             publication: 'NOT_PUBLISHED',
@@ -611,6 +718,55 @@ function stage(parent, finalName, data, finalMode, createMode, fsyncFile, ctx) {
             cause,
         });
     };
+    // Owner-read elevation: the identity descriptor is read-only, so a staging
+    // file created without owner-read (e.g. `exactMode:false` with 0o200/0o000)
+    // could not be opened. Only the mode bit is added, only on the file THIS call
+    // created, and only when `0o400` is missing; the mode is restored at the
+    // `fchmod` step below, before fsync and close.
+    let createdMode;
+    try {
+        const st = ctx.ops.fstatSync(fd, { bigint: true });
+        if (!st.isFile())
+            throw new Error('not a regular file');
+        createdMode = Number(st.mode) & 0o7777;
+    }
+    catch (err) {
+        return abort('WRITE_VERIFY_FAILED', 'identity', `cannot inspect the mode of "${tmpPath}"`, err);
+    }
+    if ((createdMode & 0o400) === 0) {
+        try {
+            ctx.ops.fchmodSync(fd, createdMode | 0o400);
+        }
+        catch (err) {
+            return abort(codeForErrno(err), 'chmod', `cannot add owner-read to "${tmpPath}" for the identity descriptor`, err);
+        }
+        restoreMode = createdMode;
+    }
+    // Identity descriptor: opened before fchmod, while the writing one is open.
+    let idFd;
+    try {
+        const flags = identityFlags(ctx);
+        if (flags === null)
+            throw new Error('O_NONBLOCK is unavailable, so a swapped-in FIFO could block the open');
+        idFd = ctx.ops.openSync(tmpPath, flags);
+        identity = { token, fd: idFd, closed: false };
+        const w = ctx.ops.fstatSync(fd, { bigint: true });
+        const i = ctx.ops.fstatSync(idFd, { bigint: true });
+        if (!w.isFile() || !i.isFile())
+            throw new Error('not a regular file');
+        if (!sameId(i, w.dev, w.ino) || !sameId(i, token.dev, token.ino))
+            throw new Error('identity descriptor shows a different file');
+        if (!ctx.caps.noFollow) {
+            // No O_NOFOLLOW: the name must still be the very file both descriptors show.
+            const at = bigLstat(ctx, tmpPath);
+            if (at.isSymbolicLink() || !sameId(at, w.dev, w.ino))
+                throw new Error('path no longer names the created file');
+        }
+        identityProven = true;
+    }
+    catch (err) {
+        return abort('WRITE_VERIFY_FAILED', 'identity', `cannot establish the identity descriptor of "${tmpPath}"`, err);
+    }
     try {
         let off = 0;
         while (off < data.length) {
@@ -623,9 +779,13 @@ function stage(parent, finalName, data, finalMode, createMode, fsyncFile, ctx) {
     catch (err) {
         return abort(codeForErrno(err), 'write', `cannot write "${tmpPath}"`, err);
     }
-    if (finalMode !== null) {
+    // The final mode, or (after an elevation) the original mode. Without either
+    // there is no `fchmod` at all: ordinary modes are never touched.
+    const targetMode = finalMode ?? restoreMode;
+    if (targetMode !== null) {
         try {
-            ctx.ops.fchmodSync(fd, finalMode);
+            ctx.ops.fchmodSync(fd, targetMode);
+            restoreMode = null;
         }
         catch (err) {
             return abort(codeForErrno(err), 'chmod', `cannot set the mode of "${tmpPath}"`, err);
@@ -641,7 +801,7 @@ function stage(parent, finalName, data, finalMode, createMode, fsyncFile, ctx) {
             throw new Error(`size is ${st.size}, expected ${data.length}`);
         if (!sameId(st, token.dev, token.ino))
             throw new Error('identity changed');
-        if (finalMode !== null && (Number(st.mode) & 0o777) !== finalMode)
+        if (targetMode !== null && (Number(st.mode) & 0o777) !== (finalMode !== null ? finalMode : targetMode & 0o777))
             throw new Error('mode does not match');
         if (ctx.caps.ownerCheck && Number(st.uid) !== process.geteuid())
             throw new Error('not owned by the effective user');
@@ -658,17 +818,35 @@ function stage(parent, finalName, data, finalMode, createMode, fsyncFile, ctx) {
             return abort('WRITE_FSYNC_FAILED', 'fsync', `cannot fsync "${tmpPath}"`, err);
         }
     }
+    // The writing descriptor is closed BEFORE publication (ADR-012): a close error
+    // forbids publishing. Whatever close reports, the fd number is spent and is
+    // never closed again.
+    const closeErr = releaseHeld(ctx, writing);
+    if (closeErr !== undefined) {
+        return abort(codeForErrno(closeErr), 'close', `cannot close "${tmpPath}"`, closeErr);
+    }
+    // The identity descriptor must still show the same, complete file.
     try {
-        closed = true;
-        ctx.ops.closeSync(fd);
+        const st = ctx.ops.fstatSync(idFd, { bigint: true });
+        if (!st.isFile() || !sameId(st, token.dev, token.ino))
+            throw new Error('identity changed after close');
+        if (st.nlink !== 1n)
+            throw new Error(`link count is ${st.nlink}`);
+        if (st.size !== BigInt(data.length))
+            throw new Error(`size is ${st.size}, expected ${data.length}`);
     }
     catch (err) {
-        return abort(codeForErrno(err), 'close', `cannot close "${tmpPath}"`, err);
+        return abort('WRITE_VERIFY_FAILED', 'verify', `temporary file "${tmpPath}" failed verification after close`, err);
     }
-    return { token, tmpPath };
+    return { token, fd: idFd, closed: false, tmpPath };
 }
-function isOurs(st, staged) {
-    return st !== null && st.isFile() && sameId(st, staged.token.dev, staged.token.ino);
+/**
+ * Is `st` the file this call created? Decided against the LIVE descriptor
+ * (`fstat(fd)`), not a remembered `dev/ino`. A throw means the proof could not
+ * be obtained and must be read as "unknown" by the caller.
+ */
+function isOurs(st, staged, ctx) {
+    return st !== null && showsOwned(ctx, staged, st);
 }
 /**
  * One read-only look at the two names after a publish call failed. NO errno is
@@ -691,10 +869,10 @@ function isOurs(st, staged) {
 function verifyPublication(kind, errno, targetPath, staged, ctx) {
     try {
         const t = bigLstatOrNull(ctx, targetPath);
-        if (isOurs(t, staged))
+        if (isOurs(t, staged, ctx))
             return 'published';
         const m = bigLstatOrNull(ctx, staged.tmpPath);
-        if (isOurs(m, staged)) {
+        if (isOurs(m, staged, ctx)) {
             if (kind === 'link' && errno === 'EEXIST') {
                 // Held by another object, or it vanished again while our temp name was
                 // never linked (link count 1): either way nothing of ours was published.
@@ -714,7 +892,7 @@ function publishFailure(kind, err, parent, staged, targetPath, ctx, warnings) {
     const dir = pdata(parent).path;
     const errno = errnoOf(err);
     const notPublished = (code, what) => {
-        const info = tmpInfo(disposeOwned(parent, staged.token, { ops: ctx.ops, caps: ctx.caps }), staged.token.name);
+        const info = tmpInfo(disposeHeld(parent, staged, ctx), staged.token.name);
         throw new SafeWriteError(`${what}: ${errMsg(err)}. The destination was not modified.${residueNote(info, dir)}`, {
             code,
             phase: 'publish',
@@ -763,7 +941,8 @@ export function publishLink(parent, token, finalName, opts = {}) {
     const ctx = ctxOf(opts);
     validName(finalName, parent);
     const dir = pdata(parent).path;
-    const staged = { token, tmpPath: join(dir, token.name) };
+    // The caller already closed its descriptor: token-only (legacy) identity, see `Held`.
+    const staged = { token, fd: null, closed: true, tmpPath: join(dir, token.name) };
     const targetPath = join(dir, finalName);
     const warnings = [];
     assertParentUnchanged(parent, ctx);
@@ -858,22 +1037,46 @@ export function replaceFile(parent, name, data, opts) {
         finalMode = p.finalExact ? opts.mode : null;
     const warnings = platformWarnings(ctx);
     const staged = stage(parent, name, buf, finalMode, p.finalExact || existing ? 0o600 : opts.mode, p.fsyncFile, ctx);
-    assertParentUnchangedOrDispose(parent, staged, ctx, targetPath);
+    // The staging descriptor stays open through publication and cleanup and is
+    // closed exactly once, whatever happens (a failure keeps its own error).
     try {
-        ctx.ops.renameSync(staged.tmpPath, targetPath);
+        assertParentUnchangedOrDispose(parent, staged, ctx, targetPath);
+        try {
+            ctx.ops.renameSync(staged.tmpPath, targetPath);
+        }
+        catch (err) {
+            publishFailure('rename', err, parent, staged, targetPath, ctx, warnings);
+        }
     }
     catch (err) {
-        publishFailure('rename', err, parent, staged, targetPath, ctx, warnings);
+        throw withCloseNote(err, releaseHeld(ctx, staged));
     }
+    noteIdentityCloseFailure(releaseHeld(ctx, staged), warnings, staged.tmpPath);
     const dirReached = p.fsyncDir ? syncDirectory(parent, ctx, warnings) : 'file';
     return { publication: 'PUBLISHED', durability: reached(p.requested, dirReached), warnings };
+}
+/**
+ * The write is already published: a failed release of the IDENTITY descriptor
+ * never changes the result. It is reported as `STAGING_DESCRIPTOR_CLOSE_FAILED`
+ * (appended to the existing warnings), NOT as `STAGING_RESIDUE`, which means "a
+ * temporary file is left behind". The close is never retried. Only the errno
+ * code is reported, not the raw message.
+ */
+function noteIdentityCloseFailure(closeErr, warnings, tmpPath) {
+    if (closeErr === undefined)
+        return;
+    warnings.push({
+        code: 'STAGING_DESCRIPTOR_CLOSE_FAILED',
+        message: `the staging descriptor failed to close after publication (${errnoOf(closeErr) ?? 'unknown error'}); the write is published and unaffected.`,
+        path: tmpPath,
+    });
 }
 function assertParentUnchangedOrDispose(parent, staged, ctx, targetPath) {
     try {
         assertParentUnchanged(parent, ctx);
     }
     catch (err) {
-        const info = tmpInfo(disposeOwned(parent, staged.token, { ops: ctx.ops, caps: ctx.caps }), staged.token.name);
+        const info = tmpInfo(disposeHeld(parent, staged, ctx), staged.token.name);
         if (err instanceof SafeWriteError) {
             throw new SafeWriteError(`${err.message}${residueNote(info, pdata(parent).path)}`, {
                 code: err.code,
@@ -906,26 +1109,37 @@ export function createFile(parent, name, data, opts) {
     inspectTarget(parent, name, ctx, 'create');
     const warnings = platformWarnings(ctx);
     const staged = stage(parent, name, buf, p.finalExact ? opts.mode : null, p.finalExact ? 0o600 : opts.mode, p.fsyncFile, ctx);
-    assertParentUnchangedOrDispose(parent, staged, ctx, targetPath);
-    let outcome;
+    // One owner for the staging descriptor: it is held until the second name has
+    // been disposed (the identity check needs it) and closed exactly once.
+    let removed;
     try {
-        ctx.ops.linkSync(staged.tmpPath, targetPath);
-        outcome = 'published';
+        assertParentUnchangedOrDispose(parent, staged, ctx, targetPath);
+        let outcome;
+        try {
+            ctx.ops.linkSync(staged.tmpPath, targetPath);
+            outcome = 'published';
+        }
+        catch (err) {
+            outcome = publishFailure('link', err, parent, staged, targetPath, ctx, warnings);
+        }
+        if (outcome === 'lost-race') {
+            const info = tmpInfo(disposeHeld(parent, staged, ctx), staged.token.name);
+            throw new SafeWriteError(`"${targetPath}" appeared while it was being created; it is never overwritten.${residueNote(info, dir)}`, {
+                code: 'WRITE_TARGET_EXISTS',
+                phase: 'publish',
+                publication: 'NOT_PUBLISHED',
+                path: targetPath,
+                tmp: info,
+            });
+        }
+        // Published: the temp name is now a second link (nlink 2) to OUR inode; the
+        // live descriptor still identifies it, so only that name is removed.
+        removed = disposeHeld(parent, staged, ctx);
     }
     catch (err) {
-        outcome = publishFailure('link', err, parent, staged, targetPath, ctx, warnings);
+        throw withCloseNote(err, releaseHeld(ctx, staged));
     }
-    if (outcome === 'lost-race') {
-        const info = tmpInfo(disposeOwned(parent, staged.token, { ops: ctx.ops, caps: ctx.caps }), staged.token.name);
-        throw new SafeWriteError(`"${targetPath}" appeared while it was being created; it is never overwritten.${residueNote(info, dir)}`, {
-            code: 'WRITE_TARGET_EXISTS',
-            phase: 'publish',
-            publication: 'NOT_PUBLISHED',
-            path: targetPath,
-            tmp: info,
-        });
-    }
-    const removed = disposeOwned(parent, staged.token, { ops: ctx.ops, caps: ctx.caps });
+    noteIdentityCloseFailure(releaseHeld(ctx, staged), warnings, staged.tmpPath);
     if (removed !== 'removed' && removed !== 'absent') {
         warnings.push({
             code: 'STAGING_RESIDUE',

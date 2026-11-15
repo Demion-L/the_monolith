@@ -18,7 +18,11 @@
  *    temp name, never from an error code. UNKNOWN is never retried and never
  *    silently downgraded;
  *  - identity-checked cleanup: only a temp file THIS call created, and only if
- *    the name still shows the `dev/ino` recorded from the descriptor.
+ *    the name still shows the inode of a separate read-only IDENTITY descriptor,
+ *    which stays open until publication and cleanup are finished (an open
+ *    descriptor pins the inode, so it cannot be recycled for a foreign file: no
+ *    ABA). The WRITING descriptor is closed before publication (ADR-012). The
+ *    `lstat` -> `unlink` step itself remains non-atomic (residual race, ADR-012).
  *
  * Not routed through here: lock release and stale-lock recovery (`lock.ts`)
  * unlink the lock path directly, and `trusted-directory` scope creates its
@@ -40,7 +44,12 @@
 import * as fs from 'fs';
 export type PublicationState = 'NOT_PUBLISHED' | 'PUBLISHED' | 'UNKNOWN';
 export type WriteErrorCode = 'WRITE_SCOPE_REQUIRED' | 'WRITE_BOUNDARY_INVALID' | 'WRITE_OUTSIDE_BOUNDARY' | 'WRITE_PARENT_SYMLINK' | 'WRITE_PARENT_NOT_DIRECTORY' | 'WRITE_PARENT_MISSING' | 'WRITE_PARENT_CHANGED' | 'WRITE_TARGET_SYMLINK' | 'WRITE_TARGET_NOT_REGULAR' | 'WRITE_TARGET_EXISTS' | 'WRITE_TARGET_HARDLINKED' | 'WRITE_TMP_COLLISION' | 'WRITE_TOO_LARGE' | 'WRITE_READONLY' | 'WRITE_PERMISSION' | 'WRITE_NO_SPACE' | 'WRITE_FSYNC_FAILED' | 'WRITE_VERIFY_FAILED' | 'WRITE_LINK_UNSUPPORTED' | 'WRITE_PUBLICATION_UNKNOWN' | 'WRITE_FAILED';
-export type WriteWarningCode = 'DIR_FSYNC_UNSUPPORTED' | 'DIR_FSYNC_FAILED' | 'STAGING_RESIDUE' | 'PUBLICATION_VERIFIED_AFTER_ERROR' | 'PLATFORM_BEST_EFFORT';
+export type WriteWarningCode = 'DIR_FSYNC_UNSUPPORTED' | 'DIR_FSYNC_FAILED' | 'STAGING_RESIDUE'
+/**
+ * After a confirmed publication the identity descriptor of the temporary file
+ * failed to close. Not data damage, not a leftover file, not a rollback.
+ */
+ | 'STAGING_DESCRIPTOR_CLOSE_FAILED' | 'PUBLICATION_VERIFIED_AFTER_ERROR' | 'PLATFORM_BEST_EFFORT';
 export interface WriteWarning {
     code: WriteWarningCode;
     message: string;
@@ -213,8 +222,10 @@ export type DisposeResult = 'removed' | 'absent' | 'not-owned' | 'failed';
 export declare function createExclusive(parent: ParentRef, name: string, mode: number, opts?: InternalOptions): OwnedFile;
 /**
  * Remove `token`'s file iff the name still shows the recorded identity. Never
- * removes anything else. The unlink itself is not conditional (no `unlinkat`):
- * a name swapped between the check and the unlink is a residual race.
+ * removes anything else. This token-only form has no live descriptor and so
+ * cannot exclude inode reuse after the caller closed its own; the writes in
+ * this module use `disposeHeld`. The unlink itself is not conditional (no
+ * `unlinkat`): a name swapped between the check and the unlink is a residual race.
  */
 export declare function disposeOwned(parent: ParentRef, token: OwnedToken, opts?: InternalOptions): DisposeResult;
 export interface WriteOptions extends InternalOptions {

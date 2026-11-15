@@ -247,7 +247,28 @@ describe('review round 1 — submodules, replace refs, subdirectory projects', (
     put(sub, 'a.txt', '2\n');
     commit(sub, 'sub 2');
     sh(join(dir, 'vendor'), ['-c', 'protocol.file.allow=always', 'pull', '-q', 'origin', 'main']);
-    const bump = commit(dir, 'chore: bump vendor');
+    // Fixture integrity: the bump must be a REAL gitlink change. Newer Git versions
+    // may skip a gitlink in `git add -A` when .gitmodules says ignore = all, and
+    // `commit --allow-empty` would then silently hide that. So the new gitlink is
+    // written to the index explicitly (update-index does not consult `ignore`),
+    // and the commit below is NOT allowed to be empty.
+    const gitlink = (rev: string): string => sh(dir, ['ls-tree', rev, 'vendor']).trim();
+    const oldLink = gitlink('HEAD');
+    const oldSha = oldLink.split(/\s+/)[2];
+    const newSha = sh(join(dir, 'vendor'), ['rev-parse', 'HEAD']).trim();
+    expect(oldLink, 'fixture: old gitlink must exist with mode 160000').toMatch(/^160000 commit [0-9a-f]{40}\tvendor$/);
+    expect(newSha, 'fixture: submodule HEAD must have moved').not.toBe(oldSha);
+    sh(dir, ['update-index', '--cacheinfo', `160000,${newSha},vendor`]);
+    expect(sh(dir, ['ls-files', '-s', 'vendor']).trim(), 'fixture: index must hold the new gitlink').toBe(`160000 ${newSha} 0\tvendor`);
+    const before = sh(dir, ['rev-parse', 'HEAD']).trim();
+    sh(dir, ['commit', '-q', '-m', 'chore: bump vendor']);
+    const bump = sh(dir, ['rev-parse', 'HEAD']).trim();
+    expect(bump, 'fixture: bump commit must exist').not.toBe(before);
+    expect(gitlink(bump), 'fixture: bump commit must contain the new gitlink').toBe(`160000 commit ${newSha}\tvendor`);
+    expect(
+      sh(dir, ['diff-tree', '-r', '--name-only', '--no-renames', '--ignore-submodules=none', before, bump]).trim().split('\n'),
+      'fixture: parent diff must contain vendor',
+    ).toEqual(['vendor']);
     const s = signals(dir);
     expect(s.commitsSince.find((c) => c.sha === bump)!.files).toEqual(['vendor']);
   });

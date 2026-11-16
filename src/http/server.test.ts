@@ -436,6 +436,9 @@ describe('architecture guards', () => {
   });
 
   it('declares no write-capable or CORS surface', () => {
-    expect(code).not.toMatch(/Access-Control|0\.0\.0\.0|'POST'|'PUT'|'DELETE'|'PATCH'/);
+    expect(code).not.toMatch(/Access-Control|0\.0\.0\.0|'PUT'|'DELETE'|'PATCH'/);
+    // POST exists only for the two diagnostic routes (Phase 3), and those never take a path or a project root.
+    expect(code.match(/'POST'/g)).toHaveLength(2);
+    expect(code).not.toMatch(/writeFile|appendFile|spawn|exec\(|execFile|child_process/);
   });
 });

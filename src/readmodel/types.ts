@@ -76,7 +76,7 @@ export interface ProjectOverview {
   /** Validated relative instance root (ADR-009), `/`-separated. */
   monolithRoot: string;
   monolithRootSource: 'config' | 'default';
-  /** `schemaVersion` as found on disk (1 is migrated in memory); null unless state is available. */
+  /** `schemaVersion` as found on disk; null unless state is available. Only the current schema is read. */
   stateSchemaVersionOnDisk: number | null;
   stateRevision: number | null;
   /** Counts over `tactical.missions`; null unless state is available or absent (absent ⇒ 0). */
@@ -205,7 +205,7 @@ export interface RoadmapData {
 }
 
 export type NoteCode =
-  | 'STATE_LEGACY_SCHEMA_MIGRATED'
+  | 'STATE_SPLIT_BRAIN'
   | 'MULTIPLE_ACTIVE_MISSIONS'
   | 'CHECKPOINT_ORDER_MISMATCH'
   | 'ACTIVE_MD_NO_CURRENT_STORY';
@@ -215,7 +215,43 @@ export interface ReadNote {
   severity: 'info' | 'warn';
 }
 
+/**
+ * Where the operational state lives and whether independent copies exist
+ * (BETA-020 Phase 2). Additive and data-only: no absolute path crosses this
+ * boundary — the canonical file is named symbolically, and other state files
+ * by their path relative to the project root.
+ */
+export interface StateProvenanceView {
+  /** `shared` = one state for all worktrees (default); `isolated` = per worktree, by explicit choice; `local` = shared is not possible here (see `localReason`). */
+  mode: 'shared' | 'isolated' | 'local';
+  location: 'git-common-dir' | 'project-local';
+  localReason: 'ISOLATED_MODE' | 'NOT_A_GIT_REPOSITORY' | 'PROJECT_NOT_AT_WORKTREE_ROOT' | null;
+  /** Symbolic path, e.g. `<git-common-dir>/monolith/state.json`. */
+  statePath: string;
+  revision: number | null;
+  schemaVersion: number | null;
+  monolithVersion: string;
+  repositoryIdentity: string | null;
+  worktreeCount: number | null;
+  splitBrain: {
+    detected: boolean;
+    canonicalMissingWithLocalData: boolean;
+    /** Worktree-local state files found next to the shared state. Never merged, never chosen. */
+    localStates: {
+      path: string;
+      status: 'ok' | 'incompatible-schema' | 'corrupt' | 'unreadable';
+      schemaVersion: number | null;
+      revision: number | null;
+      missionCount: number | null;
+      checkpointCount: number | null;
+      currentWorktree: boolean;
+    }[];
+  };
+}
+
 export interface ReadDiagnostics {
+  /** Present when the state location could be resolved. */
+  state?: StateProvenanceView;
   /**
    * This reports availability of the fixed sources only. `monolith validate`
    * is never run, so a clean report is NOT a statement that the project is valid.

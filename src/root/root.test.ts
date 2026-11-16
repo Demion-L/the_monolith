@@ -329,18 +329,17 @@ describe('consumers — one policy, no external side effects', () => {
     expect(model.missions.active.map((m) => m.title)).toEqual(['Parity']);
   });
 
-  // Threat: State Keeper v1/v2 regression via the containment guard.
-  it('still reads schemaVersion 1 and 2 state through the guarded paths', async () => {
+  // Threat: State Keeper regression via the containment guard.
+  it('reads the current schema through the guarded paths and refuses an older one', async () => {
     const { project } = sandbox();
     mkdirSync(join(project, '.monolith'));
-    const v2 = createInitialState();
-    writeFileSync(join(project, '.monolith/state.json'), JSON.stringify(v2));
-    expect((await collect(project)).stateKeeper.schemaVersionOnDisk).toBe(2);
-    const v1 = { schemaVersion: 1, revision: 0, strategic: { systems: {} }, tactical: { missions: {} } };
-    writeFileSync(join(project, '.monolith/state.json'), JSON.stringify(v1));
+    writeFileSync(join(project, '.monolith/state.json'), JSON.stringify(createInitialState()));
+    expect((await collect(project)).stateKeeper.schemaVersionOnDisk).toBe(3);
+    const old = { schemaVersion: 2, revision: 0, strategic: { systems: {} }, tactical: { missions: {}, checkpoints: {} } };
+    writeFileSync(join(project, '.monolith/state.json'), JSON.stringify(old));
     const m = await collect(project);
-    expect(m.stateKeeper.status).toBe('ok');
-    expect(m.stateKeeper.schemaVersionOnDisk).toBe(1);
+    expect(m.stateKeeper.status).toBe('unreadable');
+    expect(m.stateKeeper.schemaVersionOnDisk).toBe(2);
   });
 
   // Threat: validate keeps using join() on an unvalidated root.

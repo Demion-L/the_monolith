@@ -40,7 +40,7 @@ function checkpoint(missionId: string, n: number, createdAt = '2026-01-02T00:00:
 }
 function writeState(missions: M[], checkpoints: ReturnType<typeof checkpoint>[] = [], extra: object = {}): void {
   write('.monolith/state.json', JSON.stringify({
-    schemaVersion: 2, revision: 7, strategic: { systems: {} },
+    schemaVersion: 3, revision: 7, strategic: { systems: {} },
     tactical: {
       missions: Object.fromEntries(missions.map((m) => [m.id, mission(m)])),
       checkpoints: Object.fromEntries(checkpoints.map((c) => [c.id, c])),
@@ -63,7 +63,7 @@ describe('readDashboardModel — functional', () => {
     const m = readDashboardModel(dir);
     expect(m.projectOverview.data).toEqual({
       name: 'Demo', monolithRoot: '.monolith', monolithRootSource: 'default',
-      stateSchemaVersionOnDisk: 2, stateRevision: 7, activeMissionCount: 1, finishedMissionCount: 1,
+      stateSchemaVersionOnDisk: 3, stateRevision: 7, activeMissionCount: 1, finishedMissionCount: 1,
       currentStory: { excerpt: 'Story text here.', lineRange: '5-5' },
       storyClaim: { kind: 'unknown' },
     });
@@ -163,19 +163,19 @@ describe('readDashboardModel — functional', () => {
     expect(m.projectOverview.data!.activeMissionCount).toBe(1);
   });
 
-  it('legacy schemaVersion 1 is read via the in-memory migration and noted', () => {
+  it('an older schemaVersion is reported as corrupt/SCHEMA_INVALID, not migrated', () => {
     write('.monolith/state.json', JSON.stringify({
-      schemaVersion: 1, revision: 3, strategic: { systems: {} }, tactical: { missions: { 'MIS-0001': mission({ id: 'MIS-0001' }) } },
+      schemaVersion: 2, revision: 3, strategic: { systems: {} }, tactical: { missions: { 'MIS-0001': mission({ id: 'MIS-0001' }) }, checkpoints: {} },
     }));
     const m = readDashboardModel(dir);
-    expect(m.projectOverview.data).toMatchObject({ stateSchemaVersionOnDisk: 1, stateRevision: 3, activeMissionCount: 1 });
-    expect(m.diagnostics.notes).toContainEqual({ code: 'STATE_LEGACY_SCHEMA_MIGRATED', severity: 'info' });
+    expect(src(m, 'state')).toMatchObject({ status: 'corrupt', code: 'SCHEMA_INVALID' });
+    expect(m.projectOverview.data).toMatchObject({ stateSchemaVersionOnDisk: null, activeMissionCount: null });
   });
 
   it('honours a configured monolithRoot', () => {
     write('monolith.config.json', JSON.stringify({ monolithRoot: 'custom/inst' }));
     write('custom/inst/state.json', JSON.stringify({
-      schemaVersion: 2, revision: 1, strategic: { systems: {} }, tactical: { missions: { 'MIS-0001': mission({ id: 'MIS-0001' }) }, checkpoints: {} },
+      schemaVersion: 3, revision: 1, strategic: { systems: {} }, tactical: { missions: { 'MIS-0001': mission({ id: 'MIS-0001' }) }, checkpoints: {} },
     }));
     const m = readDashboardModel(dir);
     expect(m.projectOverview.data).toMatchObject({ monolithRoot: 'custom/inst', monolithRootSource: 'config', activeMissionCount: 1 });
@@ -326,7 +326,7 @@ describe('readDashboardModel — security regression (G1)', () => {
 
   it('a symlink that stays inside the project is forbidden too (ADR-014: no symlink anywhere)', () => {
     write('real/state.json', JSON.stringify({
-      schemaVersion: 2, revision: 9, strategic: { systems: {} }, tactical: { missions: {}, checkpoints: {} },
+      schemaVersion: 3, revision: 9, strategic: { systems: {} }, tactical: { missions: {}, checkpoints: {} },
     }));
     mkdirSync(join(dir, '.monolith'), { recursive: true });
     symlinkSync(join(dir, 'real/state.json'), join(dir, '.monolith/state.json'));

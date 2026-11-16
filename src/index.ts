@@ -56,7 +56,7 @@ export type {
 export { buildGraph, buildObjectIndex, resolveRef, makeRef, parseRef, isValidIdentifier } from './graph/index.js';
 
 // Coordinatorium — deterministic project state + mission lifecycle (Tactical v0.1, ADR-008)
-// EXPERIMENTAL in 0.1.0-alpha: the state schema (schemaVersion 2) and these exports may change.
+// EXPERIMENTAL in 0.1.0-alpha: the state schema (schemaVersion 3) and these exports may change.
 export type {
   CoordinatoriumState,
   Mission,

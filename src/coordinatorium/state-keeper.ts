@@ -30,7 +30,7 @@ import {
 } from '../root/index.js';
 import {
   STATE_SCHEMA_VERSION,
-  LEGACY_SCHEMA_VERSION_V1,
+  STORY_ID_RE,
   createInitialState,
   type CoordinatoriumState,
   type Mission,
@@ -170,7 +170,7 @@ function validateMission(id: string, raw: unknown): Mission {
   if (!isPlainObject(raw)) {
     throw new StateSchemaError(`Mission "${id}" is not an object`);
   }
-  const { title, system, status, startedAt, updatedAt, summary } = raw;
+  const { title, system, status, startedAt, updatedAt, summary, storyId } = raw;
   if (raw.id !== id) {
     throw new StateSchemaError(`Mission "${id}" has mismatched id field "${String(raw.id)}"`);
   }
@@ -192,7 +192,12 @@ function validateMission(id: string, raw: unknown): Mission {
   if (summary !== null && typeof summary !== 'string') {
     throw new StateSchemaError(`Mission "${id}" has an invalid summary`);
   }
-  return { id, title, system, status: status as MissionStatus, startedAt, updatedAt, summary };
+  if (storyId !== undefined && (typeof storyId !== 'string' || !STORY_ID_RE.test(storyId))) {
+    throw new StateSchemaError(`Mission "${id}" has an invalid storyId`);
+  }
+  const mission: Mission = { id, title, system, status: status as MissionStatus, startedAt, updatedAt, summary };
+  if (storyId !== undefined) mission.storyId = storyId;
+  return mission;
 }
 
 function validateCheckpoint(id: string, raw: unknown): Checkpoint {
@@ -231,37 +236,20 @@ function validateCheckpoint(id: string, raw: unknown): Checkpoint {
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
- * match a supported schema version — this function never "fixes" or
- * partially accepts malformed state.
- *
- * Supports exactly two on-disk shapes:
- * - `schemaVersion: 2` (current) — `tactical.checkpoints` is required.
- * - `schemaVersion: 1` (legacy, pre-COORDINATORIUM-002) — migrated
- *   in-memory to v2 on read (see `migrateV1ToV2`). Anything else
- *   (including a *newer* version this binary doesn't know about) is
- *   rejected outright — this is the deliberate fix for the compatibility
- *   gap an independent review found in the first COORDINATORIUM-002 cut:
- *   that cut kept `schemaVersion` at 1 while adding `tactical.checkpoints`,
- *   so an *older* binary (hardcoded to `schemaVersion === 1`, with no
- *   notion of checkpoints) could read a checkpoint-bearing v1-tagged file,
- *   reconstruct state from only the fields it knew about (`tactical: {
- *   missions }`, dropping checkpoints entirely — this function has never
- *   been a passthrough for unknown fields), and silently overwrite the
- *   file on its next mutateState call, destroying checkpoint history with
- *   no error raised. Bumping to 2 converts that silent data loss into a
- *   loud, immediate `StateSchemaError` for any reader that doesn't
- *   understand v2 — the version check below runs before anything is ever
- *   read into a mutable draft, so mutateState never reaches its write step
- *   (same proven pattern as the existing corrupted-JSON guard).
+ * match the current schema — this function never "fixes", migrates or
+ * partially accepts anything. An older (or newer) `schemaVersion` is rejected
+ * outright, so a read-modify-write can never reach its write step and replace
+ * a file this binary does not understand (NO LEGACY: BETA-020).
  */
 export function validateState(raw: unknown): CoordinatoriumState {
   if (!isPlainObject(raw)) {
     throw new StateSchemaError('State root is not an object');
   }
-  if (raw.schemaVersion !== STATE_SCHEMA_VERSION && raw.schemaVersion !== LEGACY_SCHEMA_VERSION_V1) {
+  if (raw.schemaVersion !== STATE_SCHEMA_VERSION) {
     throw new StateSchemaError(
-      `Unsupported schemaVersion "${String(raw.schemaVersion)}" ` +
-        `(expected ${STATE_SCHEMA_VERSION}, or legacy ${LEGACY_SCHEMA_VERSION_V1} for migration)`,
+      `Incompatible state schemaVersion "${String(raw.schemaVersion)}" (this MONOLITH supports only ${STATE_SCHEMA_VERSION}); ` +
+        'the file was not read as state and was not modified. A schemaVersion 2 file can be brought across explicitly with ' +
+        '`monolith state adopt <file> --upgrade-v2` (preview first).',
     );
   }
   if (typeof raw.revision !== 'number' || !Number.isInteger(raw.revision) || raw.revision < 0) {
@@ -280,41 +268,14 @@ export function validateState(raw: unknown): CoordinatoriumState {
   }
 
   const rawCheckpoints = raw.tactical.checkpoints;
+  if (!isPlainObject(rawCheckpoints)) {
+    throw new StateSchemaError('Invalid tactical.checkpoints');
+  }
   const checkpoints: Record<string, Checkpoint> = {};
-  if (raw.schemaVersion === LEGACY_SCHEMA_VERSION_V1) {
-    // v1→v2 migration path: a genuine pre-COORDINATORIUM-002 file has no
-    // `checkpoints` key at all — default to {}. Tolerate (and validate) one
-    // being present anyway, defensively, in case a file was ever written by
-    // the since-corrected transitional code that kept schemaVersion at 1
-    // while already writing checkpoints — nothing is lost either way.
-    if (rawCheckpoints !== undefined && !isPlainObject(rawCheckpoints)) {
-      throw new StateSchemaError('Invalid tactical.checkpoints');
-    }
-    if (rawCheckpoints !== undefined) {
-      for (const [id, c] of Object.entries(rawCheckpoints)) {
-        checkpoints[id] = validateCheckpoint(id, c);
-      }
-    }
-  } else {
-    // schemaVersion === STATE_SCHEMA_VERSION (2): every v2 writer always
-    // serializes tactical.checkpoints (even as {}), so its absence here is
-    // itself a sign of a malformed/hand-edited file, not a legacy case —
-    // required, not defaulted.
-    if (!isPlainObject(rawCheckpoints)) {
-      throw new StateSchemaError('Invalid tactical.checkpoints');
-    }
-    for (const [id, c] of Object.entries(rawCheckpoints)) {
-      checkpoints[id] = validateCheckpoint(id, c);
-    }
+  for (const [id, c] of Object.entries(rawCheckpoints)) {
+    checkpoints[id] = validateCheckpoint(id, c);
   }
 
-  // Migration is applied purely in-memory here — revision and every
-  // mission/checkpoint field are carried over exactly, only schemaVersion
-  // is relabeled. No write happens during a read (same "reads are never a
-  // side effect" rule as the missing-file case in readState below); the
-  // migrated v2 shape is only ever persisted to disk the next time
-  // mutateState's existing atomic read-modify-write cycle runs — no
-  // separate migration-write path, no new on-disk mechanism.
   return {
     schemaVersion: STATE_SCHEMA_VERSION,
     revision: raw.revision,
@@ -477,4 +438,63 @@ export async function mutateState<T>(
   // deadlock against) other writers.
   reportWarnings(warnings, onWarning);
   return { state: draft, result, warnings };
+}
+
+export interface ReplaceDecision {
+  /** The complete state to publish. The caller has validated it; its `revision` is used as given. */
+  state: CoordinatoriumState;
+  /** Keep a byte-exact copy of the current file under this name (same directory) before replacing it. */
+  backupName: string | null;
+}
+
+/**
+ * Replace the whole state file under the same exclusive lock and the same safe
+ * write path as `mutateState` — for `monolith state adopt` only. Unlike
+ * `mutateState` it does NOT require the current file to be a valid current-schema
+ * state (an incompatible or corrupt destination is exactly what an adoption may
+ * have to replace), so it hands the raw bytes to `decide` instead.
+ *
+ * Order: read raw -> `decide` (may throw: nothing written) -> backup (if asked;
+ * a failed backup aborts before the destination is touched) -> atomic replace ->
+ * read back and compare. A mismatch after publication throws, and the backup
+ * still exists.
+ */
+export async function replaceStateUnderLock(
+  target: StateWriteTarget,
+  decide: (current: { raw: string | null }) => ReplaceDecision,
+  lockOptions?: LockOptions,
+): Promise<{ state: CoordinatoriumState; backupPath: string | null; warnings: WriteWarning[] }> {
+  const { boundary, stateDir, onWarning } = resolveWriteTarget(target, 'replaceStateUnderLock');
+  const warnings: WriteWarning[] = [];
+  const parent = openParent(boundary, stateDir, { create: true });
+  const release = await acquireLock(lockFilePath(stateDir), lockOptions, {}, parent);
+  let decision: ReplaceDecision;
+  let backupPath: string | null = null;
+  try {
+    const filePath = stateFilePath(stateDir);
+    const read = readBoundedFileStable(filePath, `"${filePath}"`, { boundary: resolveReadTarget(target, 'replaceStateUnderLock').boundary, maxBytes: MAX_STATE_BYTES, allowEmpty: true }, true);
+    let raw: string | null = null;
+    if (!read.ok) {
+      if (read.code !== 'FILE_MISSING') throw new StateFileError(read.code, read.detail);
+    } else {
+      raw = 'content' in read ? read.content : '';
+    }
+    decision = decide({ raw });
+    if (decision.backupName !== null && raw !== null) {
+      const backupMode = 0o600;
+      replaceFile(parent, decision.backupName, raw, { mode: backupMode, preserveMode: false, durability: 'full', maxBytes: MAX_STATE_BYTES });
+      backupPath = join(stateDir, decision.backupName);
+    }
+    warnings.push(...atomicWriteState(parent, filePath, decision.state));
+  } finally {
+    release();
+  }
+  reportWarnings(warnings, onWarning);
+  const back = await readState(target);
+  if (JSON.stringify(back) !== JSON.stringify(decision.state)) {
+    throw new StateCorruptedError(
+      `"${stateFilePath(stateDir)}" does not match what was written${backupPath ? `; the previous content is preserved at "${backupPath}"` : ''}.`,
+    );
+  }
+  return { state: back, backupPath, warnings };
 }

@@ -43,7 +43,7 @@ function stateJson(): string {
   const m = { id: 'MIS-0001', title: 'T', system: 'sys', status: 'in_progress', startedAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', summary: null };
   const c = { id: 'MIS-0001-CKPT-0001', missionId: 'MIS-0001', createdAt: '2026-01-02T00:00:00.000Z', summary: 's', remainingSteps: ['r'], context: null };
   return JSON.stringify({
-    schemaVersion: 2, revision: 3, strategic: { systems: {} },
+    schemaVersion: 3, revision: 3, strategic: { systems: {} },
     tactical: { missions: { [m.id]: m }, checkpoints: { [c.id]: c } },
   });
 }

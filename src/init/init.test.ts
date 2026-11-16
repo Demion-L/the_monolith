@@ -41,7 +41,7 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     expect(existsSync(statePath)).toBe(true);
     const state = JSON.parse(readFileSync(statePath, 'utf8'));
     expect(state).toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       revision: 0,
       strategic: { systems: {} },
       tactical: { missions: {}, checkpoints: {} },
@@ -81,7 +81,7 @@ describe('scaffoldInstance — Coordinatorium integration', () => {
     mkdirSync(join(dir, '.monolith'), { recursive: true });
     const statePath = join(dir, '.monolith', 'state.json');
     const recorded = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       revision: 5,
       strategic: { systems: {} },
       tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'keep me', system: 's', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } }, checkpoints: {} },

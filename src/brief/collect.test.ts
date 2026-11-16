@@ -103,7 +103,7 @@ describe('collect — State Keeper classification', () => {
       dir,
       '.monolith/state.json',
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 3,
         strategic: { systems: {} },
         tactical: {
@@ -120,32 +120,32 @@ describe('collect — State Keeper classification', () => {
     expect(model.diagnostics.some((d) => d.code === 'STATE_EMPTY')).toBe(false);
   });
 
-  it('migrates a legacy v1 file in-memory, without ever writing to disk, and notes it', async () => {
+  it('reports an older schema as incompatible: nothing is read from it, nothing is written', async () => {
     const dir = makeTempDir();
     scaffoldMinimalInstance(dir);
     write(
       dir,
       '.monolith/state.json',
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         revision: 1,
         strategic: { systems: {} },
-        tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'T', system: 'S', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } } },
+        tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'T', system: 'S', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } }, checkpoints: {} },
       }),
     );
     const before = readFileSync(join(dir, '.monolith/state.json'), 'utf8');
     const model = await collect(dir);
-    const after = readFileSync(join(dir, '.monolith/state.json'), 'utf8');
-    expect(after).toBe(before); // byte-for-byte unchanged — read-only
-    expect(model.stateKeeper.status).toBe('ok');
-    expect(model.diagnostics.map((d) => d.code)).toContain('STATE_LEGACY_SCHEMA_MIGRATED');
-    expect(model.missions.active.map((m) => m.id)).toEqual(['MIS-0001']);
+    expect(readFileSync(join(dir, '.monolith/state.json'), 'utf8')).toBe(before);
+    expect(model.stateKeeper.status).toBe('unreadable');
+    expect(model.stateKeeper.schemaVersionOnDisk).toBe(2);
+    expect(model.diagnostics.find((d) => d.code === 'STATE_UNREADABLE')?.message).toContain('Incompatible state schemaVersion');
+    expect(model.missions.active).toEqual([]);
   });
 });
 
 describe('collect — missions', () => {
   function missionsState(missions: Record<string, unknown>): string {
-    return JSON.stringify({ schemaVersion: 2, revision: 1, strategic: { systems: {} }, tactical: { missions, checkpoints: {} } });
+    return JSON.stringify({ schemaVersion: 3, revision: 1, strategic: { systems: {} }, tactical: { missions, checkpoints: {} } });
   }
 
   it('flags MULTIPLE_ACTIVE_MISSIONS as informational when more than one mission is in_progress', async () => {
@@ -194,7 +194,7 @@ describe('collect — checkpoints', () => {
       dir,
       '.monolith/state.json',
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         strategic: { systems: {} },
         tactical: {
@@ -219,7 +219,7 @@ describe('collect — checkpoints', () => {
       dir,
       '.monolith/state.json',
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         strategic: { systems: {} },
         tactical: {
@@ -241,7 +241,7 @@ describe('collect — checkpoints', () => {
       dir,
       '.monolith/state.json',
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         strategic: { systems: {} },
         tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'A', system: 'S', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } }, checkpoints: {} },

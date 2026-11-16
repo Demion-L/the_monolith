@@ -7,18 +7,21 @@
  * but nothing in this package writes to it yet.
  */
 
-export const STATE_SCHEMA_VERSION = 2;
-
 /**
- * The only prior schema version `state-keeper.ts` knows how to migrate
- * from. A v1 file has `tactical.missions` but no reliable
- * `tactical.checkpoints` (COORDINATORIUM-002 bumped the version precisely
- * so that a pre-002 binary — hardcoded to `STATE_SCHEMA_VERSION === 1` —
- * refuses to touch a v2 file instead of silently dropping its checkpoints
- * on its next read-modify-write cycle; see ADR-008's 2026-10-21
- * COORDINATORIUM-002 compatibility-fix addendum).
+ * Current on-disk schema (BETA-020 Phase 2). Only this version is supported at
+ * runtime: an older state file is reported as incompatible and never read,
+ * migrated or overwritten implicitly. The one explicit way to bring a schema-2
+ * file across is `monolith state adopt --upgrade-v2` (see adopt.ts).
+ *
+ * v3 over v2: `Mission.storyId` (optional).
  */
-export const LEGACY_SCHEMA_VERSION_V1 = 1;
+export const STATE_SCHEMA_VERSION = 3;
+
+/** The only older schema `monolith state adopt --upgrade-v2` can carry over (an explicit, one-off operation). */
+export const UPGRADABLE_SCHEMA_VERSION_V2 = 2;
+
+/** Same shape as the Story identity accepted by `monolith brief` (freshness.ts). */
+export const STORY_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
@@ -32,6 +35,12 @@ export interface Mission {
   startedAt: string;
   updatedAt: string;
   summary: string | null;
+  /**
+   * Optional link to a Story (v3). Only the identifier's format is checked: the
+   * Story need not exist, and it is never inferred from the title or from the
+   * current Story.
+   */
+  storyId?: string;
 }
 
 /** Reserved for the Strategic Coordinatorium. No mutations in v0.1. */
@@ -56,15 +65,7 @@ export interface Checkpoint {
 
 export interface TacticalState {
   missions: Record<string, Mission>;
-  /**
-   * Sibling top-level map to `missions`, not nested inside `Mission` — see
-   * ADR-008's 2026-10-21 Mission Checkpoints addendum. Required for
-   * `schemaVersion: 2` (the current, in-memory shape returned by
-   * `validateState`/`readState` — every v2 writer always includes it).
-   * A `schemaVersion: 1` file on disk may be missing this key entirely;
-   * `state-keeper.ts`'s v1→v2 migration defaults it to `{}` on read. See
-   * `LEGACY_SCHEMA_VERSION_V1`.
-   */
+  /** Sibling top-level map to `missions` (ADR-008). Required in the current schema. */
   checkpoints: Record<string, Checkpoint>;
 }
 

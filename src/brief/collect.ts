@@ -32,7 +32,8 @@ import {
   selectLatestCheckpoint,
   hasCheckpointOrderMismatch,
 } from './selectors.js';
-import { stateFilePath, validateState, createInitialState, MAX_STATE_BYTES } from '../coordinatorium/index.js';
+import { validateState, createInitialState, MAX_STATE_BYTES } from '../coordinatorium/index.js';
+import { resolveStateLocation, collectStateProvenance, formatSplitBrain, openStateFileBounded, type StateLocation } from '../coordinatorium/state-location.js';
 import type { CoordinatoriumState } from '../coordinatorium/types.js';
 import type {
   BriefModel,
@@ -68,18 +69,48 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
+/**
+ * Where the shared state is and whether independent worktree-local copies exist
+ * (BETA-020 Phase 2). Reported, never repaired. When the shared state does not
+ * exist but local files hold data, the brief says so loudly: an empty mission
+ * list there would look like lost history.
+ */
+function reportSplitBrain(loc: StateLocation, diagnostics: BriefDiagnostic[]): void {
+  if (loc.kind !== 'git-common-dir') return;
+  const provenance = collectStateProvenance(loc);
+  if (!provenance.splitBrain.detected) return;
+  diagnostics.push({
+    code: 'STATE_SPLIT_BRAIN',
+    severity: provenance.splitBrain.canonicalMissingWithLocalData ? 'error' : 'warn',
+    message: formatSplitBrain(provenance)
+      .map((l) => l.trim())
+      .join(' '),
+  });
+}
+
 async function readStateForBrief(
   targetDir: string,
-  monolithRoot: string,
   root: ResolvedMonolithRoot,
   diagnostics: BriefDiagnostic[],
 ): Promise<{ summary: StateKeeperSummary; state: CoordinatoriumState }> {
-  const stateDir = join(targetDir, monolithRoot);
-  const filePath = stateFilePath(stateDir);
-  const provenance = { source: relative(targetDir, filePath) };
+  let loc: StateLocation;
+  try {
+    loc = resolveStateLocation(targetDir);
+  } catch (err) {
+    const provenance = { source: `${root.monolithRoot}/state.json` };
+    diagnostics.push({
+      code: 'STATE_UNREADABLE',
+      severity: 'error',
+      message: `The state location could not be determined, so no state was read: ${err instanceof Error ? err.message : String(err)}`,
+    });
+    return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
+  }
+  const shared = loc.kind === 'git-common-dir';
+  const filePath = loc.statePath;
+  const provenance = { source: shared ? loc.displayPath : relative(targetDir, filePath) };
 
-  // SEC-001A: never read a state.json that resolves outside the project.
-  const escape = checkContainedFile(root, 'state.json');
+  // SEC-001A: never read a project-local state.json that resolves outside the project.
+  const escape = shared ? null : checkContainedFile(root, 'state.json');
   if (escape) {
     diagnostics.push({
       code: 'PATH_OUTSIDE_PROJECT',
@@ -88,16 +119,13 @@ async function readStateForBrief(
     });
     return { summary: { status: 'unreadable', provenance }, state: createInitialState() };
   }
+  reportSplitBrain(loc, diagnostics);
 
   // Rule (section 4, #1): existence is established by the same bounded,
   // non-blocking open that reads the file (SEC-001B.1) — a FIFO or an
-  // over-limit file is rejected before any content is read.
-  const read = readBoundedFileStable(
-    filePath,
-    provenance.source,
-    { boundary: targetDir, maxBytes: MAX_STATE_BYTES, allowEmpty: true },
-    true,
-  );
+  // over-limit file is rejected before any content is read. The shared
+  // directory is its own boundary (it is outside the project root).
+  const read = openStateFileBounded(loc, provenance.source, targetDir);
   if (!read.ok && read.code === 'FILE_MISSING') {
     diagnostics.push({
       code: 'STATE_NOT_INITIALIZED',
@@ -155,8 +183,8 @@ async function readStateForBrief(
 
   let state: CoordinatoriumState;
   try {
-    // Supports schemaVersion 2 and an in-memory v1→v2 migration of legacy
-    // files — nothing is ever written back (section 4, #6/#7).
+    // Only the current schema is read; an older one is reported as incompatible
+    // and never migrated (NO LEGACY). Nothing is ever written back.
     state = validateState(parsedJson);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -168,20 +196,11 @@ async function readStateForBrief(
     return { summary: { status: 'unreadable', schemaVersionOnDisk: onDiskSchemaVersion, provenance }, state: createInitialState() };
   }
 
-  if (onDiskSchemaVersion === 1) {
-    diagnostics.push({
-      code: 'STATE_LEGACY_SCHEMA_MIGRATED',
-      severity: 'info',
-      message: `${provenance.source} is schemaVersion 1 — read via the existing in-memory v1→v2 migration; nothing was written to disk.`,
-    });
-  }
-
   return { summary: { status: 'ok', schemaVersionOnDisk: onDiskSchemaVersion, provenance }, state };
 }
 
 function collectMissions(
-  targetDir: string,
-  monolithRoot: string,
+  stateSource: string,
   state: CoordinatoriumState,
   diagnostics: BriefDiagnostic[],
 ): MissionsSummary {
@@ -196,19 +215,16 @@ function collectMissions(
     });
   }
 
-  const filePath = stateFilePath(join(targetDir, monolithRoot));
-  return { active, recentFinished, provenance: { source: `${relative(targetDir, filePath)}#tactical.missions` } };
+  return { active, recentFinished, provenance: { source: `${stateSource}#tactical.missions` } };
 }
 
 function collectCheckpoints(
-  targetDir: string,
-  monolithRoot: string,
+  stateSource: string,
   state: CoordinatoriumState,
   active: MissionsSummary['active'],
   diagnostics: BriefDiagnostic[],
 ): CheckpointSummary[] {
-  const filePath = stateFilePath(join(targetDir, monolithRoot));
-  const provenance = { source: `${relative(targetDir, filePath)}#tactical.checkpoints` };
+  const provenance = { source: `${stateSource}#tactical.checkpoints` };
 
   return active.map((m) => {
     const latest = selectLatestCheckpoint(state, m.id);
@@ -425,9 +441,9 @@ export async function collect(targetDir: string): Promise<BriefModel> {
     provenance: { source: 'monolith.config.json#project.name' },
   };
 
-  const { summary: stateKeeper, state } = await readStateForBrief(targetDir, config.monolithRoot, root, diagnostics);
-  const missions = collectMissions(targetDir, config.monolithRoot, state, diagnostics);
-  const checkpoints = collectCheckpoints(targetDir, config.monolithRoot, state, missions.active, diagnostics);
+  const { summary: stateKeeper, state } = await readStateForBrief(targetDir, root, diagnostics);
+  const missions = collectMissions(stateKeeper.provenance.source, state, diagnostics);
+  const checkpoints = collectCheckpoints(stateKeeper.provenance.source, state, missions.active, diagnostics);
   const story = collectStory(targetDir, config.monolithRoot, root, diagnostics);
   const { result: freshness, evidence: freshnessEvidence } = collectFreshness(targetDir, config.monolithRoot, root, story);
 

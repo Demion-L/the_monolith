@@ -144,23 +144,23 @@ describe('monolith brief — end to end (init then brief)', () => {
     expect(stdout.length).toBeGreaterThan(0);
   });
 
-  it('reads a legacy schemaVersion 1 state.json without writing anything back', async () => {
+  it('reports an old schemaVersion as incompatible, reads nothing from it and writes nothing back', async () => {
     const dir = makeTempDir();
     await scaffoldInstance(dir, CONFIG);
     const statePath = join(dir, '.monolith', 'state.json');
-    const legacy = {
-      schemaVersion: 1,
+    const old = {
+      schemaVersion: 2,
       revision: 2,
       strategic: { systems: {} },
-      tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'Legacy', system: 's', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } } },
+      tactical: { missions: { 'MIS-0001': { id: 'MIS-0001', title: 'Old', system: 's', status: 'in_progress', startedAt: 'a', updatedAt: 'a', summary: null } }, checkpoints: {} },
     };
-    writeFileSync(statePath, JSON.stringify(legacy), 'utf8');
-    const before = JSON.stringify(legacy);
+    writeFileSync(statePath, JSON.stringify(old), 'utf8');
+    const before = JSON.stringify(old);
 
-    const { stdout, exitCode } = await runBriefCaptured([], dir);
+    const { stdout } = await runBriefCaptured([], dir);
 
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain('MIS-0001');
+    expect(stdout).toContain('Completeness: INCOMPLETE');
+    expect(stdout).toContain('Incompatible state schemaVersion');
     const fs = await import('fs');
     expect(fs.readFileSync(statePath, 'utf8')).toBe(before);
   });
@@ -171,7 +171,7 @@ describe('monolith brief — end to end (init then brief)', () => {
     writeFileSync(
       join(dir, '.monolith', 'state.json'),
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         revision: 1,
         strategic: { systems: {} },
         tactical: {

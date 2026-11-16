@@ -21,9 +21,10 @@ const sb = computed(() => props.provenance?.splitBrain);
 </script>
 
 <template>
-  <article class="dcard" data-testid="operational-state" aria-labelledby="opstate-h">
+  <article class="dcard dcard-secondary" data-testid="operational-state" aria-labelledby="opstate-h">
     <header class="dcard-head">
       <h3 id="opstate-h">Operational state</h3>
+      <StatusPill v-if="sb?.detected" tone="warn" label="SPLIT-BRAIN" />
     </header>
     <p class="muted dcard-q">Where does MONOLITH keep its working state, and is there more than one copy?</p>
 
@@ -31,33 +32,6 @@ const sb = computed(() => props.provenance?.splitBrain);
       The location of the operational state is not reported by this data source.
     </p>
     <template v-else>
-      <dl class="facts compact">
-        <dt>Mode</dt>
-        <dd data-testid="opstate-mode">{{ provenance.mode.toUpperCase() }}
-          <span v-if="provenance.localReason !== null" class="muted">— {{ LOCAL_REASON[provenance.localReason] ?? provenance.localReason }}</span>
-        </dd>
-        <dt>Revision</dt>
-        <dd data-testid="opstate-revision">{{ provenance.revision ?? 'UNKNOWN' }}</dd>
-        <dt>Schema</dt>
-        <dd data-testid="opstate-schema">{{ provenance.schemaVersion === null ? 'UNKNOWN' : `v${provenance.schemaVersion}` }}</dd>
-        <dt>Worktrees</dt>
-        <dd data-testid="opstate-worktrees">{{ provenance.worktreeCount ?? 'UNKNOWN' }}</dd>
-        <dt>MONOLITH</dt>
-        <dd>{{ provenance.monolithVersion }}</dd>
-        <dt>Repository</dt>
-        <dd data-testid="opstate-repo">{{ provenance.repositoryIdentity ?? 'Not a git repository' }}</dd>
-        <dt>Canonical state</dt>
-        <dd><code data-testid="opstate-path">{{ provenance.statePath }}</code></dd>
-        <dt>Consistency</dt>
-        <dd data-testid="opstate-consistency">
-          <template v-if="sb?.detected"><StatusPill tone="warn" label="SPLIT-BRAIN" /></template>
-          <template v-else>
-            <StatusPill tone="neutral" label="NOT VERIFIED" />
-            <span class="muted"> No independent state copies were found. The contents of the state are not cross-checked.</span>
-          </template>
-        </dd>
-      </dl>
-
       <div v-if="sb?.detected" class="splitbrain" role="alert" data-testid="split-brain">
         <strong>Independent states were found ({{ sb.localStates.length }}).</strong>
         <p>
@@ -74,6 +48,39 @@ const sb = computed(() => props.provenance?.splitBrain);
           </li>
         </ul>
       </div>
+
+      <dl class="facts compact">
+        <dt>Mode</dt>
+        <dd data-testid="opstate-mode">{{ provenance.mode.toUpperCase() }}
+          <span v-if="provenance.localReason !== null" class="muted">— {{ LOCAL_REASON[provenance.localReason] ?? provenance.localReason }}</span>
+        </dd>
+        <dt>Revision</dt>
+        <dd data-testid="opstate-revision">{{ provenance.revision ?? 'UNKNOWN' }}</dd>
+        <dt>Schema</dt>
+        <dd data-testid="opstate-schema">{{ provenance.schemaVersion === null ? 'UNKNOWN' : `v${provenance.schemaVersion}` }}</dd>
+        <dt>Worktrees</dt>
+        <dd data-testid="opstate-worktrees">{{ provenance.worktreeCount ?? 'UNKNOWN' }}</dd>
+        <dt>Consistency</dt>
+        <dd data-testid="opstate-consistency">
+          <template v-if="sb?.detected"><StatusPill tone="warn" label="SPLIT-BRAIN" /></template>
+          <template v-else>
+            <StatusPill tone="neutral" label="NOT VERIFIED" />
+            <span class="muted"> No independent state copies were found. The contents of the state are not cross-checked.</span>
+          </template>
+        </dd>
+      </dl>
+
+      <details class="more">
+        <summary>Show details</summary>
+        <dl class="facts compact">
+          <dt>MONOLITH</dt>
+          <dd>{{ provenance.monolithVersion }}</dd>
+          <dt>Repository</dt>
+          <dd data-testid="opstate-repo">{{ provenance.repositoryIdentity ?? 'Not a git repository' }}</dd>
+          <dt>Canonical state</dt>
+          <dd><code data-testid="opstate-path">{{ provenance.statePath }}</code></dd>
+        </dl>
+      </details>
     </template>
   </article>
 </template>

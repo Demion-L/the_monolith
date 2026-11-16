@@ -90,6 +90,10 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
     // Present only when Core supplied it; an older DTO yields `undefined` (legacy fallback), never invented phases.
     roadmap: roadmap?.structured,
     diagnostics,
+    sources: {
+      total: model.diagnostics.sources.length,
+      available: model.diagnostics.sources.filter((s) => s.status === 'available').length,
+    },
     provenance: model.diagnostics.state,
   };
 }

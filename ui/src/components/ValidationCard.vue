@@ -32,7 +32,7 @@ const lastRun = computed(() => {
 </script>
 
 <template>
-  <article class="dcard" data-testid="validation-card" aria-labelledby="validation-h" :aria-busy="running">
+  <article class="dcard dcard-primary" data-testid="validation-card" aria-labelledby="validation-h" :aria-busy="running">
     <header class="dcard-head">
       <h3 id="validation-h">Project validation</h3>
       <StatusPill :tone="view.tone" :label="view.label" />

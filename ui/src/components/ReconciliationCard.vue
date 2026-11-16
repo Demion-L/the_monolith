@@ -35,7 +35,7 @@ const lastRun = computed(() => {
 </script>
 
 <template>
-  <article class="dcard" data-testid="reconciliation-card" aria-labelledby="reconciliation-h" :aria-busy="running">
+  <article class="dcard dcard-primary" data-testid="reconciliation-card" aria-labelledby="reconciliation-h" :aria-busy="running">
     <header class="dcard-head">
       <h3 id="reconciliation-h">State reconciliation</h3>
       <StatusPill :tone="view.tone" :label="view.label" />
@@ -106,7 +106,7 @@ const lastRun = computed(() => {
         </ul>
       </div>
 
-      <div v-if="done.result.actions.length > 0" class="rblock" data-testid="reconciliation-actions">
+      <div v-if="done.result.actions.length > 0" class="rblock rblock-actions" data-testid="reconciliation-actions">
         <h4>Suggested actions <span class="muted">(for a person to decide; none is applied)</span></h4>
         <ol class="plain"><li v-for="(a, i) in done.result.actions" :key="i">{{ a }}</li></ol>
       </div>

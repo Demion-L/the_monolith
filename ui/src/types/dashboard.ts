@@ -83,6 +83,8 @@ export interface DashboardData {
   /** Core's structured roadmap. `undefined` = the source predates it (legacy DTO) or is a demo: fall back to the raw text. */
   roadmap?: StructuredRoadmapView;
   diagnostics: Diagnostic[];
+  /** Availability of the fixed source files. `undefined` = not reported (demo). Not a validation result. */
+  sources?: { total: number; available: number };
   /** Where the operational state lives (Phase 2). `undefined` = not provided (demo, older server, or location unresolved). */
   provenance?: StateProvenanceView;
 }

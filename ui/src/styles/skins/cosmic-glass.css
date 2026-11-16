@@ -108,6 +108,10 @@
   line-height: 1.55;
 }
 :root[data-skin="cosmic-glass"] .phase-active { border-color: var(--accent); }
+:root[data-skin="cosmic-glass"] .phase-selected { box-shadow: var(--glass-edge), 0 0 0 2px var(--accent); }
+:root[data-skin="cosmic-glass"] .nav-search input,
+:root[data-skin="cosmic-glass"] .nav-sort select { background: var(--glass-dense); border-radius: 8px; }
+:root[data-skin="cosmic-glass"] .diag-badge { background: rgba(240, 192, 64, 0.08); }
 :root[data-skin="cosmic-glass"] .status-badge { background: rgba(255, 255, 255, 0.06); }
 :root[data-skin="cosmic-glass"] .status-badge.status-unrecognized { background: rgba(240, 192, 64, 0.1); }
 :root[data-skin="cosmic-glass"] .phase-meta .tag { background: rgba(88, 166, 255, 0.12); }

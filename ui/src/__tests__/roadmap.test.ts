@@ -107,29 +107,35 @@ describe('RoadmapPanel', () => {
     ['true', { goalTruncated: true }, true],
     ['false', { goalTruncated: false }, false],
     ['unknown (field absent)', {}, false],
-  ])('Truncated marker, goalTruncated %s', (_n, extra, shown) => {
+  ])('Truncated marker, goalTruncated %s', async (_n, extra, shown) => {
     const base = structured();
     const w = mountS({ ...base, phases: [{ ...base.phases[0], ...extra }, ...base.phases.slice(1)] });
+    await w.get('[data-testid="roadmap-sort"]').setValue('oldest');
     const first = w.findAll('[data-testid="roadmap-phase"]')[0];
     expect(first.find('[data-testid="goal-truncated"]').exists()).toBe(shown);
     if (shown) expect(first.get('[data-testid="goal-truncated"]').text()).toBe('Truncated');
     expect(w.text()).toContain('RAW <b>md</b>');
   });
 
-  it('lists phases in order with REPORTED status, goal and active marker', () => {
+  it('lists phases in Read Model order (Oldest First) with separate status / provenance, goal and active marker', async () => {
     const w = mountS(structured());
+    await w.get('[data-testid="roadmap-sort"]').setValue('oldest');
     const phases = w.findAll('[data-testid="roadmap-phase"]');
     expect(phases.map((p) => p.get('h3').text())).toEqual(['Phase A · First <b>x</b>', 'Phase B · Second', 'Phase C']);
-    expect(phases[0].get('[data-testid="phase-status"]').text()).toBe('IN PROGRESS · REPORTED');
+    expect(phases[0].get('[data-testid="phase-status"]').text()).toBe('IN PROGRESS');
+    expect(phases[0].get('[data-testid="phase-provenance"]').text()).toBe('REPORTED');
+    expect(phases[0].find('[data-testid="phase-unrecognized"]').exists()).toBe(false);
     expect(phases[0].find('[data-testid="phase-active"]').exists()).toBe(true);
     expect(phases[1].find('[data-testid="phase-active"]').exists()).toBe(false);
     expect(phases[0].get('[data-testid="phase-goal"]').text()).toContain('Goal <i>g</i>');
   });
 
-  it('marks unknown and missing statuses explicitly', () => {
+  it('marks unknown and missing statuses explicitly', async () => {
     const w = mountS(structured());
+    await w.get('[data-testid="roadmap-sort"]').setValue('oldest');
     const st = w.findAll('[data-testid="phase-status"]').map((e) => e.text());
-    expect(st[1]).toBe('Whatever · REPORTED · UNRECOGNIZED');
+    expect(st[1]).toBe('Whatever');
+    expect(w.findAll('[data-testid="roadmap-phase"]')[1].get('[data-testid="phase-unrecognized"]').text()).toBe('UNRECOGNIZED');
     expect(st[2]).toBe('STATUS NOT STATED');
   });
 
@@ -146,15 +152,15 @@ describe('RoadmapPanel', () => {
     const w = mountS(structured());
     const d = w.get('[data-testid="phase-details"]');
     expect(d.element.tagName).toBe('DETAILS');
-    expect(d.get('summary').text()).toBe('Details');
+    expect(d.get('summary').text()).toBe('Show Details');
     expect((d.element as HTMLDetailsElement).open).toBe(false);
     (d.element as HTMLDetailsElement).open = true;
     expect((d.element as HTMLDetailsElement).open).toBe(true);
     const raw = w.get('[data-testid="roadmap-raw"]');
     expect(raw.element.tagName).toBe('DETAILS');
     expect(raw.get('summary').text()).toBe('View original Markdown');
-    // Phases without details have no empty expander.
-    expect(w.findAll('[data-testid="phase-details"]')).toHaveLength(1);
+    // Phases with neither details nor a diagnostic have no empty expander (C has none).
+    expect(w.findAll('[data-testid="phase-details"]')).toHaveLength(2);
   });
 
   it.each([
@@ -189,9 +195,11 @@ describe('RoadmapPanel', () => {
     expect(w.findAll('[data-testid="roadmap-phase"]')).toHaveLength(3);
   });
 
-  it('diagnostics use fixed labels attached to the phase', () => {
+  it('per-phase diagnostics use fixed labels inside the phase and a grouped count in the list', () => {
     const w = mountS(structured());
-    expect(w.get('[data-testid="roadmap-diagnostics"]').text()).toContain('Phase B · Second: The phase status is not a recognised value.');
+    const b = w.findAll('[data-testid="roadmap-phase"]').find((p) => p.text().includes('Phase B'))!;
+    expect(b.get('[data-testid="phase-diagnostics"]').text()).toContain('The phase status is not a recognised value.');
+    expect(w.get('[data-testid="roadmap-diagnostic-group"]').text()).toContain('(1 phase;');
   });
 
   it('source unavailable: NOT AVAILABLE and no structure even if supplied', () => {

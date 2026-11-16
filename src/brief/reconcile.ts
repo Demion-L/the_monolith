@@ -23,6 +23,8 @@
 
 import {
   extractWorkItemIds,
+  findContradictions,
+  type ContradictionSource,
   mentionsId,
   type FreshnessEvidence,
   type FreshnessResult,
@@ -51,6 +53,8 @@ export interface ReconciliationFinding {
   summary: string;
   /** Short, checkable pointers: document names or `<sha7> <subject>`. */
   evidence: string[];
+  /** STATE_CONTRADICTION only: the conflicting claims, per document. Additive; the text report does not use it. */
+  sources?: ContradictionSource[];
 }
 
 export interface UntrackedWorkItem {
@@ -114,10 +118,14 @@ export function reconcile(ev: FreshnessEvidence, result: FreshnessResult): Recon
   };
 
   // 1. Contradictions between the state documents — need no git.
+  // `findContradictions` is the one definition of a contradiction; `result.reasons` carries them in the same order.
+  const contradictionSources = findContradictions(ev);
+  let contradictionIndex = 0;
   for (const r of result.reasons) {
     if (r.code !== 'STATE_CONTRADICTION') continue;
     const docs = r.documents ?? [];
-    findings.push({ kind: 'confirmed', code: 'STATE_CONTRADICTION', summary: r.message, evidence: docs });
+    const sources = contradictionSources[contradictionIndex++]?.sources;
+    findings.push({ kind: 'confirmed', code: 'STATE_CONTRADICTION', summary: r.message, evidence: docs, ...(sources ? { sources } : {}) });
     for (const d of docs) review(d, 'contradicts another state document');
     actions.push(`Decide which of ${docs.length > 0 ? docs.join(' and ') : 'the state documents'} is correct (see the confirmed mismatch above).`);
   }

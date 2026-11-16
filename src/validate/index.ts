@@ -189,6 +189,78 @@ function formatRow(result: CheckResult): string {
   return `${label}${status}  ${wrapLine(result.error, wrapWidth(), indent, indent).slice(indent.length)}`;
 }
 
+/** One static check, as the CLI and the Mission Control API both report it. */
+export interface ValidationCheck {
+  /** Stable machine id; `label` is the CLI display name. */
+  id: 'configuration' | 'instance' | 'templates';
+  label: string;
+  passed: boolean;
+  /** Reason for a FAIL; may name project-relative files. */
+  error?: string;
+  /** Printed after a PASS only. */
+  note?: string;
+}
+
+export interface ValidationReport {
+  checks: ValidationCheck[];
+  passed: boolean;
+  /** Leftover write files (SEC-001B.2). Never affects `passed`. */
+  warning: string | null;
+}
+
+const CHECK_IDS: Record<string, ValidationCheck['id']> = {
+  Configuration: 'configuration',
+  Instance: 'instance',
+  Templates: 'templates',
+};
+
+/**
+ * The validation itself, without printing or exiting: the single definition of
+ * "the project passes `monolith validate`" for the CLI and for Mission Control.
+ * Read-only and static (ADR-011): it never executes project code. `targetDir`
+ * must be an explicit absolute path; the cwd is never assumed.
+ */
+export function validateProject(targetDir: string): ValidationReport {
+  if (typeof targetDir !== 'string' || targetDir.length === 0 || !isAbsolute(targetDir)) {
+    return {
+      checks: [{ id: 'configuration', label: 'Configuration', passed: false, error: 'targetDir must be an explicit absolute path (the cwd is never assumed)' }],
+      passed: false,
+      warning: null,
+    };
+  }
+  const root = resolve(targetDir);
+
+  // Containment failures are reported by checkConfiguration; the instance
+  // and template checks must not touch a root that failed resolution.
+  let monolithRoot: string | null = null;
+  let rootAbs: string | null = null;
+  try {
+    const resolved = resolveMonolithRoot(root);
+    monolithRoot = resolved.monolithRoot;
+    rootAbs = resolved.rootAbs;
+  } catch (err) {
+    if (!(err instanceof RootContainmentError)) throw err;
+  }
+
+  const configResult = checkConfiguration(root);
+  const instanceResult: CheckResult =
+    monolithRoot === null
+      ? { label: 'Instance', passed: false, error: 'skipped: monolithRoot failed validation' }
+      : checkInstance(root, monolithRoot);
+  const templateResult: CheckResult =
+    monolithRoot === null
+      ? { label: 'Templates', passed: false, error: 'skipped: monolithRoot failed validation' }
+      : checkTemplates(root, monolithRoot);
+
+  const checks = [configResult, instanceResult, templateResult].map((r): ValidationCheck => ({ ...r, id: CHECK_IDS[r.label] }));
+  const artifacts = rootAbs === null || monolithRoot === null ? [] : findWriteArtifacts(rootAbs);
+  return {
+    checks,
+    passed: checks.every((r) => r.passed),
+    warning: artifacts.length > 0 && monolithRoot !== null ? describeWriteArtifacts(artifacts, monolithRoot) : null,
+  };
+}
+
 export async function runValidate(options: ValidateOptions): Promise<void> {
   const quiet = options.quiet ?? false;
   // SEC-001B.1-R: the project root is the read boundary and is never inferred
@@ -198,32 +270,9 @@ export async function runValidate(options: ValidateOptions): Promise<void> {
     process.exit(1);
     return;
   }
-  const targetDir = resolve(options.targetDir);
-
-  // Containment failures are reported by checkConfiguration; the instance
-  // and template checks must not touch a root that failed resolution.
-  let monolithRoot: string | null = null;
-  let rootAbs: string | null = null;
-  try {
-    const resolved = resolveMonolithRoot(targetDir);
-    monolithRoot = resolved.monolithRoot;
-    rootAbs = resolved.rootAbs;
-  } catch (err) {
-    if (!(err instanceof RootContainmentError)) throw err;
-  }
-
-  const configResult = checkConfiguration(targetDir);
-  const instanceResult: CheckResult =
-    monolithRoot === null
-      ? { label: 'Instance', passed: false, error: 'skipped: monolithRoot failed validation' }
-      : checkInstance(targetDir, monolithRoot);
-  const templateResult: CheckResult =
-    monolithRoot === null
-      ? { label: 'Templates', passed: false, error: 'skipped: monolithRoot failed validation' }
-      : checkTemplates(targetDir, monolithRoot);
-
-  const results: CheckResult[] = [configResult, instanceResult, templateResult];
-  const passed = results.every((r) => r.passed);
+  const report = validateProject(options.targetDir);
+  const results = report.checks;
+  const passed = report.passed;
 
   if (quiet) {
     if (!passed) {
@@ -241,12 +290,10 @@ export async function runValidate(options: ValidateOptions): Promise<void> {
     console.log('');
     const failed = results.filter((r) => !r.passed).length;
     console.log(`Result: ${statusWord(passed ? 'PASS' : 'FAIL', colorEnabled())}  ${paint(`(${results.length - failed}/${results.length} checks passed)`, 'dim', colorEnabled())}`);
+    const configResult = results[0];
     if (configResult.passed && configResult.note) console.log(wrapLine(configResult.note, wrapWidth(), 'Note: ', '      '));
     // Read-only warning (SEC-001B.2): never affects the result or the exit code.
-    const artifacts = rootAbs === null || monolithRoot === null ? [] : findWriteArtifacts(rootAbs);
-    if (artifacts.length > 0 && monolithRoot !== null) {
-      console.log(`Warning: ${describeWriteArtifacts(artifacts, monolithRoot)}`);
-    }
+    if (report.warning !== null) console.log(`Warning: ${report.warning}`);
     console.log('');
   }
 

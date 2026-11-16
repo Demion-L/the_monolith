@@ -293,3 +293,37 @@ describe('monolith brief --reconcile', () => {
     expect(stdout).not.toContain('RECONCILIATION');
   });
 });
+
+describe('BETA-001 reconcile presentation', () => {
+  const contradiction = () => report(evidence({ activeStory: { kind: 'none' }, roadmapActiveStory: 'GADGET-002 in progress' }));
+
+  it('shows the conflicting sources side by side and does not repeat the contradiction text in the actions', () => {
+    const r = contradiction();
+    const text = renderReconciliation(r, 6000).text;
+    expect(text).toContain('conflicting sources: active.md  vs  roadmap-index.md');
+    const msg = r.findings.find((f) => f.code === 'STATE_CONTRADICTION')?.summary ?? '';
+    expect(text.split(msg).length - 1).toBe(1); // stated once
+    expect(r.actions.join('\n')).toContain('Decide which of active.md and roadmap-index.md is correct');
+  });
+
+  it('recommendations come before limitations; the header and the closing line stay', () => {
+    const text = renderReconciliation(contradiction(), 6000).text;
+    expect(text.indexOf('Suggested actions')).toBeGreaterThan(-1);
+    expect(text.indexOf('Suggested actions')).toBeLessThan(text.indexOf('Limitations of this report:'));
+    expect(text.trimEnd().endsWith('No files were modified.')).toBe(true);
+  });
+
+  it('wraps long lines to the given width with a hanging indent, without changing the content', () => {
+    const r = contradiction();
+    const wide = renderReconciliation(r, 6000).text;
+    const narrow = renderReconciliation(r, 6000, 40).text;
+    expect(narrow.split("\n").filter((l) => l.length > 40)).toEqual([]);
+    const words = (t: string): string => t.replace(/\s+/g, '').replace(/\(\d+\)|\d+\./g, '');
+    expect(words(narrow)).toBe(words(wide));
+  });
+
+  it('no width means no wrapping (pipes and redirects)', () => {
+    const text = renderReconciliation(contradiction(), 6000).text;
+    expect(text).toBe(renderReconciliation(contradiction(), 6000, undefined).text);
+  });
+});

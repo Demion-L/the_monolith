@@ -15,7 +15,7 @@
  * `--strict`, whose meaning (Completeness) belongs to the brief.
  */
 
-import { colorEnabled, paint, tintStatuses } from '../cli/style.js';
+import { colorEnabled, paint, tintStatuses, wrapWidth } from '../cli/style.js';
 import { collect } from './collect.js';
 import { render, DEFAULT_MAX_CHARS } from './render.js';
 import { reconcile, renderReconciliation } from './reconcile.js';
@@ -87,7 +87,13 @@ export function parseBriefArgs(args: string[]): BriefArgsResult {
 /** Interactive terminals only: tints the Freshness / Completeness verdict words; plain text otherwise (byte for byte). */
 function tintBrief(text: string): string {
   const on = colorEnabled();
-  return tintStatuses(on ? text.replace(/^MONOLITH [A-Z ]+$/m, (h) => paint(h, 'head', true)) : text, on, ['Freshness', 'Completeness']);
+  if (!on) return text;
+  const headed = text
+    .replace(/^MONOLITH [A-Z ]+$/m, (h) => paint(h, 'head', true))
+    // Reconciliation section titles (column 0, ending with a colon) and commit hashes.
+    .replace(/^([A-Z][^\n]*:)$/gm, (_m, t: string) => paint(t, 'head', true))
+    .replace(/^( {4}| {2}- )([0-9a-f]{7})(?= )/gm, (_m, pre: string, sha: string) => `${pre}${paint(sha, 'dim', true)}`);
+  return tintStatuses(headed, on, ['Freshness', 'Completeness']);
 }
 
 export async function runBrief(args: string[], targetDir = process.cwd()): Promise<void> {
@@ -102,7 +108,7 @@ export async function runBrief(args: string[], targetDir = process.cwd()): Promi
     if (!model.freshness || !model.freshnessEvidence) {
       throw new Error('monolith brief --reconcile: no freshness evidence could be collected.');
     }
-    process.stdout.write(tintBrief(renderReconciliation(reconcile(model.freshnessEvidence, model.freshness), parsed.maxChars).text));
+    process.stdout.write(tintBrief(renderReconciliation(reconcile(model.freshnessEvidence, model.freshness), parsed.maxChars, wrapWidth()).text));
     process.exit(0);
   }
 

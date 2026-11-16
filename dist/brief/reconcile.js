@@ -22,6 +22,7 @@
  */
 import { extractWorkItemIds, mentionsId, } from './freshness.js';
 import { sanitizeSingleLine as san } from './sanitize.js';
+import { wrapLine } from '../cli/style.js';
 export const MAX_COMMITS_PER_ITEM = 3;
 const MAX_LISTED_ITEMS = 10;
 const MAX_SUBJECT_CHARS = 72;
@@ -58,7 +59,7 @@ export function reconcile(ev, result) {
         findings.push({ kind: 'confirmed', code: 'STATE_CONTRADICTION', summary: r.message, evidence: docs });
         for (const d of docs)
             review(d, 'contradicts another state document');
-        actions.push(`Decide which state document is correct: ${r.message}`);
+        actions.push(`Decide which of ${docs.length > 0 ? docs.join(' and ') : 'the state documents'} is correct (see the confirmed mismatch above).`);
     }
     // 2. Git-derived evidence.
     const untrackedWork = [];
@@ -207,76 +208,85 @@ const TRUNCATION_MARKER_RESERVE = 100;
  * between are added in priority order while they fit, and an omission is
  * always announced.
  */
-export function renderReconciliation(report, maxChars) {
+export function renderReconciliation(report, maxChars, width) {
     const head = ['MONOLITH STATE RECONCILIATION', '', `Freshness: ${report.freshness}`];
     if (report.lastStateUpdate) {
-        head.push(`Last state update: ${san(short(report.lastStateUpdate.sha))} (${san(report.lastStateUpdate.date.slice(0, 10))}, git)`);
+        head.push(wrapLine(`Last state update: ${san(short(report.lastStateUpdate.sha))} (${san(report.lastStateUpdate.date.slice(0, 10))}, git)`, width, '', '  '));
     }
     const foot = '\nNo files were modified.\n';
+    // `item` is one logical line; with a width it wraps under a hanging indent.
+    const item = (text, first = '- ', rest = '  ') => wrapLine(text, width, first, rest);
     const sections = [];
-    const bullets = (title, lines) => `\n${title}\n${lines.join('\n')}\n`;
+    const block = (title, lines) => `\n${wrapLine(title, width, '', '  ')}\n${lines.join('\n')}\n`;
     const contradictions = report.findings.filter((f) => f.code === 'STATE_CONTRADICTION');
     if (contradictions.length > 0) {
-        sections.push(bullets('Confirmed mismatches between state documents:', contradictions.map((f) => `- ${san(f.summary)}`)));
+        const lines = [];
+        for (const f of contradictions) {
+            lines.push(item(san(f.summary)));
+            if (f.evidence.length > 0)
+                lines.push(item(`conflicting sources: ${f.evidence.map(san).join('  vs  ')}`, '    ', '      '));
+        }
+        sections.push(block(`Confirmed mismatches between state documents (${contradictions.length}):`, lines));
     }
     if (report.untrackedWork.length > 0) {
         const lines = [];
         for (const u of report.untrackedWork.slice(0, MAX_LISTED_ITEMS)) {
-            lines.push(`- ${u.id} (${u.totalCommits} commit(s) in git)`);
+            lines.push(item(`${u.id} (${u.totalCommits} commit(s) in git)`));
             for (const c of u.commits)
-                lines.push(`    ${san(commitLine(c))}`);
+                lines.push(item(san(commitLine(c)), '    ', '       '));
             if (u.totalCommits > u.commits.length)
                 lines.push(`    … and ${u.totalCommits - u.commits.length} more`);
         }
         if (report.untrackedWork.length > MAX_LISTED_ITEMS) {
             lines.push(`- … and ${report.untrackedWork.length - MAX_LISTED_ITEMS} more work item(s)`);
         }
-        sections.push(bullets('Untracked work items (referenced in git, mentioned in no state document):', lines));
+        sections.push(block(`Untracked work items (referenced in git, mentioned in no state document) (${report.untrackedWork.length}):`, lines));
     }
     for (const [kind, title] of [
-        ['suspected', 'Suspected mismatches (not confirmable from the data):'],
-        ['unknown', 'Unknown (evidence missing):'],
+        ['suspected', 'Suspected mismatches (not confirmable from the data)'],
+        ['unknown', 'Unknown (evidence missing)'],
     ]) {
         const list = report.findings.filter((f) => f.kind === kind);
         if (list.length === 0)
             continue;
         const lines = [];
         for (const f of list) {
-            lines.push(`- ${san(f.summary)}`);
+            lines.push(item(san(f.summary)));
             for (const e of f.evidence)
-                lines.push(`    ${san(e)}`);
+                lines.push(item(san(e), '    ', '       '));
         }
-        sections.push(bullets(title, lines));
+        sections.push(block(`${title}:`, lines));
     }
     if (report.independentKnowledge.length > 0) {
         const lines = [];
         for (const k of report.independentKnowledge.slice(0, MAX_LISTED_ITEMS)) {
-            lines.push(`- ${san(k.ideaIds.join(', '))} (${k.commits.length} commit(s))`);
+            lines.push(item(`${san(k.ideaIds.join(', '))} (${k.commits.length} commit(s))`));
             const shownPaths = k.paths.slice(0, MAX_LISTED_ITEMS).map(san).join(', ');
-            lines.push(`    declared paths: ${shownPaths}${k.paths.length > MAX_LISTED_ITEMS ? ` and ${k.paths.length - MAX_LISTED_ITEMS} more` : ''}`);
+            lines.push(item(`declared paths: ${shownPaths}${k.paths.length > MAX_LISTED_ITEMS ? ` and ${k.paths.length - MAX_LISTED_ITEMS} more` : ''}`, '    ', '      '));
             for (const c of k.commits.slice(0, MAX_COMMITS_PER_ITEM))
-                lines.push(`    ${san(c)}`);
+                lines.push(item(san(c), '    ', '       '));
         }
-        sections.push(bullets('Attributed to registered independent knowledge (no work item, active story unaffected):', lines));
+        sections.push(block('Attributed to registered independent knowledge (no work item, active story unaffected):', lines));
     }
     if (report.documents.length > 0) {
         const lines = [];
         for (const d of report.documents)
-            lines.push(`- ${san(d.path)} — ${d.reasons.map(san).join('; ')}`);
-        sections.push(bullets('Documents requiring review:', lines));
+            lines.push(item(`${san(d.path)} — ${d.reasons.map(san).join('; ')}`));
+        sections.push(block('Documents requiring review:', lines));
     }
     if (report.findings.length === 0) {
-        sections.push('\nNo discrepancy was found in the available evidence. This is not a guarantee the state is correct.\n');
+        sections.push('\n' + item('No discrepancy was found in the available evidence. This is not a guarantee the state is correct.', '', '') + '\n');
     }
     if (report.mentionedWork.length > 0) {
         const shown = report.mentionedWork.slice(0, MAX_LISTED_ITEMS).join(', ');
         const more = report.mentionedWork.length > MAX_LISTED_ITEMS ? ` and ${report.mentionedWork.length - MAX_LISTED_ITEMS} more` : '';
-        sections.push(`\nWork items in git that state documents mention: ${shown}${more}. Mentioned does not mean the recorded status is correct.\n`);
+        sections.push('\n' + item(`Work items in git that state documents mention: ${shown}${more}. Mentioned does not mean the recorded status is correct.`, '', '') + '\n');
     }
-    sections.push(bullets('Limitations:', report.limitations.map((l) => `- ${san(l)}`)));
+    // Recommendations (what a person may do) come before limitations (what this report cannot show).
     if (report.actions.length > 0) {
-        sections.push(bullets('Suggested actions (for a person to decide; none is applied automatically):', report.actions.map((a, i) => `${i + 1}. ${san(a)}`)));
+        sections.push(block('Suggested actions (for a person to decide; none is applied automatically):', report.actions.map((a, i) => item(san(a), `${i + 1}. `, '   '))));
     }
+    sections.push(block('Limitations of this report:', report.limitations.map((l) => item(san(l)))));
     const mandatory = head.join('\n') + '\n' + foot;
     let used = mandatory.length;
     const kept = [];

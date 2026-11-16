@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import { existsSync, readdirSync } from 'fs';
-import { colorEnabled, paint, statusWord } from '../cli/style.js';
+import { colorEnabled, paint, statusWord, wrapLine, wrapWidth } from '../cli/style.js';
 import { isAbsolute, join, resolve, relative, sep } from 'path';
 import { checkProjectFile, readConfigFile, readProjectFile, resolveMonolithRoot, RootContainmentError, findWriteArtifacts, describeWriteArtifacts, } from '../root/index.js';
 const DEFINITION_FILE_NAME = 'project.definition.mjs';
@@ -150,8 +150,11 @@ function checkTemplates(targetDir, monolithRoot) {
 function formatRow(result) {
     const label = result.label.padEnd(COL_WIDTH);
     const status = statusWord(result.passed ? 'PASS' : 'FAIL', colorEnabled());
-    const tail = result.error ? `  ${result.error}` : '';
-    return `${label}${status}${tail}`;
+    if (!result.error)
+        return `${label}${status}`;
+    // Reason on continuation lines, aligned under the label's value column.
+    const indent = ' '.repeat(COL_WIDTH + 6);
+    return `${label}${status}  ${wrapLine(result.error, wrapWidth(), indent, indent).slice(indent.length)}`;
 }
 export async function runValidate(options) {
     const quiet = options.quiet ?? false;
@@ -201,9 +204,10 @@ export async function runValidate(options) {
             console.log(formatRow(r));
         }
         console.log('');
-        console.log(`Result: ${statusWord(passed ? 'PASS' : 'FAIL', colorEnabled())}`);
+        const failed = results.filter((r) => !r.passed).length;
+        console.log(`Result: ${statusWord(passed ? 'PASS' : 'FAIL', colorEnabled())}  ${paint(`(${results.length - failed}/${results.length} checks passed)`, 'dim', colorEnabled())}`);
         if (configResult.passed && configResult.note)
-            console.log(`Note: ${configResult.note}`);
+            console.log(wrapLine(configResult.note, wrapWidth(), 'Note: ', '      '));
         // Read-only warning (SEC-001B.2): never affects the result or the exit code.
         const artifacts = rootAbs === null || monolithRoot === null ? [] : findWriteArtifacts(rootAbs);
         if (artifacts.length > 0 && monolithRoot !== null) {

@@ -12,6 +12,7 @@ const CODES = {
     bad: '31', // red
     dim: '90', // grey
     head: '1;35', // bold purple
+    info: '36', // cyan
 };
 /** Status word → tone. Words not listed are never tinted. */
 export const STATUS_TONE = {
@@ -27,10 +28,13 @@ export const STATUS_TONE = {
     NOT_VERIFIED: 'warn',
     UNKNOWN: 'warn',
     WARNING: 'warn',
-    UPDATE: 'warn',
+    ADD: 'info',
+    UPDATE: 'info',
     INCOMPLETE: 'warn',
     pending: 'warn',
     FAIL: 'bad',
+    ok: 'good',
+    FAILING: 'bad',
     CONFLICT: 'bad',
     conflict: 'bad',
     STALE: 'bad',
@@ -73,4 +77,55 @@ export function tintStatuses(text, enabled, labels = []) {
         out = out.replace(new RegExp(`^(${label}: )([A-Za-z_]+)`, 'gm'), (_m, pre, w) => `${pre}${statusWord(w, true)}`);
     }
     return out;
+}
+/**
+ * Output width for wrapped text: the terminal's column count on an interactive
+ * terminal (clamped to 40..100), otherwise `undefined` — pipes and redirects
+ * are never re-wrapped, so machine consumers keep one logical line per line.
+ */
+export function wrapWidth(stream = process.stdout, env = process.env) {
+    if (stream.isTTY !== true)
+        return undefined;
+    const fromEnv = Number.parseInt(env.COLUMNS ?? '', 10);
+    const cols = typeof stream.columns === 'number' && stream.columns > 0 ? stream.columns : Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : 80;
+    return Math.min(100, Math.max(40, cols));
+}
+/**
+ * Wraps one logical line at word boundaries to `width` columns (a word longer
+ * than the line is hard-split). `first` prefixes the first line, `rest` every
+ * continuation line (hanging indent). `width` undefined returns `first + text`.
+ */
+export function wrapLine(text, width, first = '', rest = first) {
+    if (width === undefined)
+        return first + text;
+    const out = [];
+    let prefix = first;
+    let line = '';
+    const room = () => Math.max(10, width - prefix.length);
+    const flush = () => {
+        out.push(prefix + line);
+        prefix = rest;
+        line = '';
+    };
+    for (const word of text.split(' ')) {
+        let w = word;
+        while (w.length > room()) {
+            if (line !== '')
+                flush();
+            line = w.slice(0, room());
+            w = w.slice(line.length);
+            flush();
+        }
+        if (line === '')
+            line = w;
+        else if (line.length + 1 + w.length <= room())
+            line += ` ${w}`;
+        else {
+            flush();
+            line = w;
+        }
+    }
+    if (line !== '' || out.length === 0)
+        flush();
+    return out.join('\n');
 }

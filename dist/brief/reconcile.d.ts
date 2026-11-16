@@ -77,5 +77,5 @@ export interface RenderedReconciliation {
  * between are added in priority order while they fit, and an omission is
  * always announced.
  */
-export declare function renderReconciliation(report: ReconciliationReport, maxChars: number): RenderedReconciliation;
+export declare function renderReconciliation(report: ReconciliationReport, maxChars: number, width?: number): RenderedReconciliation;
 //# sourceMappingURL=reconcile.d.ts.map

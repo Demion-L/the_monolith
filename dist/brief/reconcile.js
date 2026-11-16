@@ -20,7 +20,7 @@
  *   suspected  something that may be a discrepancy but cannot be shown from the data
  *   unknown    the evidence needed to decide is missing (no git, truncated history, ...)
  */
-import { extractWorkItemIds, mentionsId, } from './freshness.js';
+import { extractWorkItemIds, findContradictions, mentionsId, } from './freshness.js';
 import { sanitizeSingleLine as san } from './sanitize.js';
 import { wrapLine } from '../cli/style.js';
 export const MAX_COMMITS_PER_ITEM = 3;
@@ -52,11 +52,15 @@ export function reconcile(ev, result) {
         reviewReasons.set(path, list);
     };
     // 1. Contradictions between the state documents — need no git.
+    // `findContradictions` is the one definition of a contradiction; `result.reasons` carries them in the same order.
+    const contradictionSources = findContradictions(ev);
+    let contradictionIndex = 0;
     for (const r of result.reasons) {
         if (r.code !== 'STATE_CONTRADICTION')
             continue;
         const docs = r.documents ?? [];
-        findings.push({ kind: 'confirmed', code: 'STATE_CONTRADICTION', summary: r.message, evidence: docs });
+        const sources = contradictionSources[contradictionIndex++]?.sources;
+        findings.push({ kind: 'confirmed', code: 'STATE_CONTRADICTION', summary: r.message, evidence: docs, ...(sources ? { sources } : {}) });
         for (const d of docs)
             review(d, 'contradicts another state document');
         actions.push(`Decide which of ${docs.length > 0 ? docs.join(' and ') : 'the state documents'} is correct (see the confirmed mismatch above).`);

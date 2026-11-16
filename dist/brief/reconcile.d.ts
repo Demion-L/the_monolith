@@ -20,7 +20,7 @@
  *   suspected  something that may be a discrepancy but cannot be shown from the data
  *   unknown    the evidence needed to decide is missing (no git, truncated history, ...)
  */
-import { type FreshnessEvidence, type FreshnessResult, type FreshnessStatus } from './freshness.js';
+import { type ContradictionSource, type FreshnessEvidence, type FreshnessResult, type FreshnessStatus } from './freshness.js';
 export type FindingKind = 'confirmed' | 'suspected' | 'unknown';
 export type FindingCode = 'STATE_CONTRADICTION' | 'UNRECORDED_WORK' | 'UNATTRIBUTED_ACTIVITY' | 'ACTIVITY_WITHOUT_ACTIVE_STORY' | 'GIT_UNAVAILABLE' | 'STATE_NOT_IN_GIT' | 'GIT_HISTORY_TRUNCATED' | 'GIT_HISTORY_SHALLOW' | 'ACTIVE_STORY_UNKNOWN';
 export interface ReconciliationFinding {
@@ -29,6 +29,8 @@ export interface ReconciliationFinding {
     summary: string;
     /** Short, checkable pointers: document names or `<sha7> <subject>`. */
     evidence: string[];
+    /** STATE_CONTRADICTION only: the conflicting claims, per document. Additive; the text report does not use it. */
+    sources?: ContradictionSource[];
 }
 export interface UntrackedWorkItem {
     id: string;

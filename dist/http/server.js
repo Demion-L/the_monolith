@@ -1,9 +1,15 @@
 /**
  * Secure read-only HTTP transport for Mission Control (UI-001B.2, ADR-010 G2).
  *
- * One endpoint, `GET /api/dashboard`, serves the existing `DashboardReadModel`
- * exactly as `readDashboardModel(projectRoot)` returns it. This module is a
- * transport only:
+ * `GET /api/dashboard` serves the existing `DashboardReadModel` exactly as
+ * `readDashboardModel(projectRoot)` returns it. `POST /api/diagnostics/validate`
+ * and `POST /api/diagnostics/reconcile` (BETA-020 Phase 3) run Core's existing
+ * Validation / Reconciliation on demand and return structured DTOs; they take
+ * no parameters, need `Content-Type: application/json` with an empty or `{}`
+ * body (which a cross-site request cannot send without a CORS preflight, and
+ * there is no CORS), and write nothing. No per-launch token is introduced: ADR-010
+ * F-8 keeps the token decision for write operations, which do not exist here.
+ * This module is a transport only:
  *  - it reads no file and imports no filesystem module; every byte of project
  *    data arrives through `readDashboardModel` (ADR-014 safe read);
  *  - it knows nothing about `state.json`, its schema or its physical layout, so
@@ -16,7 +22,8 @@
  *
  * Security boundary (G2): bound to 127.0.0.1 only; `Host` allowlist (loopback
  * name + the real port, against DNS rebinding); `Origin` checked when present
- * and never reflected; no CORS headers at all; GET only; fixed response
+ * and never reflected; no CORS headers at all; GET (read) and the two diagnostic
+ * POSTs only; fixed response
  * headers; bounded response size with no partial JSON; errors are fixed codes,
  * never exception text or paths. Loopback is NOT treated as authentication.
  *
@@ -29,8 +36,18 @@
  */
 import { createServer } from 'http';
 import { isAbsolute } from 'path';
-import { readDashboardModel } from '../readmodel/index.js';
+import { readDashboardModel, runReconciliation, runValidation } from '../readmodel/index.js';
 export const DASHBOARD_PATH = '/api/dashboard';
+/**
+ * On-demand diagnostics (BETA-020 Phase 3). POST only, because a run is an
+ * action, not a read of stored data. They are still read-only for the project:
+ * they call Core's `validateProject` and `collect` + `reconcile` in-process
+ * (no subprocess, no shell) and write nothing. Not a write API (ADR-010 G2.14).
+ */
+export const VALIDATE_PATH = '/api/diagnostics/validate';
+export const RECONCILE_PATH = '/api/diagnostics/reconcile';
+/** A diagnostics request carries no parameters: an empty body or `{}`. Anything larger is refused unread. */
+export const MAX_REQUEST_BODY_BYTES = 64;
 /** The only bind address; there is deliberately no option to change it. */
 export const LOOPBACK_HOST = '127.0.0.1';
 /**
@@ -44,7 +61,11 @@ const ERROR_STATUS = {
     ORIGIN_NOT_ALLOWED: 403,
     NOT_FOUND: 404,
     METHOD_NOT_ALLOWED: 405,
+    UNSUPPORTED_MEDIA_TYPE: 415,
+    BAD_REQUEST: 400,
+    PAYLOAD_TOO_LARGE: 413,
     RESPONSE_TOO_LARGE: 500,
+    DIAGNOSTICS_FAILED: 500,
     INTERNAL_ERROR: 500,
 };
 const ERROR_KIND = {
@@ -52,7 +73,11 @@ const ERROR_KIND = {
     ORIGIN_NOT_ALLOWED: 'security',
     NOT_FOUND: 'request',
     METHOD_NOT_ALLOWED: 'request',
+    UNSUPPORTED_MEDIA_TYPE: 'request',
+    BAD_REQUEST: 'request',
+    PAYLOAD_TOO_LARGE: 'request',
     RESPONSE_TOO_LARGE: 'dashboard',
+    DIAGNOSTICS_FAILED: 'diagnostics',
     INTERNAL_ERROR: 'internal',
 };
 function send(res, status, body, extra = {}) {
@@ -82,12 +107,12 @@ function sendAsset(res, body, contentType) {
     });
     res.end(body);
 }
-function sendError(res, code) {
+function sendError(res, code, allow = 'GET') {
     const body = { error: { kind: ERROR_KIND[code], code } };
     // An unread request body must not keep the connection busy.
     const extra = { Connection: 'close' };
     if (code === 'METHOD_NOT_ALLOWED')
-        extra.Allow = 'GET';
+        extra.Allow = allow;
     send(res, ERROR_STATUS[code], JSON.stringify(body), extra);
 }
 function single(h) {
@@ -113,6 +138,42 @@ function pathOf(target) {
     const q = target.indexOf('?');
     return q === -1 ? target : target.slice(0, q);
 }
+/** Exactly `application/json` (optionally with a charset): the type that a cross-site form or `no-cors` request cannot send. */
+function isJsonContentType(h) {
+    const v = single(h);
+    return v !== undefined && /^application\/json\s*(;\s*charset=utf-?8\s*)?$/i.test(v);
+}
+/** Reads a request body of at most MAX_REQUEST_BODY_BYTES; it must be empty or the JSON object `{}`. */
+function readEmptyBody(req) {
+    return new Promise((resolve) => {
+        const declared = single(req.headers['content-length']);
+        if (declared !== undefined && (!/^\d+$/.test(declared) || Number(declared) > MAX_REQUEST_BODY_BYTES))
+            return resolve('too_large');
+        const chunks = [];
+        let size = 0;
+        let done = false;
+        const finish = (r) => {
+            if (done)
+                return;
+            done = true;
+            resolve(r);
+        };
+        req.on('data', (c) => {
+            size += c.length;
+            if (size > MAX_REQUEST_BODY_BYTES) {
+                finish('too_large');
+                req.destroy();
+                return;
+            }
+            chunks.push(c);
+        });
+        req.on('end', () => {
+            const text = Buffer.concat(chunks).toString('utf8').trim();
+            finish(text === '' || text === '{}' ? 'ok' : 'bad');
+        });
+        req.on('error', () => finish('bad'));
+    });
+}
 export async function startDashboardServer(options) {
     const { projectRoot } = options;
     if (typeof projectRoot !== 'string' || !isAbsolute(projectRoot)) {
@@ -121,6 +182,42 @@ export async function startDashboardServer(options) {
     const maxBytes = options.maxResponseBytes ?? MAX_RESPONSE_BYTES;
     let allowedHosts = new Set();
     let allowedOrigins = new Set();
+    // One run per diagnostic at a time: a repeated request while one is running
+    // shares its result instead of starting a parallel scan of the project.
+    const inFlight = new Map();
+    function runDiagnostic(path) {
+        const running = inFlight.get(path);
+        if (running !== undefined)
+            return running;
+        const task = (async () => JSON.stringify(path === VALIDATE_PATH ? runValidation(projectRoot) : await runReconciliation(projectRoot)))();
+        inFlight.set(path, task);
+        const clear = () => {
+            inFlight.delete(path);
+        };
+        task.then(clear, clear);
+        return task;
+    }
+    async function handleDiagnostic(req, res, path) {
+        if (req.method !== 'POST')
+            return sendError(res, 'METHOD_NOT_ALLOWED', 'POST');
+        if (!isJsonContentType(req.headers['content-type']))
+            return sendError(res, 'UNSUPPORTED_MEDIA_TYPE');
+        const body = await readEmptyBody(req);
+        if (body === 'too_large')
+            return sendError(res, 'PAYLOAD_TOO_LARGE');
+        if (body === 'bad')
+            return sendError(res, 'BAD_REQUEST');
+        let out;
+        try {
+            out = await runDiagnostic(path);
+        }
+        catch {
+            return sendError(res, 'DIAGNOSTICS_FAILED');
+        }
+        if (Buffer.byteLength(out, 'utf8') > maxBytes)
+            return sendError(res, 'RESPONSE_TOO_LARGE');
+        send(res, 200, out);
+    }
     function handle(req, res) {
         // 1. Security preconditions, before anything about the route is revealed.
         // Exactly one Host: a duplicate is ambiguous (proxies may pick another one).
@@ -132,6 +229,15 @@ export async function startDashboardServer(options) {
         }
         // 2. Route and method. Exact match only: no trailing slash, no decoding.
         const path = pathOf(req.url);
+        if (path === VALIDATE_PATH || path === RECONCILE_PATH) {
+            void handleDiagnostic(req, res, path).catch(() => {
+                if (!res.headersSent)
+                    sendError(res, 'INTERNAL_ERROR');
+                else
+                    res.destroy();
+            });
+            return;
+        }
         if (path !== DASHBOARD_PATH) {
             const asset = options.assets?.get(path === '/' ? '/index.html' : path);
             if (asset === undefined)

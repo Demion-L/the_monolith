@@ -163,6 +163,8 @@ function listIds(ids) {
 function isDone(status) {
     return status === 'COMPLETED' || status === 'DONE';
 }
+const MAX_CLAIM_CHARS = 80;
+const clipClaim = (s) => (s.length <= MAX_CLAIM_CHARS ? s : `${s.slice(0, MAX_CLAIM_CHARS - 1)}…`);
 /**
  * Contradictions between the state documents. Shared by `brief` (freshness /
  * `--reconcile`) and `finalize` (FIN-002 consistency assessment) so that there
@@ -174,12 +176,20 @@ export function findContradictions(ev) {
         out.push({
             message: `active.md records no active story, but its Current Story section also has a **Story:** field (${ev.activeStory.contradiction.map((f) => `"${f.slice(0, 40)}"`).join(', ')}).`,
             documents: ['active.md'],
+            sources: [
+                { document: 'active.md', claim: 'No active story' },
+                { document: 'active.md', claim: `**Story:** ${ev.activeStory.contradiction.map((f) => clipClaim(f)).join(', ')}` },
+            ],
         });
     }
     if (ev.activeStory.kind === 'none' && ev.roadmapActiveStory !== null && !NONE_RE.test(ev.roadmapActiveStory)) {
         out.push({
             message: `active.md records no active story, but roadmap-index.md names "${ev.roadmapActiveStory}".`,
             documents: ['active.md', 'roadmap-index.md'],
+            sources: [
+                { document: 'active.md', claim: 'No active story' },
+                { document: 'roadmap-index.md', claim: `Active Story: ${clipClaim(ev.roadmapActiveStory)}` },
+            ],
         });
     }
     if (ev.activeStory.kind === 'ids') {
@@ -188,12 +198,20 @@ export function findContradictions(ev) {
                 out.push({
                     message: `active.md treats ${id} as current, but roadmap-index.md marks it ${ev.roadmapStatuses.get(id)}.`,
                     documents: ['active.md', 'roadmap-index.md'],
+                    sources: [
+                        { document: 'active.md', claim: `${id} is current` },
+                        { document: 'roadmap-index.md', claim: `${id} is ${ev.roadmapStatuses.get(id)}` },
+                    ],
                 });
             }
             else if (isDone(ev.storyIndexStatuses.get(id))) {
                 out.push({
                     message: `active.md treats ${id} as current, but story-index.md marks it ${ev.storyIndexStatuses.get(id)}.`,
                     documents: ['active.md', 'story-index.md'],
+                    sources: [
+                        { document: 'active.md', claim: `${id} is current` },
+                        { document: 'story-index.md', claim: `${id} is ${ev.storyIndexStatuses.get(id)}` },
+                    ],
                 });
             }
         }
@@ -204,6 +222,10 @@ export function findContradictions(ev) {
             out.push({
                 message: `${id} is ${roadmapStatus} in roadmap-index.md but ${indexStatus} in story-index.md.`,
                 documents: ['roadmap-index.md', 'story-index.md'],
+                sources: [
+                    { document: 'roadmap-index.md', claim: `${id} is ${roadmapStatus}` },
+                    { document: 'story-index.md', claim: `${id} is ${indexStatus}` },
+                ],
             });
         }
     }

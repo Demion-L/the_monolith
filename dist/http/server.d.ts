@@ -1,9 +1,15 @@
 /**
  * Secure read-only HTTP transport for Mission Control (UI-001B.2, ADR-010 G2).
  *
- * One endpoint, `GET /api/dashboard`, serves the existing `DashboardReadModel`
- * exactly as `readDashboardModel(projectRoot)` returns it. This module is a
- * transport only:
+ * `GET /api/dashboard` serves the existing `DashboardReadModel` exactly as
+ * `readDashboardModel(projectRoot)` returns it. `POST /api/diagnostics/validate`
+ * and `POST /api/diagnostics/reconcile` (BETA-020 Phase 3) run Core's existing
+ * Validation / Reconciliation on demand and return structured DTOs; they take
+ * no parameters, need `Content-Type: application/json` with an empty or `{}`
+ * body (which a cross-site request cannot send without a CORS preflight, and
+ * there is no CORS), and write nothing. No per-launch token is introduced: ADR-010
+ * F-8 keeps the token decision for write operations, which do not exist here.
+ * This module is a transport only:
  *  - it reads no file and imports no filesystem module; every byte of project
  *    data arrives through `readDashboardModel` (ADR-014 safe read);
  *  - it knows nothing about `state.json`, its schema or its physical layout, so
@@ -16,7 +22,8 @@
  *
  * Security boundary (G2): bound to 127.0.0.1 only; `Host` allowlist (loopback
  * name + the real port, against DNS rebinding); `Origin` checked when present
- * and never reflected; no CORS headers at all; GET only; fixed response
+ * and never reflected; no CORS headers at all; GET (read) and the two diagnostic
+ * POSTs only; fixed response
  * headers; bounded response size with no partial JSON; errors are fixed codes,
  * never exception text or paths. Loopback is NOT treated as authentication.
  *
@@ -28,6 +35,16 @@
  * dynamic TOCTOU is not closed here, nor by Core.
  */
 export declare const DASHBOARD_PATH = "/api/dashboard";
+/**
+ * On-demand diagnostics (BETA-020 Phase 3). POST only, because a run is an
+ * action, not a read of stored data. They are still read-only for the project:
+ * they call Core's `validateProject` and `collect` + `reconcile` in-process
+ * (no subprocess, no shell) and write nothing. Not a write API (ADR-010 G2.14).
+ */
+export declare const VALIDATE_PATH = "/api/diagnostics/validate";
+export declare const RECONCILE_PATH = "/api/diagnostics/reconcile";
+/** A diagnostics request carries no parameters: an empty body or `{}`. Anything larger is refused unread. */
+export declare const MAX_REQUEST_BODY_BYTES = 64;
 /** The only bind address; there is deliberately no option to change it. */
 export declare const LOOPBACK_HOST = "127.0.0.1";
 /**
@@ -43,8 +60,8 @@ export interface UiAsset {
 }
 /** Request path (`/index.html`, `/assets/x.js`) -> asset. */
 export type UiAssets = ReadonlyMap<string, UiAsset>;
-export type HttpErrorKind = 'request' | 'security' | 'dashboard' | 'internal';
-export type HttpErrorCode = 'HOST_NOT_ALLOWED' | 'ORIGIN_NOT_ALLOWED' | 'NOT_FOUND' | 'METHOD_NOT_ALLOWED' | 'RESPONSE_TOO_LARGE' | 'INTERNAL_ERROR';
+export type HttpErrorKind = 'request' | 'security' | 'dashboard' | 'diagnostics' | 'internal';
+export type HttpErrorCode = 'HOST_NOT_ALLOWED' | 'ORIGIN_NOT_ALLOWED' | 'NOT_FOUND' | 'METHOD_NOT_ALLOWED' | 'UNSUPPORTED_MEDIA_TYPE' | 'BAD_REQUEST' | 'PAYLOAD_TOO_LARGE' | 'RESPONSE_TOO_LARGE' | 'DIAGNOSTICS_FAILED' | 'INTERNAL_ERROR';
 /** Body of every non-200 response. Fixed vocabulary only: no message, path or detail. */
 export interface HttpErrorBody {
     error: {

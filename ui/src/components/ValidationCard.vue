@@ -40,7 +40,7 @@ const lastRun = computed(() => {
     <p class="muted dcard-q">Did the project pass MONOLITH's existing checks?</p>
 
     <p v-if="runner.state.status === 'idle'" class="empty" data-testid="validation-idle">
-      Not run in this session. Source availability above is not a validation result.
+      Not run in this session. Source availability is not a validation result.
     </p>
     <p v-else-if="runner.state.status === 'running'" role="status" data-testid="validation-running">Checking the project…</p>
     <p v-else-if="runner.state.status === 'error'" role="alert" class="dcard-error" data-testid="validation-error">

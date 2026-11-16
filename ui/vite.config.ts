@@ -22,6 +22,18 @@ export default defineConfig({
         target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
       },
+      // The two on-demand diagnostics (POST). The browser sends the Vite dev origin, which the API
+      // (correctly) does not allow; only in this dev proxy it is rewritten to the API's own origin.
+      // The production server (`monolith ui`) serves the UI and the API from one origin and needs no rewrite.
+      '^/api/diagnostics/(validate|reconcile)$': {
+        target: `http://127.0.0.1:${apiPort}`,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            if (proxyReq.getHeader('origin') !== undefined) proxyReq.setHeader('origin', `http://127.0.0.1:${apiPort}`);
+          });
+        },
+      },
     },
   },
   build: {

@@ -164,3 +164,9 @@
   :root[data-skin="cosmic-glass"] .sidebar { background: rgba(8, 11, 32, 0.82); border-bottom-color: var(--border); }
   :root[data-skin="cosmic-glass"] .panel { padding: 14px 16px; background: rgba(12, 16, 40, 0.6); }
 }
+
+/* Interactive diagnostics (BETA-020 Phase 3): the same glass vocabulary, cyan for "running / info". */
+:root[data-skin="cosmic-glass"] { --info: #6fd3ff; }
+:root[data-skin="cosmic-glass"] .dcard { background: var(--surface-2); box-shadow: var(--glass-edge); border-color: var(--border); }
+:root[data-skin="cosmic-glass"] .conflict { background: rgba(255, 138, 133, 0.07); }
+:root[data-skin="cosmic-glass"] .splitbrain { background: rgba(240, 192, 64, 0.08); }

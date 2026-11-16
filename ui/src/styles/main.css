@@ -219,3 +219,45 @@ button:disabled { opacity: 0.5; cursor: default; }
 /* Project Overview blocks (UI-003B-1A): stacked groups; the grid inside .facts already collapses on narrow screens. */
 .ov-block + .ov-block { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--border); }
 .ov-block h3 { margin-top: 8px; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-secondary); color: var(--muted); }
+
+/* ---- Interactive diagnostics (BETA-020 Phase 3) ---- */
+:root { --info: #4cc2ff; }
+.dgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 12px; }
+@media (min-width: 1000px) { .dgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.dcard { min-width: 0; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; }
+.dcard-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.panel .dcard-head h3 { margin: 0; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-secondary); }
+.dcard-q { margin: 4px 0 10px; font-size: var(--fs-secondary); }
+.dcard-summary { margin: 8px 0; font-weight: 600; }
+.dcard-error { color: var(--err); }
+.dcard-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 12px; }
+.dcard-foot button { min-height: 36px; padding: 6px 16px; }
+.pill {
+  display: inline-block; font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em;
+  padding: 2px 10px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap;
+}
+.pill-ok { color: var(--ok); }
+.pill-err { color: var(--err); }
+.pill-warn { color: var(--warn); }
+.pill-info { color: var(--info); }
+.pill-neutral { color: var(--muted); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.checks li { border-left: 3px solid var(--border); padding: 4px 0 4px 10px; }
+.checks .check-pass { border-left-color: var(--ok); }
+.checks .check-fail { border-left-color: var(--err); }
+.check-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.check-about { margin: 2px 0 0; font-size: var(--fs-secondary); }
+.check-reason { margin: 4px 0 0; color: var(--err); }
+.more { margin-top: 10px; }
+.more summary { cursor: pointer; color: var(--accent); }
+.more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rblock { margin-top: 12px; }
+.panel .rblock h4 { margin: 0 0 6px; }
+.plain { margin: 0; padding-left: 18px; }
+.plain .commits { margin-top: 2px; font-size: var(--fs-secondary); }
+.conflict { border: 1px solid var(--err); border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; }
+.conflict-title { font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.1em; color: var(--err); margin-bottom: 4px; }
+.conflict-source { display: flex; flex-direction: column; margin: 4px 0; }
+.conflict-source code { color: var(--muted); }
+.splitbrain { margin-top: 12px; border: 1px solid var(--warn); border-radius: 4px; padding: 8px 12px; }
+.splitbrain p { margin: 6px 0; }

@@ -109,7 +109,22 @@ describe('Roadmap Navigator', () => {
     expect(cur.classes()).toContain('phase-selected');
     expect(cur.classes()).toContain('phase-active');
     expect(new URLSearchParams(window.location.search).get('phase')).toBe('4');
+    // Only a small window around the target is in the DOM, never the roadmap up to it.
+    expect(w.findAll('[data-testid="roadmap-phase"]').length).toBeLessThanOrEqual(30);
+    expect(w.find('[data-testid="roadmap-earlier"]').exists()).toBe(true);
     expect(w.get('[data-testid="roadmap-current"]').text()).toContain('Phase 4');
+  });
+
+  it('Show earlier extends the window upward without duplicates', async () => {
+    const w = mountN(300, 4);
+    await w.get('[data-testid="roadmap-go-current"]').trigger('click');
+    await flushPromises();
+    const before = ids(w).length;
+    await w.get('[data-testid="roadmap-earlier"]').trigger('click');
+    const all = ids(w);
+    expect(all.length).toBe(before + 10);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all[0]).toBe(String(Number(ids(w)[10]) + 10));
   });
 
   it('the selection survives a sort change and stays visible', async () => {

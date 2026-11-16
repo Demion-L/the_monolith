@@ -60,6 +60,8 @@ const stateMessage = computed(() => {
 // ---- Navigator state (view-only; never written back to the roadmap) ----
 const query = ref('');
 const sort = ref<SortOrder>('newest');
+/** The rendered window is [windowStart, windowStart + visibleCount) of the filtered list: never the whole roadmap. */
+const windowStart = ref(0);
 const visibleCount = ref(PAGE_SIZE);
 const selectedId = ref<string | null>(null);
 const notice = ref<string | null>(null);
@@ -78,8 +80,8 @@ const filtered = computed<Entry[]>(() => {
   const list = q === '' ? entries.value : entries.value.filter((e) => e.haystack.includes(q));
   return sort.value === 'oldest' ? list : list.slice().reverse();
 });
-const visible = computed(() => filtered.value.slice(0, visibleCount.value));
-const remaining = computed(() => Math.max(0, filtered.value.length - visibleCount.value));
+const visible = computed(() => filtered.value.slice(windowStart.value, windowStart.value + visibleCount.value));
+const remaining = computed(() => Math.max(0, filtered.value.length - windowStart.value - visibleCount.value));
 const truncatedByParser = computed(() => view.value?.diagnostics.some((d) => d.code === 'PHASES_TRUNCATED') ?? false);
 const currentPhase = computed(() => {
   const i = view.value?.activePhase.kind === 'phase' ? view.value.phases.findIndex((p) => p.id === activeId.value) : -1;
@@ -116,14 +118,24 @@ function selectedEntry(): Entry | null {
   const hits = entries.value.filter((e) => e.phase.id === selectedId.value);
   return hits.length === 1 ? hits[0] : null;
 }
-/** Widen the window (in whole pages) so the entry is rendered. */
+/** Make the entry rendered: keep the window if it already holds it, else open one page around it. */
 function reveal(index: number): boolean {
   const pos = positionOf(index);
   if (pos === -1) return false;
-  visibleCount.value = Math.max(visibleCount.value, Math.ceil((pos + 1) / PAGE_SIZE) * PAGE_SIZE);
+  const inside = pos >= windowStart.value && pos < windowStart.value + visibleCount.value;
+  if (!inside) {
+    windowStart.value = Math.max(0, Math.floor(pos / PAGE_SIZE) * PAGE_SIZE - PAGE_SIZE);
+    visibleCount.value = Math.max(PAGE_SIZE, Math.ceil((pos + 1 + PAGE_SIZE - windowStart.value) / PAGE_SIZE) * PAGE_SIZE);
+  }
   return true;
 }
+function showEarlier(): void {
+  const step = Math.min(PAGE_SIZE, windowStart.value);
+  windowStart.value -= step;
+  visibleCount.value += step;
+}
 function resetWindow(): void {
+  windowStart.value = 0;
   visibleCount.value = PAGE_SIZE;
   const sel = selectedEntry();
   if (sel !== null) reveal(sel.index); // the selection is never lost to a sort or a search
@@ -312,8 +324,9 @@ function heading(p: { id: string | null; title: string | null }): string {
       </ol>
 
       <div v-if="hasPhases && filtered.length > 0" class="nav-footer" data-testid="roadmap-footer">
+        <button v-if="windowStart > 0" type="button" class="btn" data-testid="roadmap-earlier" @click="showEarlier">Show {{ Math.min(PAGE_SIZE, windowStart) }} earlier</button>
         <p class="muted" data-testid="roadmap-count">
-          Showing {{ visible.length }} of {{ filtered.length }} phases<template v-if="filtered.length !== entries.length"> (filtered from {{ entries.length }})</template><template v-if="truncatedByParser"> · roadmap truncated</template>
+          Showing {{ windowStart > 0 ? `${windowStart + 1}–${windowStart + visible.length}` : visible.length }} of {{ filtered.length }} phases<template v-if="filtered.length !== entries.length"> (filtered from {{ entries.length }})</template><template v-if="truncatedByParser"> · roadmap truncated</template>
         </p>
         <button v-if="remaining > 0" type="button" class="btn" data-testid="roadmap-more" @click="showMore">Show {{ Math.min(PAGE_SIZE, remaining) }} more</button>
         <p v-else class="muted" data-testid="roadmap-end">End of the list.</p>

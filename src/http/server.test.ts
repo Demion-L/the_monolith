@@ -354,11 +354,22 @@ describe('HTTP security', () => {
   });
 
   it('has an explicit default response limit and serves under it', async () => {
-    expect(MAX_RESPONSE_BYTES).toBe(2 * 1024 * 1024);
+    expect(MAX_RESPONSE_BYTES).toBe(4 * 1024 * 1024);
     fullProject();
     const r = await http(await start());
     expect(r.status).toBe(200);
     expect(Buffer.byteLength(r.body)).toBeLessThan(MAX_RESPONSE_BYTES);
+  });
+
+  it('serves a 2003-phase roadmap whole, within the response limit (BETA-020 Phase 4)', async () => {
+    fullProject();
+    const phases = Array.from({ length: 2003 }, (_, i) => `### Phase ${i + 1} — Title ${i + 1}\n\n**Status:** COMPLETED\n**Goal:** Goal ${i + 1}\n\nDetail ${i + 1}\n`).join('\n');
+    write(`.monolith/${ROADMAP_REL}`, `## Phases\n\n${phases}`);
+    const r = await http(await start());
+    expect(r.status).toBe(200);
+    const body = JSON.parse(r.body) as { roadmap: { data: { structured: { state: string; phases: unknown[] } } } };
+    expect(body.roadmap.data.structured.state).toBe('ok');
+    expect(body.roadmap.data.structured.phases).toHaveLength(2003);
   });
 });
 

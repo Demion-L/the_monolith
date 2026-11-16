@@ -55,10 +55,10 @@ export const MAX_REQUEST_BODY_BYTES = 64;
 export const LOOPBACK_HOST = '127.0.0.1';
 /**
  * Hard ceiling for one serialized response. The Core read limits (state 16 MiB,
- * active.md/roadmap 256 KiB) are protective ceilings of their own and can exceed
+ * active.md 256 KiB, roadmap 1 MiB) are protective ceilings of their own and can exceed
  * it; an over-limit DTO is refused whole, never truncated.
  */
-export const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 /** One file of the built UI, held in memory (loaded by `ui-assets.ts`, which is the only place that touches the disk). */
 export interface UiAsset {

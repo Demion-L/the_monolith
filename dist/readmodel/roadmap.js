@@ -29,7 +29,13 @@
 import { maskNonContent } from '../brief/markdown-context.js';
 /** Statuses the documents themselves declare (template comment + the MONOLITH roadmap). */
 const RECOGNIZED_STATUSES = new Set(['PLANNED', 'IN PROGRESS', 'COMPLETE', 'COMPLETED', 'NOT DEFINED']);
-export const MAX_ROADMAP_PHASES = 200;
+/**
+ * Parser capacity: a resource guard, not a product limit and not a display limit
+ * (the UI shows a small window of the phases and keeps all of them reachable).
+ * It is far above any realistic roadmap; if it is ever hit, the result is
+ * `partial` with `PHASES_TRUNCATED`, so a cut roadmap is never presented as whole.
+ */
+export const MAX_ROADMAP_PHASES = 10000;
 export const MAX_PHASE_DETAILS_CHARS = 8000;
 export const MAX_PHASE_GOAL_CHARS = 600;
 const MAX_STATUS_CHARS = 80;

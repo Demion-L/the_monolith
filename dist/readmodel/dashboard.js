@@ -35,7 +35,7 @@ import { parseRoadmapPhases } from './roadmap.js';
 import { hasCheckpointOrderMismatch, selectActiveMissions, selectLatestCheckpoint, } from '../brief/selectors.js';
 export const ROADMAP_REL = 'context/maps/roadmap-index.md';
 /** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
-export const MAX_ROADMAP_BYTES = 256 * 1024;
+export const MAX_ROADMAP_BYTES = 1024 * 1024;
 const CHANGED_RETRIES = 3;
 /**
  * Exhaustive over Core's `ProjectFileErrorCode`: a new Core code is a compile

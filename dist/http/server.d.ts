@@ -49,7 +49,7 @@ export declare const MAX_REQUEST_BODY_BYTES = 64;
 export declare const LOOPBACK_HOST = "127.0.0.1";
 /**
  * Hard ceiling for one serialized response. The Core read limits (state 16 MiB,
- * active.md/roadmap 256 KiB) are protective ceilings of their own and can exceed
+ * active.md 256 KiB, roadmap 1 MiB) are protective ceilings of their own and can exceed
  * it; an over-limit DTO is refused whole, never truncated.
  */
 export declare const MAX_RESPONSE_BYTES: number;

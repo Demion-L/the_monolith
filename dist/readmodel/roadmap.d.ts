@@ -27,7 +27,13 @@
  *   Active Phase: <id> — <title> | —     (read ONLY inside `## Current Focus`)
  */
 import type { StructuredRoadmapView } from './types.js';
-export declare const MAX_ROADMAP_PHASES = 200;
+/**
+ * Parser capacity: a resource guard, not a product limit and not a display limit
+ * (the UI shows a small window of the phases and keeps all of them reachable).
+ * It is far above any realistic roadmap; if it is ever hit, the result is
+ * `partial` with `PHASES_TRUNCATED`, so a cut roadmap is never presented as whole.
+ */
+export declare const MAX_ROADMAP_PHASES = 10000;
 export declare const MAX_PHASE_DETAILS_CHARS = 8000;
 export declare const MAX_PHASE_GOAL_CHARS = 600;
 export declare function parseRoadmapPhases(text: string): StructuredRoadmapView;

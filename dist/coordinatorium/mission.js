@@ -7,6 +7,7 @@
  */
 import { mutateState, readState } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
+import { STORY_ID_RE } from './types.js';
 const MISSION_ID_RE = /^MIS-(\d+)$/;
 const MISSION_RESULTS = ['completed', 'failed', 'cancelled'];
 function nextMissionId(missions) {
@@ -33,6 +34,13 @@ function requireNonEmptyString(value, field) {
 export async function startMission(target, input) {
     const title = requireNonEmptyString(input.title, 'title');
     const system = requireNonEmptyString(input.system, 'system');
+    let storyId;
+    if (input.storyId !== undefined) {
+        storyId = input.storyId.trim();
+        if (!STORY_ID_RE.test(storyId)) {
+            throw new ValidationError(`"storyId" must match ${STORY_ID_RE.source}, got ${JSON.stringify(input.storyId.slice(0, 80))}`);
+        }
+    }
     const { result } = await mutateState(target, (draft) => {
         const id = nextMissionId(draft.tactical.missions);
         const now = new Date().toISOString();
@@ -45,6 +53,8 @@ export async function startMission(target, input) {
             updatedAt: now,
             summary: null,
         };
+        if (storyId !== undefined)
+            mission.storyId = storyId;
         draft.tactical.missions[id] = mission;
         return mission;
     });

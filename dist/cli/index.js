@@ -55,7 +55,7 @@ Commands:
               (source checkout only). See 'monolith ui --help'.
 
 Mission usage:
-  monolith mission start --title "..." --system "..."
+  monolith mission start --title "..." --system "..." [--story <STORY-ID>]
   monolith mission list
   monolith mission show <id>
   monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
@@ -63,6 +63,8 @@ Mission usage:
   monolith mission checkpoints <missionId>
 
 Brief usage:
+  monolith state status
+  monolith state adopt <source> [--upgrade-v2] [--apply]   (preview unless --apply)
   monolith brief [--max-chars N] [--strict]
   monolith brief --reconcile [--max-chars N]   (read-only report: what the Freshness verdict rests on)
 
@@ -159,6 +161,11 @@ async function main() {
                     console.log(USAGE);
                     process.exit(1);
             }
+            break;
+        }
+        case 'state': {
+            const { runState } = await import('../coordinatorium/state-cli.js');
+            await runState(args.slice(1));
             break;
         }
         case 'brief': {

@@ -6,10 +6,12 @@
  * state-keeper.ts owns persistence and never knows what a mission is.
  */
 import { type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
-import type { Mission, MissionResult } from './types.js';
+import { type Mission, type MissionResult } from './types.js';
 export interface StartMissionInput {
     title: string;
     system: string;
+    /** Optional Story link. Format-checked only; never guessed and never defaulted to the current Story. */
+    storyId?: string;
 }
 /**
  * Register a new mission as in_progress. ID generation happens inside the

@@ -2,7 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CheckpointsPanel from './components/CheckpointsPanel.vue';
 import CurrentMission from './components/CurrentMission.vue';
+import DecisionsPanel from './components/DecisionsPanel.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
+import HypothesesPanel from './components/HypothesesPanel.vue';
 import ProjectOverview from './components/ProjectOverview.vue';
 import RoadmapPanel from './components/RoadmapPanel.vue';
 import SideNav from './components/SideNav.vue';
@@ -115,6 +117,8 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           <CurrentMission v-else-if="section === 'mission'" key="mission" :missions="data.missions" />
           <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
           <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" />
+          <HypothesesPanel v-else-if="section === 'hypotheses'" key="hypotheses" :items="data.hypotheses" :info="data.hypothesesInfo" :demo="data.isDemo" />
+          <DecisionsPanel v-else-if="section === 'decisions'" key="decisions" :items="data.decisions" :info="data.decisionsInfo" :demo="data.isDemo" />
           <DiagnosticsPanel v-else key="diagnostics" :data="data" />
         </Transition>
       </main>

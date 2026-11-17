@@ -1,5 +1,5 @@
-import type { DashboardReadModel, SourceReport } from '../../../src/readmodel/types';
-import type { Checkpoint, DashboardData, Diagnostic, DiagnosticSeverity, StoryState } from '../types/dashboard';
+import type { DashboardReadModel, KnowledgeData, Section, SourceReport } from '../../../src/readmodel/types';
+import type { Checkpoint, DashboardData, Diagnostic, DiagnosticSeverity, KnowledgeInfo, KnowledgeItem, StoryState } from '../types/dashboard';
 
 /**
  * Presentation adapter: `DashboardReadModel` (API) -> `DashboardData` (the
@@ -40,11 +40,43 @@ function toStoryState(model: DashboardReadModel): StoryState {
   return { kind: claim.kind, excerpt };
 }
 
+/**
+ * Knowledge section -> list + info. `undefined` (older server) stays `undefined`: the panel says "not provided".
+ * A failed source is `null` (never `[]`); `absent` = not available, anything else = error.
+ */
+function toKnowledge(sec: Section<KnowledgeData> | undefined): { items?: KnowledgeItem[] | null; info?: KnowledgeInfo } {
+  if (sec === undefined) return {};
+  const src = sec.sources[0];
+  if (sec.data === null) {
+    const absent = src !== undefined && src.status === 'absent';
+    return { items: null, info: { availability: absent ? 'not_available' : 'error', code: src?.code ?? null, complete: false, issues: [] } };
+  }
+  return {
+    items: sec.data.items.map((i): KnowledgeItem => ({
+      id: i.id,
+      title: i.title,
+      status: i.status,
+      summary: i.summary,
+      path: i.path,
+      ...(i.supersedes ? { supersedes: [...i.supersedes] } : {}),
+      ...(i.supersededBy ? { supersededBy: [...i.supersededBy] } : {}),
+    })),
+    info: {
+      availability: 'available',
+      code: null,
+      complete: sec.data.complete,
+      issues: sec.data.issues.map((x) => ({ code: x.code, severity: x.severity, path: x.path, id: x.id })),
+    },
+  };
+}
+
 export function toDashboardData(model: DashboardReadModel): DashboardData {
   const overview = model.projectOverview.data;
   const missions = model.currentMissions.data;
   const checkpoints = model.checkpoints.data;
   const roadmap = model.roadmap.data;
+  const hyp = toKnowledge(model.hypotheses);
+  const dec = toKnowledge(model.decisions);
 
   const diagnostics: Diagnostic[] = [
     { severity: 'info', message: 'Source availability only; monolith validate was not run.' },
@@ -89,6 +121,8 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
     roadmapText: roadmap === null ? null : roadmap.text,
     // Present only when Core supplied it; an older DTO yields `undefined` (legacy fallback), never invented phases.
     roadmap: roadmap?.structured,
+    ...(hyp.items !== undefined ? { hypotheses: hyp.items, hypothesesInfo: hyp.info } : {}),
+    ...(dec.items !== undefined ? { decisions: dec.items, decisionsInfo: dec.info } : {}),
     diagnostics,
   };
 }

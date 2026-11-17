@@ -81,7 +81,54 @@ export interface DashboardData {
   roadmapText: string | null;
   /** Core's structured roadmap. `undefined` = the source predates it (legacy DTO) or is a demo: fall back to the raw text. */
   roadmap?: StructuredRoadmapView;
+  /**
+   * `undefined` = the data source provides no such section (LIVE today: Core has no read model for it);
+   * `null` = the source exists but could not be read; `[]` = readable and genuinely empty.
+   */
+  hypotheses?: KnowledgeItem[] | null;
+  decisions?: KnowledgeItem[] | null;
+  /** LIVE only: how Core reported each knowledge source (availability, incompleteness, issues). */
+  hypothesesInfo?: KnowledgeInfo;
+  decisionsInfo?: KnowledgeInfo;
   diagnostics: Diagnostic[];
+}
+
+/**
+ * One hypothesis or ADR as the source states it (UI-004). Every field is the document's own
+ * claim: nothing is defaulted, so a missing status stays `null` and is shown as UNKNOWN, never
+ * as `accepted` / `validated`. Text fields are untrusted and rendered escaped.
+ */
+export interface KnowledgeItem {
+  /** `HYP-005`, `ADR-020`, ... */
+  id: string | null;
+  title: string | null;
+  /** Verbatim status as declared; may be a value the UI does not know. */
+  status: string | null;
+  summary: string | null;
+  /** Project-relative path of the source document. Displayed as text only; validated by `safeDocPath`. */
+  path: string | null;
+  /** Declared supersession only (`superseded_by` / `supersedes`); never inferred. */
+  supersededBy?: string[];
+  supersedes?: string[];
+}
+
+/**
+ * `not_available`: the source is absent. `error`: it exists but was refused or could not be read
+ * (`code` is Core's fixed code). Either way the item list is `null`, never `[]`.
+ */
+export interface KnowledgeInfo {
+  availability: 'available' | 'not_available' | 'error';
+  code: string | null;
+  /** False when Core could not interpret some documents/entries: the list is not exhaustive. */
+  complete: boolean;
+  issues: KnowledgeIssue[];
+}
+
+export interface KnowledgeIssue {
+  code: string;
+  severity: 'info' | 'warn';
+  path: string | null;
+  id: string | null;
 }
 
 export type ScenarioId = 'normal' | 'partial' | 'empty';

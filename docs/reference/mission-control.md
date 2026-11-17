@@ -25,6 +25,8 @@ The active section is kept in the URL hash, e.g. `#roadmap`.
 | Current Mission | Active missions |
 | Checkpoints | Latest checkpoints per active mission |
 | Roadmap | Structured roadmap: phases from `roadmap-index.md` with their status, goal and details, and the active phase when the document names one explicitly. The original Markdown stays available under "View original Markdown" |
+| Hypotheses | Hypotheses from `memory/long-term/hypotheses.md` (headings `## Title {#HYP-NNN}`): id, title, status as declared, short summary and expandable details. A source that cannot be read is shown as NOT AVAILABLE or as an error, never as an empty list; documents that are only partly readable are marked INCOMPLETE |
+| Architecture Decisions | ADRs from `docs/adr/ADR-*.md`, from their frontmatter (`id`, `title`, `status`, `supersedes`, `superseded_by`) as declared; ids are case-sensitive and an id that differs from the file name is reported as an issue. Links between ADRs are shown, never derived. `docs/adr/README.md` is not a source |
 | Diagnostics | Per-source read status (absent / forbidden / corrupt / unreadable) and notes |
 
 ### Structured Roadmap

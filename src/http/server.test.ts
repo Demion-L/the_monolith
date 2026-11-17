@@ -362,6 +362,36 @@ describe('HTTP security', () => {
   });
 });
 
+describe('Core integration — knowledge (UI-004B)', () => {
+  const adr = (id: string) => `---\nid: ${id}\ntitle: T\nstatus: accepted\n---\n`;
+
+  it('serves hypotheses and decisions without changing the existing fields', async () => {
+    fullProject();
+    write('.monolith/memory/long-term/hypotheses.md', '## A {#HYP-001}\n**Status:** active\n');
+    write('docs/adr/ADR-001-a.md', adr('ADR-001'));
+    const m = dto(await http(await start()));
+    expect(m.hypotheses!.data!.items.map((i) => i.id)).toEqual(['HYP-001']);
+    expect(m.decisions!.data!.items.map((i) => i.id)).toEqual(['ADR-001']);
+    expect(m).toEqual(readDashboardModel(dir));
+    expect(Object.keys(m).sort()).toEqual(['checkpoints', 'currentMissions', 'decisions', 'diagnostics', 'hypotheses', 'projectOverview', 'roadmap']);
+    expect(m.diagnostics.sources.map((x) => x.id)).toEqual(['config', 'state', 'activeStory', 'roadmap']);
+  });
+
+  it('read failures are DTO data (typed codes, no path or text), not HTTP errors', async () => {
+    fullProject();
+    write('secret.md', '## Leak {#HYP-666}\n**Status:** active\n', outside);
+    mkdirSync(join(dir, '.monolith/memory/long-term'), { recursive: true });
+    symlinkSync(join(outside, 'secret.md'), join(dir, '.monolith/memory/long-term/hypotheses.md'));
+    const r = await http(await start());
+    expect(r.status).toBe(200);
+    const m = dto(r);
+    expect(m.hypotheses).toEqual({ data: null, sources: [{ id: 'hypotheses', path: '.monolith/memory/long-term/hypotheses.md', status: 'forbidden', code: 'SOURCE_SYMLINK' }] });
+    expect(m.decisions!.sources[0]).toMatchObject({ status: 'absent' });
+    expect(r.body).not.toContain('HYP-666');
+    expect(r.body).not.toContain(outside);
+  });
+});
+
 describe('Core integration', () => {
   it('an absent optional source is DTO data, not an HTTP error', async () => {
     write('monolith.config.json', JSON.stringify({ project: { name: 'Demo' } }));

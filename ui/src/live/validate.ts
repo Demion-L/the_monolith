@@ -115,6 +115,49 @@ function isStructuredRoadmap(v: unknown): boolean {
   );
 }
 
+const ISSUE_CODES = [
+  'DOCUMENT_EMPTY', 'ITEMS_TRUNCATED', 'HYP_HEADING_MALFORMED', 'HYP_ID_DUPLICATE', 'HYP_STATUS_MISSING', 'HYP_STATUS_EMPTY',
+  'HYP_STATUS_CONFLICT', 'ADR_FILE_UNREADABLE', 'ADR_FILENAME_UNRECOGNIZED', 'ADR_FRONTMATTER_MISSING', 'ADR_FRONTMATTER_MALFORMED',
+  'ADR_ID_MISSING', 'ADR_ID_INVALID', 'ADR_ID_MISMATCH', 'ADR_ID_DUPLICATE', 'ADR_FIELD_DUPLICATE', 'ADR_STATUS_MISSING',
+  'ADR_LINK_INVALID', 'INTERNAL',
+];
+
+function isKnowledgeItem(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStrOrNull(v.id) &&
+    isStrOrNull(v.title) &&
+    isStrOrNull(v.status) &&
+    isStrOrNull(v.summary) &&
+    isStrOrNull(v.path) &&
+    (v.supersedes === undefined || isArr(v.supersedes, isStr)) &&
+    (v.supersededBy === undefined || isArr(v.supersededBy, isStr))
+  );
+}
+
+function isKnowledgeIssue(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.code) &&
+    ISSUE_CODES.includes(v.code) &&
+    (v.severity === 'info' || v.severity === 'warn') &&
+    isStrOrNull(v.path) &&
+    isStrOrNull(v.id) &&
+    isStrOrNull(v.reason)
+  );
+}
+
+function isKnowledgeData(d: unknown): boolean {
+  return (
+    isObj(d) &&
+    typeof d.complete === 'boolean' &&
+    Array.isArray(d.items) && d.items.every(isKnowledgeItem) &&
+    Array.isArray(d.issues) && d.issues.every(isKnowledgeIssue) &&
+    // `complete` must agree with the issues: a payload cannot claim completeness next to a warning.
+    d.complete === !d.issues.some((i: unknown) => isObj(i) && i.severity === 'warn')
+  );
+}
+
 function isOverview(d: unknown): boolean {
   return (
     isObj(d) &&
@@ -143,6 +186,8 @@ export function isDashboardReadModel(v: unknown): v is DashboardReadModel {
         ),
     ) &&
     isSection(v.roadmap, (d) => isObj(d) && isStr(d.text) && (d.structured === undefined || isStructuredRoadmap(d.structured))) &&
+    (v.hypotheses === undefined || isSection(v.hypotheses, isKnowledgeData)) &&
+    (v.decisions === undefined || isSection(v.decisions, isKnowledgeData)) &&
     isObj(diag) &&
     Array.isArray(diag.sources) &&
     diag.sources.every(isSourceReport) &&

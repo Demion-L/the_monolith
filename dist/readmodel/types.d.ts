@@ -14,7 +14,7 @@
  */
 import type { Checkpoint, Mission } from '../coordinatorium/types.js';
 /** The fixed, closed set of files this model reads. */
-export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap';
+export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions';
 /**
  * - available: read and (where applicable) parsed successfully
  * - absent:    the file does not exist (a legitimate state for a fresh project)
@@ -182,11 +182,54 @@ export interface ReadDiagnostics {
     sources: SourceReport[];
     notes: ReadNote[];
 }
+/**
+ * One hypothesis or ADR as the document itself declares it (UI-004B). Nothing is
+ * defaulted or inferred: a missing field is `null`, a status is verbatim (it may
+ * be a value the project's own legend does not define), and supersession links are
+ * only those written in the document. Text fields are untrusted.
+ */
+export interface KnowledgeItemView {
+    /** `HYP-005`, `ADR-020`, ... as declared. */
+    id: string | null;
+    title: string | null;
+    status: string | null;
+    /** Short, plain-text excerpt (bounded by Core); never HTML. */
+    summary: string | null;
+    /** Project-relative, `/`-separated path of the source document. */
+    path: string | null;
+    /** ADRs only: `supersedes` / `superseded_by` exactly as declared; never inferred, never checked against other ADRs. */
+    supersedes?: string[];
+    supersededBy?: string[];
+}
+export type KnowledgeIssueCode = 'DOCUMENT_EMPTY' | 'ITEMS_TRUNCATED' | 'HYP_HEADING_MALFORMED' | 'HYP_ID_DUPLICATE' | 'HYP_STATUS_MISSING' | 'HYP_STATUS_EMPTY' | 'HYP_STATUS_CONFLICT' | 'ADR_FILE_UNREADABLE' | 'ADR_FILENAME_UNRECOGNIZED' | 'ADR_FRONTMATTER_MISSING' | 'ADR_FRONTMATTER_MALFORMED' | 'ADR_ID_MISSING' | 'ADR_ID_INVALID' | 'ADR_ID_MISMATCH' | 'ADR_ID_DUPLICATE' | 'ADR_FIELD_DUPLICATE' | 'ADR_STATUS_MISSING' | 'ADR_LINK_INVALID' | 'INTERNAL';
+/** A fixed code plus a project-relative path; no document text. `warn` makes the list incomplete. */
+export interface KnowledgeIssueView {
+    code: KnowledgeIssueCode;
+    severity: 'info' | 'warn';
+    path: string | null;
+    /** Identifier involved (validated shape, bounded); null when none. */
+    id: string | null;
+    /** Reader failure (file-level issues only). */
+    reason: SourceErrorCode | null;
+}
+export interface KnowledgeData {
+    items: KnowledgeItemView[];
+    issues: KnowledgeIssueView[];
+    /** False when any `warn` issue means documents or entries could not be interpreted: the list must not be read as exhaustive. */
+    complete: boolean;
+}
 export interface DashboardReadModel {
     projectOverview: Section<ProjectOverview>;
     currentMissions: Section<CurrentMissions>;
     checkpoints: Section<CheckpointsData>;
     roadmap: Section<RoadmapData>;
+    /**
+     * Additive (UI-004B). `data === null` means the source is not available (see
+     * `sources[0].status`: `absent` = NOT AVAILABLE, anything else = ERROR); it is never an empty list.
+     * Absent from DTOs of older servers.
+     */
+    hypotheses?: Section<KnowledgeData>;
+    decisions?: Section<KnowledgeData>;
     diagnostics: ReadDiagnostics;
 }
 //# sourceMappingURL=types.d.ts.map

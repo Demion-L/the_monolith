@@ -4,6 +4,7 @@ import type { DashboardReadModel } from '../../../src/readmodel/types';
 import App from '../App.vue';
 import { DASHBOARD_ENDPOINT, DashboardLoadError, fetchDashboard } from '../live/client';
 import { toDashboardData } from '../live/adapter';
+import { SECTIONS } from '../sections';
 import { goTo, sweep } from './nav';
 
 const src = (id: string, status = 'available', code: string | null = null) =>
@@ -271,7 +272,7 @@ describe('App in LIVE mode (default)', () => {
       w.findAll(tag).filter((el) => !(tag === 'img' && el.element.matches('.sidebar .brand-logo'))).length;
     expect(w.findAll('.sidebar img')).toHaveLength(1);
     const injected = await sweep(w, () => ['script', 'img', 'b'].some((t) => untrusted(t) > 0));
-    expect(injected).toEqual([false, false, false, false, false]);
+    expect(injected).toEqual(SECTIONS.map(() => false));
     expect((window as unknown as { __pwn?: number }).__pwn).toBeUndefined();
   });
 

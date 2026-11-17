@@ -4,6 +4,8 @@ export const SECTIONS = [
   { id: 'mission', label: 'Current Mission' },
   { id: 'checkpoints', label: 'Checkpoints' },
   { id: 'roadmap', label: 'Roadmap' },
+  { id: 'hypotheses', label: 'Hypotheses' },
+  { id: 'decisions', label: 'Architecture Decisions' },
   { id: 'diagnostics', label: 'Diagnostics' },
 ] as const;
 

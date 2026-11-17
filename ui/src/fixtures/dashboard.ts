@@ -1,4 +1,4 @@
-import type { DashboardData, ScenarioId } from '../types/dashboard';
+import type { DashboardData, KnowledgeItem, ScenarioId } from '../types/dashboard';
 
 /**
  * SYNTHETIC DEMO DATA. The project below ("Tidewatch") is fictional and is
@@ -17,6 +17,30 @@ Phase 2 - Reporting
 
 Phase 3 - Alerts
 - Threshold notifications`;
+
+const demoHypotheses: KnowledgeItem[] = [
+  { id: 'HYP-001', title: 'Gauge readings can be batched hourly without losing alerts', status: 'active',
+    summary: 'Hourly batching halves ingest load; the open question is alert latency.', path: 'docs/hypotheses/hyp-001.md' },
+  { id: 'HYP-002', title: 'CSV import is sufficient for calibration offsets', status: 'validated',
+    summary: 'Field operators confirmed CSV works for all current gauges.', path: 'docs/hypotheses/hyp-002.md' },
+  { id: 'HYP-003', title: 'Per-gauge timezones are needed', status: 'rejected',
+    summary: 'A single harbor timezone covers every deployment so far.', path: 'docs/hypotheses/hyp-003.md' },
+  { id: 'HYP-004', title: 'Predictive alerts based on seasonal tide models', status: 'deferred', summary: null, path: 'docs/hypotheses.md' },
+  { id: 'HYP-005',
+    title: 'A deliberately very long hypothesis title that keeps going to check wrapping in narrow layouts: LongUnbrokenIdentifierSegment_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_0123456789',
+    status: 'draft', summary: '<b>Not bold</b> <script>alert(1)</script> markup in text is shown literally.', path: 'docs/hypotheses.md' },
+];
+
+const demoDecisions: KnowledgeItem[] = [
+  { id: 'ADR-001', title: 'Store readings in append-only daily files', status: 'superseded',
+    summary: 'Replaced when the store moved to a single indexed log.', path: 'docs/adr/ADR-001-daily-files.md', supersededBy: ['ADR-003'] },
+  { id: 'ADR-002', title: 'Use UTC internally, convert at the edge', status: 'accepted',
+    summary: 'All timestamps are stored in UTC.', path: 'docs/adr/ADR-002-utc.md' },
+  { id: 'ADR-003', title: 'Single indexed log for readings', status: 'accepted',
+    summary: 'One log with a time index.', path: 'docs/adr/ADR-003-indexed-log.md', supersedes: ['ADR-001'] },
+  { id: 'ADR-004', title: 'Push notifications through a webhook relay', status: 'proposed', summary: null, path: 'docs/adr/ADR-004-webhook.md' },
+  { id: 'ADR-005', title: 'Record without a declared status', status: null, summary: null, path: '../../etc/passwd' },
+];
 
 export const normalScenario: DashboardData = {
   isDemo: true,
@@ -68,6 +92,8 @@ export const normalScenario: DashboardData = {
     },
   ],
   roadmapText: roadmap,
+  hypotheses: demoHypotheses,
+  decisions: demoDecisions,
   diagnostics: [
     { severity: 'info', message: 'Fixture "normal" loaded.' },
     { severity: 'warning', message: 'Sample warning: fixture state revision is older than expected.' },
@@ -97,6 +123,8 @@ export const partialScenario: DashboardData = {
     },
   ],
   roadmapText: null,
+  hypotheses: null,
+  decisions: [{ id: null, title: null, status: null, summary: null, path: null }],
   diagnostics: [
     { severity: 'info', message: 'Fixture "partial" loaded.' },
     { severity: 'error', message: 'Sample error: roadmap source could not be read.' },
@@ -109,6 +137,8 @@ export const emptyScenario: DashboardData = {
   missions: [],
   checkpoints: [],
   roadmapText: '',
+  hypotheses: [],
+  decisions: [],
   diagnostics: [{ severity: 'info', message: 'Fixture "empty" loaded.' }],
 };
 

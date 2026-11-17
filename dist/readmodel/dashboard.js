@@ -26,43 +26,20 @@
 import { MAX_STATE_BYTES, validateState } from '../coordinatorium/index.js';
 import { resolveStateLocation, collectStateProvenance, openStateFileBounded } from '../coordinatorium/state-location.js';
 import { relative } from 'path';
-import { CONFIG_FILE_NAME, MAX_PROJECT_FILE_BYTES, isReadSecurityViolation, RootContainmentError, readProjectFile, resolveMonolithRoot, } from '../root/index.js';
+import { CONFIG_FILE_NAME, MAX_PROJECT_FILE_BYTES, RootContainmentError, readProjectFile, resolveMonolithRoot, } from '../root/index.js';
 import { MAX_ACTIVE_CONTEXT_BYTES } from '../brief/collect.js';
 import { ACTIVE_MD_REL } from '../brief/constants.js';
 import { extractCurrentStory } from '../brief/story.js';
 import { parseActiveStoryClaim } from '../brief/freshness.js';
 import { parseRoadmapPhases } from './roadmap.js';
+import { readKnowledge } from './knowledge.js';
+import { sourceFailure } from './source-failure.js';
 import { hasCheckpointOrderMismatch, selectActiveMissions, selectLatestCheckpoint, } from '../brief/selectors.js';
 export const ROADMAP_REL = 'context/maps/roadmap-index.md';
 /** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
 export const MAX_ROADMAP_BYTES = 1024 * 1024;
 const CHANGED_RETRIES = 3;
-/**
- * Exhaustive over Core's `ProjectFileErrorCode`: a new Core code is a compile
- * error here until it is mapped. The status of a security violation is NOT
- * decided here — `sourceFailure` takes it from Core's `isReadSecurityViolation`,
- * so the UI keeps no second classification of filesystem security. The
- * 'forbidden' entries only document that and are checked against Core in tests.
- */
-export const FILE_CODE_MAP = {
-    FILE_MISSING: ['absent', 'SOURCE_ABSENT'],
-    FILE_OUTSIDE_PROJECT: ['forbidden', 'SOURCE_OUTSIDE_PROJECT'],
-    FILE_UNRESOLVABLE: ['unreadable', 'SOURCE_UNRESOLVABLE'],
-    FILE_NOT_REGULAR: ['forbidden', 'SOURCE_NOT_REGULAR'],
-    FILE_EMPTY: ['corrupt', 'SOURCE_EMPTY'],
-    FILE_TOO_LARGE: ['unreadable', 'SOURCE_TOO_LARGE'],
-    FILE_CHANGED: ['unreadable', 'SOURCE_CHANGED'],
-    FILE_UNREADABLE: ['unreadable', 'SOURCE_UNREADABLE'],
-    FILE_SYMLINK: ['forbidden', 'SOURCE_SYMLINK'],
-    FILE_HARDLINKED: ['forbidden', 'SOURCE_HARDLINKED'],
-    READ_BOUNDARY_INVALID: ['forbidden', 'SOURCE_BOUNDARY_INVALID'],
-    READ_UNSUPPORTED_PLATFORM: ['forbidden', 'SOURCE_UNSUPPORTED_PLATFORM'],
-};
-/** Never maps a security violation to anything but 'forbidden'; no default for unknown codes. */
-function sourceFailure(code) {
-    const [status, sourceCode] = FILE_CODE_MAP[code];
-    return [isReadSecurityViolation(code) ? 'forbidden' : status, sourceCode];
-}
+export { FILE_CODE_MAP } from './source-failure.js';
 function report(id, path, status, code) {
     return { id, path, status, code };
 }
@@ -220,6 +197,9 @@ function unreadableModel(config, rootCode = 'ROOT_INVALID') {
         currentMissions: section(null, [state]),
         checkpoints: section(null, [state]),
         roadmap: section(null, [roadmap]),
+        // The root is untrusted, so nothing below it is read: not available (never an empty list).
+        hypotheses: section(null, [report('hypotheses', null, 'forbidden', rootCode)]),
+        decisions: section(null, [report('decisions', null, 'forbidden', rootCode)]),
         diagnostics: { validation: 'NOT_PERFORMED', sources: [config, state, story, roadmap], notes: [] },
     };
 }
@@ -305,6 +285,7 @@ function buildModel(projectRoot) {
         currentMissions: section(currentMissions, [stateResult.report]),
         checkpoints: section(checkpoints, [stateResult.report]),
         roadmap: section(roadmap, [roadmapLoaded.report]),
+        ...readKnowledge(projectRoot, root.monolithRoot),
         diagnostics: {
             validation: 'NOT_PERFORMED',
             sources: [config.report, stateResult.report, storyLoaded.report, roadmapLoaded.report],

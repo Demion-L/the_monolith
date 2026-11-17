@@ -11,11 +11,16 @@ export type {
   ValidationResultDto,
 } from './diagnostics-types.js';
 export { parseRoadmapPhases } from './roadmap.js';
+export { parseHypotheses, parseAdr, readKnowledge, HYPOTHESES_REL, ADR_DIR_REL } from './knowledge.js';
 export type {
   ActivePhaseView,
   CheckpointsData,
   CurrentMissions,
   DashboardReadModel,
+  KnowledgeData,
+  KnowledgeIssueCode,
+  KnowledgeIssueView,
+  KnowledgeItemView,
   MissionCheckpoints,
   NoteCode,
   ProjectOverview,

@@ -1,6 +1,6 @@
 ---
 type: adr
-id: adr-022
+id: ADR-022
 status: accepted
 date: 2026-11-02
 authority: authoritative

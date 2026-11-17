@@ -82,7 +82,7 @@ function formatStateKeeperBlock(sk) {
     return `\n## State Keeper\n  status: ${sk.status}${versionNote}\n  (source: ${san(sk.provenance.source)})\n`;
 }
 function formatMission(m) {
-    return `  - ${san(m.id)} [${m.status}] ${san(m.title)} (${san(m.system)}) — started ${san(m.startedAt)}\n`;
+    return `  - ${san(m.id)} [${m.status}] ${san(m.title)} (${san(m.system)})${m.storyId !== undefined ? ` story ${san(m.storyId)}` : ''} — started ${san(m.startedAt)}\n`;
 }
 function formatActiveMissionsBlock(missions, provenance) {
     const body = missions.length > 0 ? missions.map(formatMission).join('') : '  (none)\n';

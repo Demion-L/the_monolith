@@ -6,6 +6,7 @@
  */
 
 import { reportWriteWarning } from '../root/index.js';
+import { colorEnabled, paint, statusWord, wrapLine, wrapWidth } from '../cli/style.js';
 import { applyPlan, integrationComplete, planUpdate, type UpdateItem, type UpdatePlan } from './index.js';
 
 export const UPDATE_USAGE = `Usage: monolith update [--apply]
@@ -45,9 +46,19 @@ function printable(s: string): string {
   return s.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 }
 
+function heading(title: string): void {
+  console.log(`\n${paint(title, 'head', colorEnabled())}`);
+}
+
 function printPlan(plan: UpdatePlan): void {
-  const width = Math.max(...plan.items.map((i) => i.action.length));
-  for (const i of plan.items) console.log(`  ${i.action.padEnd(width)}  ${printable(i.path)}\n  ${' '.repeat(width)}  ${i.reason}`);
+  const on = colorEnabled();
+  const width = wrapWidth();
+  const col = Math.max(...plan.items.map((i) => i.action.length));
+  const pad = ' '.repeat(col + 4);
+  for (const i of plan.items) {
+    console.log(`  ${statusWord(i.action, on)}${' '.repeat(col - i.action.length)}  ${printable(i.path)}`);
+    console.log(paint(wrapLine(i.reason, width, pad, pad), 'dim', on));
+  }
 }
 
 function printEffects(items: UpdateItem[]): void {
@@ -66,11 +77,12 @@ function printProposals(items: UpdateItem[]): void {
 }
 
 function printChain(plan: UpdatePlan): void {
-  console.log('\nConsistency (instructions → routing → skill → CLI → storage):');
-  for (const c of plan.chain) console.log(`  ${c.ok ? 'ok  ' : 'FAIL'}  ${c.link}: ${printable(c.detail)}`);
+  const on = colorEnabled();
+  heading('Consistency (instructions → routing → skill → CLI → storage)');
+  for (const c of plan.chain) console.log(wrapLine(`${c.link}: ${printable(c.detail)}`, wrapWidth(), `  ${statusWord(c.ok ? 'ok' : 'FAIL', on)}${c.ok ? '    ' : '  '}`, '        '));
 }
 
-function verdict(plan: UpdatePlan, stale: string[] = []): string {
+function verdictText(plan: UpdatePlan, stale: string[] = []): string {
   const pending = plan.items.filter((i) => i.action === 'ADD' || i.action === 'UPDATE').length;
   const manual = plan.items.filter((i) => i.action === 'CONFLICT').length;
   const broken = plan.chain.filter((c) => !c.ok).length;
@@ -81,6 +93,12 @@ function verdict(plan: UpdatePlan, stale: string[] = []): string {
   if (stale.length > 0) parts.push(`${stale.length} change(s) skipped because the file changed meanwhile`);
   if (broken > 0 && parts.length === 0) parts.push(`${broken} consistency check(s) failing`);
   return `Agent integration: INCOMPLETE (${parts.join(', ')}). A partly installed integration is not active.`;
+}
+
+function printVerdict(plan: UpdatePlan, stale: string[] = []): void {
+  const on = colorEnabled();
+  const text = verdictText(plan, stale);
+  console.log(`\n${wrapLine(text, wrapWidth(), '', '  ')}`.replace(/\b(INCOMPLETE|COMPLETE)\b/, (w) => statusWord(w, on)));
 }
 
 export async function runUpdate(args: string[], targetDir = process.cwd()): Promise<number> {
@@ -94,15 +112,18 @@ export async function runUpdate(args: string[], targetDir = process.cwd()): Prom
   }
 
   const plan = planUpdate(targetDir);
-  console.log(`monolith update — ${apply ? 'apply' : 'preview (nothing is written)'}`);
-  console.log(`Instance root: ${plan.monolithRoot}/\n`);
+  const on = colorEnabled();
+  console.log(`${paint('MONOLITH update', 'head', on)} — ${apply ? 'apply' : 'preview (nothing is written)'}`);
+  console.log(`Mode: ${apply ? 'Apply' : 'Preview'}`);
+  console.log(`Instance root: ${plan.monolithRoot}/`);
+  heading('Files');
   printPlan(plan);
 
   if (!apply) {
     printEffects(plan.items);
     printProposals(plan.items);
     printChain(plan);
-    console.log(`\n${verdict(plan)}`);
+    printVerdict(plan);
     if (plan.items.some((i) => i.action === 'ADD' || i.action === 'UPDATE')) console.log('Run `monolith update --apply` to perform the ADD / UPDATE items.');
     return 0;
   }
@@ -117,6 +138,6 @@ export async function runUpdate(args: string[], targetDir = process.cwd()): Prom
   const after = planUpdate(targetDir);
   printProposals(after.items);
   printChain(after);
-  console.log(`\n${verdict(after, result.stale)}`);
+  printVerdict(after, result.stale);
   return integrationComplete(after) && result.stale.length === 0 ? 0 : 2;
 }

@@ -1,1 +1,1 @@
-export const MONOLITH_VERSION = '0.1.0-alpha.4';
+export const MONOLITH_VERSION = '0.2.0-beta.1';

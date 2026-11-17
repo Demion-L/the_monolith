@@ -25,6 +25,8 @@
  */
 
 import { MAX_STATE_BYTES, validateState } from '../coordinatorium/index.js';
+import { resolveStateLocation, collectStateProvenance, openStateFileBounded, type StateLocation, type StateProvenance } from '../coordinatorium/state-location.js';
+import { relative } from 'path';
 import type { CoordinatoriumState } from '../coordinatorium/types.js';
 import {
   CONFIG_FILE_NAME,
@@ -53,6 +55,7 @@ import type {
   DashboardReadModel,
   ProjectOverview,
   ReadNote,
+  StateProvenanceView,
   RoadmapData,
   StoryClaimView,
   StructuredRoadmapView,
@@ -65,7 +68,7 @@ import type {
 
 export const ROADMAP_REL = 'context/maps/roadmap-index.md';
 /** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
-export const MAX_ROADMAP_BYTES = 256 * 1024;
+export const MAX_ROADMAP_BYTES = 1024 * 1024;
 
 const CHANGED_RETRIES = 3;
 
@@ -161,16 +164,81 @@ interface StateResult {
   report: SourceReport;
   state: CoordinatoriumState | null;
   schemaVersionOnDisk: number | null;
+  provenance: StateProvenanceView | null;
 }
 
-function loadState(projectRoot: string, root: ResolvedMonolithRoot): StateResult {
-  const loaded = load(projectRoot, 'state', `${root.monolithRoot}/state.json`, MAX_STATE_BYTES);
-  if (loaded.content === null) return { report: loaded.report, state: null, schemaVersionOnDisk: null };
+function provenanceView(loc: StateLocation, p: StateProvenance): StateProvenanceView {
+  return {
+    mode: loc.kind === 'git-common-dir' ? 'shared' : loc.mode === 'isolated' ? 'isolated' : 'local',
+    location: loc.kind,
+    localReason: loc.localReason,
+    statePath: loc.displayPath,
+    revision: p.canonical.revision,
+    schemaVersion: p.canonical.schemaVersion,
+    monolithVersion: p.monolithVersion,
+    repositoryIdentity: p.repositoryIdentity,
+    worktreeCount: p.worktreeCount,
+    splitBrain: {
+      detected: p.splitBrain.detected,
+      canonicalMissingWithLocalData: p.splitBrain.canonicalMissingWithLocalData,
+      localStates: p.splitBrain.candidates.map((c) => ({
+        path: relative(loc.projectRoot, c.path),
+        status: c.status === 'absent' ? 'unreadable' : c.status,
+        schemaVersion: c.schemaVersion,
+        revision: c.revision,
+        missionCount: c.missionCount,
+        checkpointCount: c.checkpointCount,
+        currentWorktree: c.current,
+      })),
+    },
+  };
+}
+
+function loadState(projectRoot: string, root: ResolvedMonolithRoot, config: ConfigRead): StateResult {
+  let loc: StateLocation;
+  try {
+    loc = resolveStateLocation(projectRoot, config);
+  } catch {
+    return {
+      report: report('state', null, 'unreadable', 'SOURCE_BOUNDARY_INVALID'),
+      state: null,
+      schemaVersionOnDisk: null,
+      provenance: null,
+    };
+  }
+  let provenance: StateProvenanceView | null = null;
+  try {
+    provenance = provenanceView(loc, collectStateProvenance(loc));
+  } catch {
+    /* provenance is additive diagnostics: its failure never hides the state itself */
+  }
+
+  let loaded: Loaded;
+  if (loc.kind === 'git-common-dir') {
+    // The shared directory lies outside the project root, so it is its own boundary.
+    try {
+      const read = openStateFileBounded(loc, loc.displayPath, projectRoot);
+      if (read.ok && 'content' in read) {
+        loaded = { report: report('state', loc.displayPath, 'available', null), content: read.content };
+      } else if (!read.ok) {
+        const [status, code] = sourceFailure(read.code);
+        loaded = { report: report('state', loc.displayPath, status, code), content: null };
+      } else {
+        loaded = { report: report('state', loc.displayPath, 'unreadable', 'INTERNAL'), content: null };
+      }
+    } catch {
+      loaded = { report: report('state', loc.displayPath, 'unreadable', 'INTERNAL'), content: null };
+    }
+  } else {
+    loaded = load(projectRoot, 'state', `${root.monolithRoot}/state.json`, MAX_STATE_BYTES);
+  }
+  if (loaded.content === null) return { report: loaded.report, state: null, schemaVersionOnDisk: null, provenance };
 
   const corrupt = (code: SourceErrorCode): StateResult => ({
     report: withStatus(loaded.report, 'corrupt', code),
     state: null,
     schemaVersionOnDisk: null,
+    provenance,
   });
   if (loaded.content.trim() === '') return corrupt('SOURCE_EMPTY');
   let parsed: unknown;
@@ -182,7 +250,7 @@ function loadState(projectRoot: string, root: ResolvedMonolithRoot): StateResult
   try {
     const state = validateState(parsed);
     const onDisk = isPlainObject(parsed) && typeof parsed.schemaVersion === 'number' ? parsed.schemaVersion : null;
-    return { report: loaded.report, state, schemaVersionOnDisk: onDisk };
+    return { report: loaded.report, state, schemaVersionOnDisk: onDisk, provenance };
   } catch {
     return corrupt('SCHEMA_INVALID');
   }
@@ -220,7 +288,7 @@ function buildModel(projectRoot: string): DashboardReadModel {
   }
 
   const notes: ReadNote[] = [];
-  const stateResult = loadState(projectRoot, root);
+  const stateResult = loadState(projectRoot, root, config.read);
   const storyLoaded = load(projectRoot, 'activeStory', `${root.monolithRoot}/${ACTIVE_MD_REL}`, MAX_ACTIVE_CONTEXT_BYTES);
   const roadmapLoaded = load(projectRoot, 'roadmap', `${root.monolithRoot}/${ROADMAP_REL}`, MAX_ROADMAP_BYTES);
 
@@ -230,7 +298,7 @@ function buildModel(projectRoot: string): DashboardReadModel {
   const missions = state ? Object.values(state.tactical.missions) : [];
   const active = state ? selectActiveMissions(state) : [];
 
-  if (stateResult.schemaVersionOnDisk === 1) notes.push({ code: 'STATE_LEGACY_SCHEMA_MIGRATED', severity: 'info' });
+  if (stateResult.provenance?.splitBrain.detected) notes.push({ code: 'STATE_SPLIT_BRAIN', severity: 'warn' });
   if (active.length > 1) notes.push({ code: 'MULTIPLE_ACTIVE_MISSIONS', severity: 'info' });
 
   let currentStory: ProjectOverview['currentStory'] = null;
@@ -296,6 +364,7 @@ function buildModel(projectRoot: string): DashboardReadModel {
       validation: 'NOT_PERFORMED',
       sources: [config.report, stateResult.report, storyLoaded.report, roadmapLoaded.report],
       notes,
+      ...(stateResult.provenance ? { state: stateResult.provenance } : {}),
     },
   };
 }

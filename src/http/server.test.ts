@@ -43,7 +43,7 @@ function stateJson(): string {
   const m = { id: 'MIS-0001', title: 'T', system: 'sys', status: 'in_progress', startedAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', summary: null };
   const c = { id: 'MIS-0001-CKPT-0001', missionId: 'MIS-0001', createdAt: '2026-01-02T00:00:00.000Z', summary: 's', remainingSteps: ['r'], context: null };
   return JSON.stringify({
-    schemaVersion: 2, revision: 3, strategic: { systems: {} },
+    schemaVersion: 3, revision: 3, strategic: { systems: {} },
     tactical: { missions: { [m.id]: m }, checkpoints: { [c.id]: c } },
   });
 }
@@ -354,11 +354,22 @@ describe('HTTP security', () => {
   });
 
   it('has an explicit default response limit and serves under it', async () => {
-    expect(MAX_RESPONSE_BYTES).toBe(2 * 1024 * 1024);
+    expect(MAX_RESPONSE_BYTES).toBe(4 * 1024 * 1024);
     fullProject();
     const r = await http(await start());
     expect(r.status).toBe(200);
     expect(Buffer.byteLength(r.body)).toBeLessThan(MAX_RESPONSE_BYTES);
+  });
+
+  it('serves a 2003-phase roadmap whole, within the response limit (BETA-020 Phase 4)', async () => {
+    fullProject();
+    const phases = Array.from({ length: 2003 }, (_, i) => `### Phase ${i + 1} — Title ${i + 1}\n\n**Status:** COMPLETED\n**Goal:** Goal ${i + 1}\n\nDetail ${i + 1}\n`).join('\n');
+    write(`.monolith/${ROADMAP_REL}`, `## Phases\n\n${phases}`);
+    const r = await http(await start());
+    expect(r.status).toBe(200);
+    const body = JSON.parse(r.body) as { roadmap: { data: { structured: { state: string; phases: unknown[] } } } };
+    expect(body.roadmap.data.structured.state).toBe('ok');
+    expect(body.roadmap.data.structured.phases).toHaveLength(2003);
   });
 });
 
@@ -436,6 +447,9 @@ describe('architecture guards', () => {
   });
 
   it('declares no write-capable or CORS surface', () => {
-    expect(code).not.toMatch(/Access-Control|0\.0\.0\.0|'POST'|'PUT'|'DELETE'|'PATCH'/);
+    expect(code).not.toMatch(/Access-Control|0\.0\.0\.0|'PUT'|'DELETE'|'PATCH'/);
+    // POST exists only for the two diagnostic routes (Phase 3), and those never take a path or a project root.
+    expect(code.match(/'POST'/g)).toHaveLength(2);
+    expect(code).not.toMatch(/writeFile|appendFile|spawn|exec\(|execFile|child_process/);
   });
 });

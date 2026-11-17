@@ -101,7 +101,7 @@ function formatStateKeeperBlock(sk: StateKeeperSummary): string {
 }
 
 function formatMission(m: Mission): string {
-  return `  - ${san(m.id)} [${m.status}] ${san(m.title)} (${san(m.system)}) — started ${san(m.startedAt)}\n`;
+  return `  - ${san(m.id)} [${m.status}] ${san(m.title)} (${san(m.system)})${m.storyId !== undefined ? ` story ${san(m.storyId)}` : ''} — started ${san(m.startedAt)}\n`;
 }
 
 function formatActiveMissionsBlock(missions: Mission[], provenance: Provenance): string {

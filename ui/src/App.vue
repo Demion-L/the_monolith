@@ -12,6 +12,7 @@ import { DEFAULT_SECTION, isSectionId, sectionFromHash } from './sections';
 import type { SectionId } from './sections';
 import { DashboardLoadError, fetchDashboard } from './live/client';
 import type { DashboardLoadState } from './live/client';
+import { createRunners } from './live/diagnostics';
 import type { ScenarioId } from './types/dashboard';
 
 const params = new URLSearchParams(window.location.search);
@@ -24,6 +25,9 @@ function initialScenario(): ScenarioId {
   return scenarioIds.find((id) => id === params.get('scenario')) ?? 'normal';
 }
 const scenario = ref<ScenarioId>(initialScenario());
+
+// Owned here, not by the Diagnostics section: switching sections must not forget a run of this session.
+const runners = createRunners();
 
 const live = ref<DashboardLoadState>({ status: 'loading' });
 let request = 0;
@@ -115,7 +119,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           <CurrentMission v-else-if="section === 'mission'" key="mission" :missions="data.missions" />
           <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
           <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" />
-          <DiagnosticsPanel v-else key="diagnostics" :data="data" />
+          <DiagnosticsPanel v-else key="diagnostics" :data="data" :runners="demo ? undefined : runners" />
         </Transition>
       </main>
       <main v-else class="content">

@@ -6,7 +6,7 @@
  * interactive terminal; `NO_COLOR` (any non-empty value), `TERM=dumb`, pipes,
  * redirects and `--json` output stay plain. No dependency, no state.
  */
-export type Tone = 'good' | 'warn' | 'bad' | 'dim' | 'head';
+export type Tone = 'good' | 'warn' | 'bad' | 'dim' | 'head' | 'info';
 /** Status word → tone. Words not listed are never tinted. */
 export declare const STATUS_TONE: Readonly<Record<string, Tone>>;
 export interface TextStream {
@@ -23,4 +23,18 @@ export declare function statusWord(word: string, enabled: boolean): string;
  * otherwise untouched, so disabling colour returns the input byte for byte.
  */
 export declare function tintStatuses(text: string, enabled: boolean, labels?: readonly string[]): string;
+/**
+ * Output width for wrapped text: the terminal's column count on an interactive
+ * terminal (clamped to 40..100), otherwise `undefined` — pipes and redirects
+ * are never re-wrapped, so machine consumers keep one logical line per line.
+ */
+export declare function wrapWidth(stream?: TextStream & {
+    columns?: number;
+}, env?: NodeJS.ProcessEnv): number | undefined;
+/**
+ * Wraps one logical line at word boundaries to `width` columns (a word longer
+ * than the line is hard-split). `first` prefixes the first line, `rest` every
+ * continuation line (hanging indent). `width` undefined returns `first + text`.
+ */
+export declare function wrapLine(text: string, width: number | undefined, first?: string, rest?: string): string;
 //# sourceMappingURL=style.d.ts.map

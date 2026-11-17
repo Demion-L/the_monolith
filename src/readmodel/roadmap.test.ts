@@ -231,6 +231,34 @@ describe('parseRoadmapPhases — failure modes are distinguishable', () => {
   });
 });
 
+describe('parseRoadmapPhases — large roadmaps (parser capacity is not a display limit)', () => {
+  const build = (n: number, active?: number): string =>
+    `## Phases\n\n${Array.from({ length: n }, (_, i) => `### Phase ${i + 1} — Title ${i + 1}\n\n**Status:** ${i + 1 === n ? 'IN PROGRESS' : i % 7 === 0 ? 'Odd (custom)' : 'COMPLETED'}\n**Goal:** goal ${i + 1}\n`).join('\n')}\n## Current Focus\n\n${active === undefined ? '' : `Active Phase: ${active} — x\n`}`;
+
+  it.each([10, 200, 500, 2003])('reads all %i phases, whole and in document order', (n) => {
+    const r = parseRoadmapPhases(build(n, n));
+    expect(r.state).toBe('ok');
+    expect(r.phases).toHaveLength(n);
+    expect(r.phases.map((p) => p.id)).toEqual(Array.from({ length: n }, (_, i) => String(i + 1)));
+    expect(codes(r)).not.toContain('PHASES_TRUNCATED');
+    expect(r.activePhase).toEqual({ kind: 'phase', id: String(n) });
+  });
+
+  it('keeps unrecognised statuses unrecognised at scale and an undeclared active phase undeclared', () => {
+    const r = parseRoadmapPhases(build(2003));
+    expect(r.activePhase).toEqual({ kind: 'not_declared' });
+    expect(r.phases[0].status).toMatchObject({ value: 'Odd (custom)', recognized: false });
+    expect(r.phases[1].status).toMatchObject({ value: 'COMPLETED', recognized: true });
+  });
+
+  it('is fast enough on 2003 phases', () => {
+    const text = build(2003, 2003);
+    const t = Date.now();
+    parseRoadmapPhases(text);
+    expect(Date.now() - t).toBeLessThan(2000);
+  });
+});
+
 describe('parseRoadmapPhases — bounds and hostile text', () => {
   it('caps the number of phases and reports it', () => {
     const body = Array.from({ length: MAX_ROADMAP_PHASES + 5 }, (_, i) => `### Phase ${i + 1} — P\n\n**Status:** PLANNED\n`).join('\n');

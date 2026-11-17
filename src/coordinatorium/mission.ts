@@ -8,7 +8,7 @@
 
 import { mutateState, readState, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
-import type { CoordinatoriumState, Mission, MissionResult } from './types.js';
+import { STORY_ID_RE, type CoordinatoriumState, type Mission, type MissionResult } from './types.js';
 
 const MISSION_ID_RE = /^MIS-(\d+)$/;
 const MISSION_RESULTS: readonly MissionResult[] = ['completed', 'failed', 'cancelled'];
@@ -25,6 +25,8 @@ function nextMissionId(missions: Record<string, Mission>): string {
 export interface StartMissionInput {
   title: string;
   system: string;
+  /** Optional Story link. Format-checked only; never guessed and never defaulted to the current Story. */
+  storyId?: string;
 }
 
 function requireNonEmptyString(value: string, field: string): string {
@@ -43,6 +45,13 @@ function requireNonEmptyString(value: string, field: string): string {
 export async function startMission(target: StateWriteTarget, input: StartMissionInput): Promise<Mission> {
   const title = requireNonEmptyString(input.title, 'title');
   const system = requireNonEmptyString(input.system, 'system');
+  let storyId: string | undefined;
+  if (input.storyId !== undefined) {
+    storyId = input.storyId.trim();
+    if (!STORY_ID_RE.test(storyId)) {
+      throw new ValidationError(`"storyId" must match ${STORY_ID_RE.source}, got ${JSON.stringify(input.storyId.slice(0, 80))}`);
+    }
+  }
 
   const { result } = await mutateState(target, (draft: CoordinatoriumState) => {
     const id = nextMissionId(draft.tactical.missions);
@@ -56,6 +65,7 @@ export async function startMission(target: StateWriteTarget, input: StartMission
       updatedAt: now,
       summary: null,
     };
+    if (storyId !== undefined) mission.storyId = storyId;
     draft.tactical.missions[id] = mission;
     return mission;
   });

@@ -30,7 +30,7 @@ beforeEach(async () => {
   const c = { id: 'MIS-0042-CKPT-0001', missionId: 'MIS-0042', createdAt: '2026-01-02T00:00:00.000Z', summary: 'Integration checkpoint', remainingSteps: ['Integration step'], context: null };
   write('monolith.config.json', JSON.stringify({ project: { name: 'Integration Project' } }));
   write('.monolith/state.json', JSON.stringify({
-    schemaVersion: 2, revision: 3, strategic: { systems: {} },
+    schemaVersion: 3, revision: 3, strategic: { systems: {} },
     tactical: { missions: { [m.id]: m }, checkpoints: { [c.id]: c } },
   }));
   write('.monolith/memory/working/active.md', '# Active\n\n## Current Story\n\nIntegration story.\n');

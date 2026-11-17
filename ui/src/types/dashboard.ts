@@ -9,7 +9,8 @@
 
 /** Core's interpretation of the roadmap (UI-003C). The UI displays it; it never parses Markdown itself. */
 export type { StructuredRoadmapView, RoadmapPhaseView, ActivePhaseView, RoadmapDiagnosticCode } from '../../../src/readmodel/types';
-import type { StructuredRoadmapView } from '../../../src/readmodel/types';
+import type { StructuredRoadmapView, StateProvenanceView } from '../../../src/readmodel/types';
+export type { StateProvenanceView };
 
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
@@ -82,6 +83,10 @@ export interface DashboardData {
   /** Core's structured roadmap. `undefined` = the source predates it (legacy DTO) or is a demo: fall back to the raw text. */
   roadmap?: StructuredRoadmapView;
   diagnostics: Diagnostic[];
+  /** Availability of the fixed source files. `undefined` = not reported (demo). Not a validation result. */
+  sources?: { total: number; available: number };
+  /** Where the operational state lives (Phase 2). `undefined` = not provided (demo, older server, or location unresolved). */
+  provenance?: StateProvenanceView;
 }
 
 export type ScenarioId = 'normal' | 'partial' | 'empty';

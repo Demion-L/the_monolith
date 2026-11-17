@@ -108,6 +108,10 @@
   line-height: 1.55;
 }
 :root[data-skin="cosmic-glass"] .phase-active { border-color: var(--accent); }
+:root[data-skin="cosmic-glass"] .phase-selected { box-shadow: var(--glass-edge), 0 0 0 2px var(--accent); }
+:root[data-skin="cosmic-glass"] .nav-search input,
+:root[data-skin="cosmic-glass"] .nav-sort select { background: var(--glass-dense); border-radius: 8px; }
+:root[data-skin="cosmic-glass"] .diag-badge { background: rgba(240, 192, 64, 0.08); }
 :root[data-skin="cosmic-glass"] .status-badge { background: rgba(255, 255, 255, 0.06); }
 :root[data-skin="cosmic-glass"] .status-badge.status-unrecognized { background: rgba(240, 192, 64, 0.1); }
 :root[data-skin="cosmic-glass"] .phase-meta .tag { background: rgba(88, 166, 255, 0.12); }
@@ -164,3 +168,12 @@
   :root[data-skin="cosmic-glass"] .sidebar { background: rgba(8, 11, 32, 0.82); border-bottom-color: var(--border); }
   :root[data-skin="cosmic-glass"] .panel { padding: 14px 16px; background: rgba(12, 16, 40, 0.6); }
 }
+
+/* Interactive diagnostics (BETA-020 Phase 3): the same glass vocabulary, cyan for "running / info". */
+:root[data-skin="cosmic-glass"] { --info: #6fd3ff; }
+:root[data-skin="cosmic-glass"] .dcard { background: var(--surface-2); box-shadow: var(--glass-edge); border-color: var(--border); }
+:root[data-skin="cosmic-glass"] .conflict { background: rgba(255, 138, 133, 0.07); }
+:root[data-skin="cosmic-glass"] .splitbrain { background: rgba(240, 192, 64, 0.08); }
+/* Spacious layout: primary checks glow softly, secondary context stays calmer. */
+:root[data-skin="cosmic-glass"] .dcard-primary { box-shadow: var(--glass-edge), 0 0 28px rgba(150, 140, 255, 0.1); border-color: rgba(190, 200, 255, 0.3); }
+:root[data-skin="cosmic-glass"] .dcard-secondary { background: rgba(20, 24, 58, 0.5); }

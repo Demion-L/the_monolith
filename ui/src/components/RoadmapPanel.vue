@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import type { RoadmapDiagnosticCode, StructuredRoadmapView } from '../types/dashboard';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import type { RoadmapDiagnosticCode, RoadmapPhaseView, StructuredRoadmapView } from '../types/dashboard';
+
+/** UI display limit. Independent of the parser capacity: every phase stays reachable. */
+const PAGE_SIZE = 10;
+/** Stable selection contract: `?phase=<phase id as in the read model>`. */
+const PHASE_PARAM = 'phase';
+type SortOrder = 'newest' | 'oldest';
 
 const props = defineProps<{ text: string | null; structured?: StructuredRoadmapView }>();
 
@@ -51,6 +57,170 @@ const stateMessage = computed(() => {
   return st === 'empty' || st === 'no_phases' || st === 'unrecognized' || st === 'error' ? STATE_MESSAGES[st] : null;
 });
 
+// ---- Navigator state (view-only; never written back to the roadmap) ----
+const query = ref('');
+const sort = ref<SortOrder>('newest');
+/** The rendered window is [windowStart, windowStart + visibleCount) of the filtered list: never the whole roadmap. */
+const windowStart = ref(0);
+const visibleCount = ref(PAGE_SIZE);
+const selectedId = ref<string | null>(null);
+const notice = ref<string | null>(null);
+
+interface Entry { phase: RoadmapPhaseView; index: number; haystack: string }
+// Document (Read Model) order is the only ordering truth: never a parse of phase numbers.
+const entries = computed<Entry[]>(() =>
+  (view.value?.phases ?? []).map((phase, index) => ({
+    phase,
+    index,
+    haystack: `${phase.id ?? ''}\n${phase.id === null ? '' : `phase ${phase.id}`}\n${phase.title ?? ''}`.toLowerCase(),
+  })),
+);
+const filtered = computed<Entry[]>(() => {
+  const q = query.value.trim().toLowerCase();
+  const list = q === '' ? entries.value : entries.value.filter((e) => e.haystack.includes(q));
+  return sort.value === 'oldest' ? list : list.slice().reverse();
+});
+const visible = computed(() => filtered.value.slice(windowStart.value, windowStart.value + visibleCount.value));
+const remaining = computed(() => Math.max(0, filtered.value.length - windowStart.value - visibleCount.value));
+const truncatedByParser = computed(() => view.value?.diagnostics.some((d) => d.code === 'PHASES_TRUNCATED') ?? false);
+const currentPhase = computed(() => {
+  const i = view.value?.activePhase.kind === 'phase' ? view.value.phases.findIndex((p) => p.id === activeId.value) : -1;
+  return i === -1 ? null : entries.value[i];
+});
+
+// Per-phase diagnostics are shown inside their cards; only the global ones and a
+// grouped count remain in the list below, so thousands of phases never become thousands of rows.
+const phaseDiagnostics = computed(() => {
+  const byPhase = new Map<number, RoadmapDiagnosticCode[]>();
+  for (const d of view.value?.diagnostics ?? []) {
+    if (d.phaseIndex === null) continue;
+    byPhase.set(d.phaseIndex, [...(byPhase.get(d.phaseIndex) ?? []), d.code]);
+  }
+  return byPhase;
+});
+const globalDiagnostics = computed(() => (view.value?.diagnostics ?? []).filter((d) => d.phaseIndex === null));
+const groupedDiagnostics = computed(() => {
+  const groups = new Map<RoadmapDiagnosticCode, { severity: 'info' | 'warn'; count: number }>();
+  for (const d of view.value?.diagnostics ?? []) {
+    if (d.phaseIndex === null) continue;
+    const g = groups.get(d.code);
+    if (g === undefined) groups.set(d.code, { severity: d.severity, count: 1 });
+    else g.count++;
+  }
+  return [...groups].map(([code, g]) => ({ code, ...g }));
+});
+
+function positionOf(index: number): number {
+  return filtered.value.findIndex((e) => e.index === index);
+}
+function selectedEntry(): Entry | null {
+  if (selectedId.value === null) return null;
+  const hits = entries.value.filter((e) => e.phase.id === selectedId.value);
+  return hits.length === 1 ? hits[0] : null;
+}
+/** Make the entry rendered: keep the window if it already holds it, else open one page around it. */
+function reveal(index: number): boolean {
+  const pos = positionOf(index);
+  if (pos === -1) return false;
+  const inside = pos >= windowStart.value && pos < windowStart.value + visibleCount.value;
+  if (!inside) {
+    windowStart.value = Math.max(0, Math.floor(pos / PAGE_SIZE) * PAGE_SIZE - PAGE_SIZE);
+    visibleCount.value = Math.max(PAGE_SIZE, Math.ceil((pos + 1 + PAGE_SIZE - windowStart.value) / PAGE_SIZE) * PAGE_SIZE);
+  }
+  return true;
+}
+function showEarlier(): void {
+  const step = Math.min(PAGE_SIZE, windowStart.value);
+  windowStart.value -= step;
+  visibleCount.value += step;
+}
+function resetWindow(): void {
+  windowStart.value = 0;
+  visibleCount.value = PAGE_SIZE;
+  const sel = selectedEntry();
+  if (sel !== null) reveal(sel.index); // the selection is never lost to a sort or a search
+}
+watch([query, sort], resetWindow);
+
+function writeParam(id: string | null): void {
+  try {
+    const url = new URL(window.location.href);
+    if (id === null) url.searchParams.delete(PHASE_PARAM);
+    else url.searchParams.set(PHASE_PARAM, id);
+    window.history.replaceState(window.history.state, '', url);
+  } catch {
+    /* navigation state is a convenience; the selection still works without it */
+  }
+}
+function select(id: string | null): void {
+  selectedId.value = id;
+  writeParam(id);
+}
+async function scrollTo(index: number): Promise<void> {
+  await nextTick();
+  const el = document.querySelector<HTMLElement>(`[data-phase-index="${index}"]`);
+  el?.scrollIntoView?.({ block: 'center' });
+  el?.focus?.({ preventScroll: true });
+}
+function toggleSelect(e: Entry): void {
+  notice.value = null;
+  if (e.phase.id === null || duplicateIds.value.has(e.phase.id)) return;
+  select(selectedId.value === e.phase.id ? null : e.phase.id);
+}
+const duplicateIds = computed(() => {
+  const seen = new Set<string>();
+  const dup = new Set<string>();
+  for (const p of view.value?.phases ?? []) {
+    if (p.id === null) continue;
+    if (seen.has(p.id)) dup.add(p.id);
+    seen.add(p.id);
+  }
+  return dup;
+});
+async function goToCurrent(): Promise<void> {
+  const cur = currentPhase.value;
+  if (cur === null || cur.phase.id === null) {
+    notice.value = 'Current phase could not be identified from the roadmap.';
+    return;
+  }
+  notice.value = null;
+  query.value = ''; // a search must not hide the target
+  await nextTick();
+  select(cur.phase.id);
+  reveal(cur.index);
+  await scrollTo(cur.index);
+}
+function showMore(): void {
+  visibleCount.value += PAGE_SIZE;
+}
+function clearSearch(): void {
+  query.value = '';
+}
+
+onMounted(() => {
+  // Entering with `?phase=<id>` selects exactly that phase, if the roadmap has it exactly once.
+  const wanted = new URLSearchParams(window.location.search).get(PHASE_PARAM);
+  if (wanted === null || view.value === undefined) return;
+  const hits = entries.value.filter((e) => e.phase.id === wanted);
+  if (hits.length !== 1) {
+    notice.value = 'The requested phase is not available in this roadmap.';
+    return;
+  }
+  selectedId.value = wanted;
+  reveal(hits[0].index);
+  void scrollTo(hits[0].index);
+});
+
+/** Status / provenance / diagnostics are separate things; the long text is kept for the details. */
+function statusParts(p: RoadmapPhaseView): { label: string; full: string | null } {
+  const v = p.status.value;
+  if (v === null) return { label: 'STATUS NOT STATED', full: null };
+  const m = /^(.*?)\s*(?:\(|\s[—–-]\s|:)/.exec(v);
+  if (m !== null && m[1] !== '') return { label: m[1], full: v };
+  if (v.length > 32) return { label: `${v.slice(0, 32).trimEnd()}…`, full: v };
+  return { label: v, full: null };
+}
+
 function heading(p: { id: string | null; title: string | null }): string {
   const id = p.id === null ? '' : `Phase ${p.id}`;
   if (p.title === null) return id === '' ? 'Untitled phase' : id;
@@ -85,34 +255,89 @@ function heading(p: { id: string | null; title: string | null }): string {
 
       <p v-if="hasPhases && activeNote" class="muted" data-testid="roadmap-active-note">{{ activeNote }}</p>
 
+      <p v-if="truncatedByParser" class="muted" role="status" data-testid="roadmap-truncated">
+        <span class="unknown">INCOMPLETE</span> This roadmap exceeds the parser's capacity; only the first {{ structured.phases.length }} phases were read. The list below is not the whole roadmap.
+      </p>
+
+      <div v-if="hasPhases" class="navigator" data-testid="roadmap-navigator">
+        <p v-if="currentPhase" class="nav-current" data-testid="roadmap-current">
+          <span class="muted">Current phase</span> {{ heading(currentPhase.phase) }}
+        </p>
+        <div class="nav-controls">
+          <label class="nav-search">
+            <span class="sr-only">Search phases</span>
+            <input v-model="query" type="search" placeholder="Search phases by id, number or title…" autocomplete="off" data-testid="roadmap-search" />
+          </label>
+          <button v-if="query !== ''" type="button" class="btn" data-testid="roadmap-search-clear" @click="clearSearch">Clear</button>
+          <label class="nav-sort">
+            <span class="muted">Sort</span>
+            <select v-model="sort" data-testid="roadmap-sort">
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-primary" data-testid="roadmap-go-current" @click="goToCurrent">Go to Current Phase</button>
+        </div>
+        <p v-if="notice" class="muted" role="status" data-testid="roadmap-notice">{{ notice }}</p>
+      </div>
+
+      <p v-if="hasPhases && filtered.length === 0" class="empty" role="status" data-testid="roadmap-no-results">No phases match "{{ query }}".</p>
+
       <ol v-if="hasPhases" class="phases" data-testid="roadmap-phases">
         <li
-          v-for="(p, i) in structured.phases"
-          :key="i"
+          v-for="e in visible"
+          :key="e.index"
           class="phase"
-          :class="{ 'phase-active': p.id !== null && p.id === activeId }"
+          :class="{ 'phase-active': e.phase.id !== null && e.phase.id === activeId, 'phase-selected': e.phase.id !== null && e.phase.id === selectedId }"
+          :data-phase-index="e.index"
+          :data-phase-id="e.phase.id ?? undefined"
+          tabindex="-1"
           data-testid="roadmap-phase"
         >
-          <h3 class="phase-title">{{ heading(p) }}</h3>
+          <div class="phase-head">
+            <h3 class="phase-title">{{ heading(e.phase) }}</h3>
+            <button
+              v-if="e.phase.id !== null && !duplicateIds.has(e.phase.id)"
+              type="button"
+              class="btn btn-quiet"
+              :aria-pressed="e.phase.id === selectedId"
+              data-testid="phase-select"
+              @click="toggleSelect(e)"
+            >{{ e.phase.id === selectedId ? 'Selected' : 'Select' }}</button>
+          </div>
           <p class="phase-meta">
-            <span v-if="p.status.value !== null" class="status-badge" :class="{ 'status-unrecognized': !p.status.recognized }" data-testid="phase-status">
-              {{ p.status.value }} · REPORTED<template v-if="!p.status.recognized"> · UNRECOGNIZED</template>
-            </span>
-            <span v-else class="status-badge status-unrecognized" data-testid="phase-status">STATUS NOT STATED</span>
-            <span v-if="p.id !== null && p.id === activeId" class="tag" data-testid="phase-active">ACTIVE</span>
+            <span class="status-badge" :class="{ 'status-unrecognized': !e.phase.status.recognized }" data-testid="phase-status">{{ statusParts(e.phase).label }}</span>
+            <span class="prov" data-testid="phase-provenance">{{ e.phase.status.provenance }}</span>
+            <span v-if="e.phase.status.value !== null && !e.phase.status.recognized" class="diag-badge" data-testid="phase-unrecognized">UNRECOGNIZED</span>
+            <span v-if="e.phase.id !== null && e.phase.id === activeId" class="tag" data-testid="phase-active">ACTIVE</span>
           </p>
-          <p v-if="p.goal !== null" class="phase-goal" data-testid="phase-goal"><span class="muted">Goal:</span> {{ p.goal }}<span v-if="p.goalTruncated === true" class="tag tag-neutral" data-testid="goal-truncated"> Truncated</span></p>
-          <details v-if="p.details !== null" class="phase-details" data-testid="phase-details">
-            <summary>Details</summary>
-            <pre class="roadmap">{{ p.details }}</pre>
+          <p v-if="e.phase.goal !== null" class="phase-goal" data-testid="phase-goal"><span class="muted">Goal:</span> {{ e.phase.goal }}<span v-if="e.phase.goalTruncated === true" class="tag tag-neutral" data-testid="goal-truncated"> Truncated</span></p>
+          <details v-if="e.phase.details !== null || statusParts(e.phase).full !== null || phaseDiagnostics.has(e.index)" class="phase-details" data-testid="phase-details">
+            <summary>Show Details</summary>
+            <p v-if="statusParts(e.phase).full !== null" class="phase-full-status" data-testid="phase-full-status"><span class="muted">Reported status:</span> {{ statusParts(e.phase).full }}</p>
+            <ul v-if="phaseDiagnostics.has(e.index)" class="diag" data-testid="phase-diagnostics">
+              <li v-for="(c, k) in phaseDiagnostics.get(e.index)" :key="k" class="sev-warning">{{ DIAGNOSTIC_LABELS[c] ?? c }}</li>
+            </ul>
+            <pre v-if="e.phase.details !== null" class="roadmap">{{ e.phase.details }}</pre>
           </details>
         </li>
       </ol>
 
-      <ul v-if="structured.diagnostics.length > 0" class="diag roadmap-diag" data-testid="roadmap-diagnostics">
-        <li v-for="(d, i) in structured.diagnostics" :key="i" :class="d.severity === 'warn' ? 'sev-warning' : 'sev-info'">
-          <span class="sev">{{ d.severity === 'warn' ? 'warn' : 'info' }}</span>
-          <template v-if="d.phaseIndex !== null && structured.phases[d.phaseIndex]">{{ heading(structured.phases[d.phaseIndex]) }}: </template>{{ DIAGNOSTIC_LABELS[d.code] ?? d.code }}
+      <div v-if="hasPhases && filtered.length > 0" class="nav-footer" data-testid="roadmap-footer">
+        <button v-if="windowStart > 0" type="button" class="btn" data-testid="roadmap-earlier" @click="showEarlier">Show {{ Math.min(PAGE_SIZE, windowStart) }} earlier</button>
+        <p class="muted" data-testid="roadmap-count">
+          Showing {{ windowStart > 0 ? `${windowStart + 1}–${windowStart + visible.length}` : visible.length }} of {{ filtered.length }} phases<template v-if="filtered.length !== entries.length"> (filtered from {{ entries.length }})</template><template v-if="truncatedByParser"> · roadmap truncated</template>
+        </p>
+        <button v-if="remaining > 0" type="button" class="btn" data-testid="roadmap-more" @click="showMore">Show {{ Math.min(PAGE_SIZE, remaining) }} more</button>
+        <p v-else class="muted" data-testid="roadmap-end">End of the list.</p>
+      </div>
+
+      <ul v-if="globalDiagnostics.length > 0 || groupedDiagnostics.length > 0" class="diag roadmap-diag" data-testid="roadmap-diagnostics">
+        <li v-for="(d, i) in globalDiagnostics" :key="`g${i}`" :class="d.severity === 'warn' ? 'sev-warning' : 'sev-info'">
+          <span class="sev">{{ d.severity === 'warn' ? 'warn' : 'info' }}</span>{{ DIAGNOSTIC_LABELS[d.code] ?? d.code }}
+        </li>
+        <li v-for="g in groupedDiagnostics" :key="g.code" :class="g.severity === 'warn' ? 'sev-warning' : 'sev-info'" data-testid="roadmap-diagnostic-group">
+          <span class="sev">{{ g.severity === 'warn' ? 'warn' : 'info' }}</span>{{ DIAGNOSTIC_LABELS[g.code] ?? g.code }} ({{ g.count }} {{ g.count === 1 ? 'phase' : 'phases' }}; see the phase details)
         </li>
       </ul>
 

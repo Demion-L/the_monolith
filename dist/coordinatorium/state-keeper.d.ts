@@ -69,28 +69,10 @@ export type StateReadTarget = {
 /**
  * Validate the shape of parsed JSON and return a typed, defensively-copied
  * CoordinatoriumState. Throws StateSchemaError for anything that does not
- * match a supported schema version — this function never "fixes" or
- * partially accepts malformed state.
- *
- * Supports exactly two on-disk shapes:
- * - `schemaVersion: 2` (current) — `tactical.checkpoints` is required.
- * - `schemaVersion: 1` (legacy, pre-COORDINATORIUM-002) — migrated
- *   in-memory to v2 on read (see `migrateV1ToV2`). Anything else
- *   (including a *newer* version this binary doesn't know about) is
- *   rejected outright — this is the deliberate fix for the compatibility
- *   gap an independent review found in the first COORDINATORIUM-002 cut:
- *   that cut kept `schemaVersion` at 1 while adding `tactical.checkpoints`,
- *   so an *older* binary (hardcoded to `schemaVersion === 1`, with no
- *   notion of checkpoints) could read a checkpoint-bearing v1-tagged file,
- *   reconstruct state from only the fields it knew about (`tactical: {
- *   missions }`, dropping checkpoints entirely — this function has never
- *   been a passthrough for unknown fields), and silently overwrite the
- *   file on its next mutateState call, destroying checkpoint history with
- *   no error raised. Bumping to 2 converts that silent data loss into a
- *   loud, immediate `StateSchemaError` for any reader that doesn't
- *   understand v2 — the version check below runs before anything is ever
- *   read into a mutable draft, so mutateState never reaches its write step
- *   (same proven pattern as the existing corrupted-JSON guard).
+ * match the current schema — this function never "fixes", migrates or
+ * partially accepts anything. An older (or newer) `schemaVersion` is rejected
+ * outright, so a read-modify-write can never reach its write step and replace
+ * a file this binary does not understand (NO LEGACY: BETA-020).
  */
 export declare function validateState(raw: unknown): CoordinatoriumState;
 /**
@@ -110,6 +92,31 @@ export declare function readState(target: StateReadTarget): Promise<Coordinatori
 export declare function mutateState<T>(target: StateWriteTarget, mutator: (draft: CoordinatoriumState) => T, lockOptions?: LockOptions): Promise<{
     state: CoordinatoriumState;
     result: T;
+    warnings: WriteWarning[];
+}>;
+export interface ReplaceDecision {
+    /** The complete state to publish. The caller has validated it; its `revision` is used as given. */
+    state: CoordinatoriumState;
+    /** Keep a byte-exact copy of the current file under this name (same directory) before replacing it. */
+    backupName: string | null;
+}
+/**
+ * Replace the whole state file under the same exclusive lock and the same safe
+ * write path as `mutateState` — for `monolith state adopt` only. Unlike
+ * `mutateState` it does NOT require the current file to be a valid current-schema
+ * state (an incompatible or corrupt destination is exactly what an adoption may
+ * have to replace), so it hands the raw bytes to `decide` instead.
+ *
+ * Order: read raw -> `decide` (may throw: nothing written) -> backup (if asked;
+ * a failed backup aborts before the destination is touched) -> atomic replace ->
+ * read back and compare. A mismatch after publication throws, and the backup
+ * still exists.
+ */
+export declare function replaceStateUnderLock(target: StateWriteTarget, decide: (current: {
+    raw: string | null;
+}) => ReplaceDecision, lockOptions?: LockOptions): Promise<{
+    state: CoordinatoriumState;
+    backupPath: string | null;
     warnings: WriteWarning[];
 }>;
 //# sourceMappingURL=state-keeper.d.ts.map

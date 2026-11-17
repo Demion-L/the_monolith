@@ -6,6 +6,7 @@ import { dirname, join } from 'path';
 import {
   evaluateFreshness,
   extractWorkItemIds,
+  findContradictions,
   parseActiveStoryClaim,
   parseRoadmapActiveStory,
   parseRoadmapStatuses,
@@ -46,6 +47,34 @@ function evidence(overrides: Partial<FreshnessEvidence> = {}): FreshnessEvidence
 function gitWith(commitsSince: ReturnType<typeof commit>[], truncated = false): GitSignals {
   return { status: 'ok', lastStateUpdate: LAST, commitsSince, truncated };
 }
+
+describe('findContradictions: the conflicting claims, document by document (BETA-020 Phase 3)', () => {
+  const sources = (e: Partial<FreshnessEvidence>) => findContradictions(evidence(e)).map((c) => ({ documents: c.documents, sources: c.sources }));
+
+  it('names what each document claims, in the same order as `documents`', () => {
+    expect(sources({ activeStory: { kind: 'none' }, roadmapActiveStory: 'SUPPORT-003' })).toEqual([
+      { documents: ['active.md', 'roadmap-index.md'], sources: [{ document: 'active.md', claim: 'No active story' }, { document: 'roadmap-index.md', claim: 'Active Story: SUPPORT-003' }] },
+    ]);
+    expect(sources({ activeStory: { kind: 'ids', ids: ['WIDGET-001'] }, roadmapStatuses: new Map([['WIDGET-001', 'COMPLETED']]) })).toEqual([
+      { documents: ['active.md', 'roadmap-index.md'], sources: [{ document: 'active.md', claim: 'WIDGET-001 is current' }, { document: 'roadmap-index.md', claim: 'WIDGET-001 is COMPLETED' }] },
+    ]);
+    expect(sources({ roadmapStatuses: new Map([['WIDGET-001', 'PLANNED']]), storyIndexStatuses: new Map([['WIDGET-001', 'DONE']]) })).toEqual([
+      { documents: ['roadmap-index.md', 'story-index.md'], sources: [{ document: 'roadmap-index.md', claim: 'WIDGET-001 is PLANNED' }, { document: 'story-index.md', claim: 'WIDGET-001 is DONE' }] },
+    ]);
+  });
+
+  it('a self-contradicting active.md shows both of its own claims, and clips untrusted text', () => {
+    const [c] = sources({ activeStory: { kind: 'unknown', contradiction: ['X'.repeat(200)] } });
+    expect(c.documents).toEqual(['active.md']);
+    expect(c.sources?.map((s) => s.document)).toEqual(['active.md', 'active.md']);
+    expect(c.sources?.[0].claim).toBe('No active story');
+    expect(c.sources?.[1].claim.length).toBeLessThanOrEqual('**Story:** '.length + 80 + 2);
+  });
+
+  it('reports no conflict where there is none', () => {
+    expect(sources({ activeStory: { kind: 'none' }, roadmapActiveStory: 'None' })).toEqual([]);
+  });
+});
 
 describe('evaluateFreshness', () => {
   it('1. FRESH only with positive evidence: git readable, state located, nothing beyond state files changed since', () => {

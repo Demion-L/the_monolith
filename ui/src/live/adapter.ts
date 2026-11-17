@@ -47,7 +47,7 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
   const roadmap = model.roadmap.data;
 
   const diagnostics: Diagnostic[] = [
-    { severity: 'info', message: 'Source availability only; monolith validate was not run.' },
+    { severity: 'info', message: 'Source availability only; this is not a validation result.' },
     ...model.diagnostics.sources.map((s) => ({ severity: SOURCE_SEVERITY[s.status], message: sourceMessage(s) })),
     ...model.diagnostics.notes.map((n) => ({
       severity: (n.severity === 'warn' ? 'warning' : 'info') as DiagnosticSeverity,
@@ -90,5 +90,10 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
     // Present only when Core supplied it; an older DTO yields `undefined` (legacy fallback), never invented phases.
     roadmap: roadmap?.structured,
     diagnostics,
+    sources: {
+      total: model.diagnostics.sources.length,
+      available: model.diagnostics.sources.filter((s) => s.status === 'available').length,
+    },
+    provenance: model.diagnostics.state,
   };
 }

@@ -6,26 +6,45 @@
  * into mission.ts, and formats output. All lifecycle/validation logic lives
  * in mission.ts.
  */
-import { resolveMonolithRoot, assertContainedFile, reportWriteWarning, SafeWriteError } from '../root/index.js';
-import { LockCreationError } from './errors.js';
-import { STATE_FILE_NAME, projectTarget } from './state-keeper.js';
+import { reportWriteWarning, SafeWriteError } from '../root/index.js';
+import { LockCreationError, StateAdoptionRequiredError } from './errors.js';
+import { resolveStateLocation, stateReadTargetOf, stateWriteTargetOf, collectStateProvenance, formatSplitBrain, describeFile, } from './state-location.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
-// Reads use the same PROJECT scope as writes (SEC-001B.1-R): the project root is
-// the explicit boundary, so a symlink anywhere below it is refused.
-function readTargetFor(targetDir) {
-    const root = resolveMonolithRoot(targetDir);
-    assertContainedFile(root, STATE_FILE_NAME);
-    return projectTarget(root.projectRoot, root.rootAbs);
+// One resolver for every command (BETA-020 Phase 2): the shared state in the git
+// common directory by default, the project-local file only when isolated or when
+// there is no git worktree. Local layouts keep the project-scope containment
+// checks (ADR-012); the shared directory is a trusted-directory scope.
+/** Split-brain is reported on stderr, never silently: an empty answer must not look like lost history. */
+function warnAboutLocalStates(targetDir) {
+    const loc = resolveStateLocation(targetDir);
+    if (loc.kind !== 'git-common-dir')
+        return;
+    const provenance = collectStateProvenance(loc);
+    for (const line of formatSplitBrain(provenance))
+        console.error(line);
 }
-// Writes always use PROJECT scope (ADR-012): the project root is the boundary,
-// so a symlinked `monolithRoot` or intermediate directory is refused even when
-// it stays inside the project.
+function readTargetFor(targetDir) {
+    warnAboutLocalStates(targetDir);
+    return stateReadTargetOf(resolveStateLocation(targetDir));
+}
+// A write that would start an EMPTY shared state next to worktree-local files
+// holding data is refused: to the user it would look like the history was lost.
 function writeTargetFor(targetDir) {
-    const root = resolveMonolithRoot(targetDir);
-    assertContainedFile(root, STATE_FILE_NAME);
-    assertContainedFile(root, `${STATE_FILE_NAME}.lock`);
-    return projectTarget(root.projectRoot, root.rootAbs, (w) => reportWriteWarning(w));
+    const loc = resolveStateLocation(targetDir);
+    if (loc.kind === 'git-common-dir') {
+        const provenance = collectStateProvenance(loc);
+        if (provenance.splitBrain.canonicalMissingWithLocalData) {
+            throw new StateAdoptionRequiredError([
+                ...formatSplitBrain(provenance),
+                `Nothing was written. Adopt one of the files above as the shared state first, or set "state": { "mode": "isolated" } in monolith.config.json to keep working per worktree.`,
+                `(shared state would be ${loc.statePath}: ${describeFile(provenance.canonical)})`,
+            ].join('\n'));
+        }
+        for (const line of formatSplitBrain(provenance))
+            console.error(line);
+    }
+    return stateWriteTargetOf(loc, (w) => reportWriteWarning(w));
 }
 /**
  * A write whose outcome is UNKNOWN (SEC-001B.2) was NOT retried and nothing was
@@ -100,16 +119,18 @@ function formatMission(m) {
         `  startedAt:  ${m.startedAt}`,
         `  updatedAt:  ${m.updatedAt}`,
         `  summary:    ${m.summary ?? '(none)'}`,
+        ...(m.storyId !== undefined ? [`  storyId:    ${m.storyId}`] : []),
     ];
     return lines.join('\n');
 }
 export async function runMissionStart(args, targetDir = process.cwd()) {
     const title = parseFlag(args, '--title');
     const system = parseFlag(args, '--system');
+    const storyId = parseFlag(args, '--story');
     if (!title || !system) {
-        throw new Error('Usage: monolith mission start --title "..." --system "..."');
+        throw new Error('Usage: monolith mission start --title "..." --system "..." [--story <STORY-ID>]');
     }
-    const mission = await withWriteGuidance(() => startMission(writeTargetFor(targetDir), { title, system }));
+    const mission = await withWriteGuidance(() => startMission(writeTargetFor(targetDir), { title, system, ...(storyId !== undefined ? { storyId } : {}) }));
     console.log(`Started mission ${mission.id} (${mission.status})`);
     console.log(formatMission(mission));
 }

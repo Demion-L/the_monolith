@@ -115,6 +115,32 @@ function isStructuredRoadmap(v: unknown): boolean {
   );
 }
 
+const STATE_MODES = ['shared', 'isolated', 'local'];
+const LOCAL_STATE_STATUSES = ['ok', 'incompatible-schema', 'corrupt', 'unreadable'];
+
+/** The optional state provenance (Phase 2); absent in DTOs from older servers. Displayed as plain text only. */
+function isProvenance(v: unknown): boolean {
+  if (!isObj(v) || !isObj(v.splitBrain)) return false;
+  return (
+    isStr(v.mode) && STATE_MODES.includes(v.mode) &&
+    (v.location === 'git-common-dir' || v.location === 'project-local') &&
+    isStrOrNull(v.localReason) &&
+    isStr(v.statePath) &&
+    isNumOrNull(v.revision) &&
+    isNumOrNull(v.schemaVersion) &&
+    isStr(v.monolithVersion) &&
+    isStrOrNull(v.repositoryIdentity) &&
+    isCountOrNull(v.worktreeCount) &&
+    typeof v.splitBrain.detected === 'boolean' &&
+    typeof v.splitBrain.canonicalMissingWithLocalData === 'boolean' &&
+    Array.isArray(v.splitBrain.localStates) &&
+    v.splitBrain.localStates.every(
+      (l) => isObj(l) && isStr(l.path) && isStr(l.status) && LOCAL_STATE_STATUSES.includes(l.status) && isNumOrNull(l.schemaVersion) && isNumOrNull(l.revision) &&
+        isCountOrNull(l.missionCount) && isCountOrNull(l.checkpointCount) && typeof l.currentWorktree === 'boolean',
+    )
+  );
+}
+
 function isOverview(d: unknown): boolean {
   return (
     isObj(d) &&
@@ -144,6 +170,7 @@ export function isDashboardReadModel(v: unknown): v is DashboardReadModel {
     ) &&
     isSection(v.roadmap, (d) => isObj(d) && isStr(d.text) && (d.structured === undefined || isStructuredRoadmap(d.structured))) &&
     isObj(diag) &&
+    (diag.state === undefined || isProvenance(diag.state)) &&
     Array.isArray(diag.sources) &&
     diag.sources.every(isSourceReport) &&
     Array.isArray(diag.notes) &&

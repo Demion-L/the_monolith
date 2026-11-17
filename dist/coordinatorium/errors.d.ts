@@ -7,7 +7,7 @@
  * string-matching messages.
  */
 import type { ProjectFileErrorCode } from '../root/index.js';
-export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'LOCK_UNSAFE' | 'STATE_FILE_UNSAFE' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'CHECKPOINT_NOT_FOUND';
+export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'LOCK_UNSAFE' | 'STATE_FILE_UNSAFE' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'CHECKPOINT_NOT_FOUND' | 'STATE_LOCATION_INVALID' | 'STATE_ADOPTION_REQUIRED' | 'STATE_ADOPT_REFUSED';
 export declare class CoordinatoriumError extends Error {
     readonly code: CoordinatoriumErrorCode;
     constructor(code: CoordinatoriumErrorCode, message: string);
@@ -108,5 +108,21 @@ export declare class MissionNotActiveError extends CoordinatoriumError {
 }
 export declare class CheckpointNotFoundError extends CoordinatoriumError {
     constructor(id: string);
+}
+/** The canonical state location cannot be determined or is unsafe (BETA-020 Phase 2). Nothing is read or written. */
+export declare class StateLocationError extends CoordinatoriumError {
+    constructor(message: string);
+}
+/**
+ * The shared state does not exist yet, but worktree-local state files holding
+ * user data do. Writing now would start an empty canonical state next to them —
+ * to the user, a lost history. Nothing was written.
+ */
+export declare class StateAdoptionRequiredError extends CoordinatoriumError {
+    constructor(message: string);
+}
+/** `monolith state adopt` refused the source or the destination. Nothing was written (or, after a backup, the destination was left as it was). */
+export declare class StateAdoptError extends CoordinatoriumError {
+    constructor(message: string);
 }
 //# sourceMappingURL=errors.d.ts.map

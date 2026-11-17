@@ -20,7 +20,10 @@ export type CoordinatoriumErrorCode =
   | 'INVALID_TRANSITION'
   | 'VALIDATION_ERROR'
   | 'MISSION_NOT_ACTIVE'
-  | 'CHECKPOINT_NOT_FOUND';
+  | 'CHECKPOINT_NOT_FOUND'
+  | 'STATE_LOCATION_INVALID'
+  | 'STATE_ADOPTION_REQUIRED'
+  | 'STATE_ADOPT_REFUSED';
 
 export class CoordinatoriumError extends Error {
   readonly code: CoordinatoriumErrorCode;
@@ -205,5 +208,33 @@ export class CheckpointNotFoundError extends CoordinatoriumError {
   constructor(id: string) {
     super('CHECKPOINT_NOT_FOUND', `No checkpoint found with id "${id}"`);
     this.name = 'CheckpointNotFoundError';
+  }
+}
+
+/** The canonical state location cannot be determined or is unsafe (BETA-020 Phase 2). Nothing is read or written. */
+export class StateLocationError extends CoordinatoriumError {
+  constructor(message: string) {
+    super('STATE_LOCATION_INVALID', message);
+    this.name = 'StateLocationError';
+  }
+}
+
+/**
+ * The shared state does not exist yet, but worktree-local state files holding
+ * user data do. Writing now would start an empty canonical state next to them —
+ * to the user, a lost history. Nothing was written.
+ */
+export class StateAdoptionRequiredError extends CoordinatoriumError {
+  constructor(message: string) {
+    super('STATE_ADOPTION_REQUIRED', message);
+    this.name = 'StateAdoptionRequiredError';
+  }
+}
+
+/** `monolith state adopt` refused the source or the destination. Nothing was written (or, after a backup, the destination was left as it was). */
+export class StateAdoptError extends CoordinatoriumError {
+  constructor(message: string) {
+    super('STATE_ADOPT_REFUSED', message);
+    this.name = 'StateAdoptError';
   }
 }

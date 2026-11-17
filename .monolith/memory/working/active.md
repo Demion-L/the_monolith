@@ -23,7 +23,12 @@ No active phase.
 
 ## Current Story
 
-No active story recorded.
+**Story:** BETA-020
+**Title:** MONOLITH v0.2.0-beta.1
+**Goal:** Interactive Mission Control & Project Universe
+**Status:** IN PROGRESS
+**Branch:** `feat/beta-020-development`
+**Current milestone:** Phase 3 — Interactive Diagnostics (Phase 2 accepted by the owner, HEAD `0cff302`)
 
 Previous recorded story: **CONTEXT-001A — MONOLITH Context Gateway: `monolith brief`** (COMPLETED 2026-10-22)
 

@@ -71,6 +71,8 @@ export type ProposalParse = {
 };
 export declare const LIMITS: {
     readonly idLen: 64;
+    /** Phase directory name: one path segment; same ceiling as story ids. Never truncated. */
+    readonly phaseLen: 64;
     readonly titleLen: 200;
     readonly lineLen: 1000;
     readonly blockLen: 20000;

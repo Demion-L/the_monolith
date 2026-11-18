@@ -307,6 +307,8 @@ writes a JSON proposal; MONOLITH decides whether and where it can be applied.
   Exit 0 `FINALIZED` / `ALREADY_FINALIZED`; 2 `REFUSED` (nothing written);
   3 `INCOMPLETE` (partially applied: the story is **not** finalized).
 
+`story.phase` is the phase directory name under `memory/working/phases/`: `[a-z0-9][a-z0-9-]{0,63}` (at most 64 characters, the same ceiling as story ids). It is used exactly as given in every step (`plan`, `apply`, the capsule path); it is never shortened or aliased, and a longer value is rejected.
+
 Targets, in write order: story capsule (created, never overwritten),
 `execution-history.md` (append), `story-index.md` (insert), optional
 `docUpdates`, optional `HANDOFF.md`, and `active.md` last. Missing canonical

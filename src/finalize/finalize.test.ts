@@ -386,6 +386,66 @@ describe('DOCSYNC-001 finalize', () => {
   });
 });
 
+describe('CORE-FIX-001 phase identifier compatibility', () => {
+  const LONG = 'phase-1-security-persistence-identity';
+  const withPhase = (phase: string) => ({ ...proposal(), story: { ...proposal().story, phase } });
+  const capsule = (phase: string): string => `.monolith/memory/working/phases/${phase}/stories/story-docsync-001-test.md`;
+
+  it('AC-1/2: accepts a long phase identifier and keeps it byte-for-byte', () => {
+    expect(LONG.length).toBeGreaterThan(32);
+    const r = parseProposal(withPhase(LONG));
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.proposal.story.phase).toBe(LONG);
+  });
+
+  it('AC-3/4: plan carries the exact phase in the capsule path', async () => {
+    const dir = await instance();
+    const plan = planFinalization(dir, proposal({ story: { ...proposal().story, phase: LONG } }));
+    expect(plan.status).toBe('READY');
+    expect(plan.targets.find((t) => t.id === 'capsule')!.path).toBe(capsule(LONG));
+    expect(JSON.stringify(plan)).not.toContain('phases/phase-1/');
+  });
+
+  it('AC-5: apply accepts what plan accepted and writes only into the full-name phase directory', async () => {
+    const dir = await instance();
+    const p = proposal({ story: { ...proposal().story, phase: LONG } });
+    const r = await applyFinalization(dir, p, approve(dir, p));
+    expect(r.status).toBe('FINALIZED');
+    expect(read(dir, capsule(LONG))).toContain(`phase: ${LONG}\n`);
+    expect(readdirSync(join(dir, '.monolith/memory/working/phases')).filter((n) => n !== '.gitkeep')).toEqual([LONG]);
+  });
+
+  it('AC-6: short identifiers keep working and keep their path', async () => {
+    const dir = await instance();
+    const plan = planFinalization(dir, proposal());
+    expect(plan.targets.find((t) => t.id === 'capsule')!.path).toBe(capsule('phase-1'));
+  });
+
+  it('AC-7: traversal, absolute, separator and empty identifiers are rejected', () => {
+    for (const bad of ['../phase-1', 'phase/../../outside', '/tmp/phase-1', 'phase\\..\\outside', 'a/b', '', ' ', '-phase', 'Phase-1', 'phase.1', 'phase\0x', 'phase\n1', '..']) {
+      expect(parseProposal(withPhase(bad)).ok, JSON.stringify(bad)).toBe(false);
+    }
+  });
+
+  it('AC-8/9: boundary is 64; 65 is rejected, never truncated', () => {
+    const at = 'p' + 'a'.repeat(63);
+    const over = at + 'a';
+    expect(at.length).toBe(64);
+    const ok = parseProposal(withPhase(at));
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.proposal.story.phase).toBe(at);
+    expect(parseProposal(withPhase(over)).ok).toBe(false);
+  });
+
+  it('AC-9: maximum phase with maximum slug still yields a capsule path within the 260-char path ceiling', () => {
+    const at = 'p' + 'a'.repeat(63);
+    const slug = 's' + 'a'.repeat(99);
+    const r = parseProposal({ ...proposal(), story: { ...proposal().story, phase: at, slug } });
+    expect(r.ok).toBe(true);
+    expect(`.monolith/memory/working/phases/${at}/stories/${slug}.md`.length).toBeLessThanOrEqual(260);
+  });
+});
+
 async function writeFile(dir: string, name: string, content: string): Promise<void> {
   writeFileSync(join(dir, name), content);
 }

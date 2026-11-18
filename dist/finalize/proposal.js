@@ -10,6 +10,8 @@
 export const PROPOSAL_SCHEMA_VERSION = 1;
 export const LIMITS = {
     idLen: 64,
+    /** Phase directory name: one path segment; same ceiling as story ids. Never truncated. */
+    phaseLen: 64,
     titleLen: 200,
     lineLen: 1000,
     blockLen: 20000,
@@ -29,7 +31,7 @@ export function hasStoryIdToken(text, id) {
     return (text.match(/[A-Za-z0-9._-]+/g) ?? []).some((t) => t.replace(/[._-]+$/, '').toLowerCase() === want);
 }
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,99}$/;
-const PHASE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const PHASE_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 function isObject(v) {
     return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -105,9 +107,9 @@ export function parseProposal(raw) {
     if (id && !ID_RE.test(id))
         errors.push('story.id: must match [A-Za-z0-9][A-Za-z0-9._-]{0,63}.');
     const title = text(story.title, 'story.title', errors, { multiline: false, max: LIMITS.titleLen });
-    const phase = text(story.phase, 'story.phase', errors, { multiline: false, max: 32 });
+    const phase = text(story.phase, 'story.phase', errors, { multiline: false, max: LIMITS.phaseLen });
     if (phase && !PHASE_RE.test(phase))
-        errors.push('story.phase: must match [a-z0-9][a-z0-9-]{0,31}.');
+        errors.push('story.phase: must match [a-z0-9][a-z0-9-]{0,63}.');
     const phaseHeading = text(story.phaseHeading, 'story.phaseHeading', errors, { multiline: false, max: LIMITS.titleLen });
     if (phaseHeading.startsWith('#'))
         errors.push('story.phaseHeading: give the heading text without leading "#".');

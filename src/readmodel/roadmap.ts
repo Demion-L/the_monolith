@@ -37,7 +37,7 @@ import type {
 } from './types.js';
 
 /** Statuses the documents themselves declare (template comment + the MONOLITH roadmap). */
-const RECOGNIZED_STATUSES: ReadonlySet<string> = new Set(['PLANNED', 'IN PROGRESS', 'COMPLETE', 'COMPLETED', 'NOT DEFINED']);
+export const RECOGNIZED_STATUSES: ReadonlySet<string> = new Set(['PLANNED', 'IN PROGRESS', 'COMPLETE', 'COMPLETED', 'NOT DEFINED']);
 
 /**
  * Parser capacity: a resource guard, not a product limit and not a display limit

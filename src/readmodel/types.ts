@@ -16,7 +16,7 @@
 import type { Checkpoint, Mission } from '../coordinatorium/types.js';
 
 /** The fixed, closed set of files this model reads. */
-export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions';
+export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions' | 'storyIndex';
 
 /**
  * - available: read and (where applicable) parsed successfully
@@ -204,6 +204,91 @@ export interface RoadmapData {
   structured?: StructuredRoadmapView;
 }
 
+/**
+ * Structured story index (CORE-GRAPH-002), interpreted by Core's `parseStoryIndex`.
+ * `story-index.md` is an index of FINISHED stories (decision D4): an unfinished story
+ * is not there and no link to a phase is invented for it. Every status is REPORTED
+ * (the document's own claim), never confirmed. No Story → Story relationship exists
+ * (D5). Diagnostics are fixed codes; no document text.
+ */
+
+/**
+ * Phase containment of one story, from the structural nesting under a `## Phase <id>`
+ * heading only (D1), confirmed only by strict, exact comparison of the id token with
+ * the Roadmap's phase ids (D2: no fuzzy match, no title match, no order, no correction).
+ * - matched:    the token equals exactly one Roadmap phase id (`phaseId` === `token`)
+ * - unmatched:  the token equals no Roadmap phase id (or the phase heading was malformed)
+ * - ambiguous:  the token equals more than one Roadmap phase id (duplicated in the Roadmap)
+ * - unverified: the Roadmap could not supply phase ids, so the nesting is NOT confirmed
+ * - outside:    the story is not nested under any `## Phase` heading
+ * `token` is the original text found in the story index, kept for diagnostics.
+ */
+export type StoryPhaseRef =
+  | { kind: 'matched'; phaseId: string; token: string }
+  | { kind: 'unmatched'; token: string }
+  | { kind: 'ambiguous'; token: string }
+  | { kind: 'unverified'; token: string }
+  | { kind: 'outside' };
+
+export interface StoryIndexItemView {
+  /** Id exactly as declared in the heading (whitespace-normalized): `STORY 1.1`, `CONTEXT-001A`, ... */
+  id: string;
+  /** `duplicate` when another entry declares the same id: all such entries stay listed, none is a unique node. */
+  idStatus: 'unique' | 'duplicate';
+  /** Title after the dash; null when the heading has none. Untrusted text. */
+  title: string | null;
+  status: {
+    /** Verbatim (whitespace-normalized) value; null when missing, empty or self-contradicting. */
+    value: string | null;
+    /** True only for a value the documents themselves declare. */
+    recognized: boolean;
+    provenance: 'REPORTED';
+  };
+  /** `**Date:**` verbatim (bounded); null when missing or empty. */
+  date: string | null;
+  phase: StoryPhaseRef;
+}
+
+export type StoryIndexDiagnosticCode =
+  | 'DOCUMENT_EMPTY'
+  | 'STORIES_NOT_FOUND'
+  | 'STORY_HEADING_MALFORMED'
+  | 'PHASE_HEADING_MALFORMED'
+  | 'STORIES_TRUNCATED'
+  | 'STORY_ID_DUPLICATE'
+  | 'STORY_OUTSIDE_PHASE'
+  | 'STORY_STATUS_MISSING'
+  | 'STORY_STATUS_EMPTY'
+  | 'STORY_STATUS_CONFLICT'
+  | 'STORY_STATUS_UNRECOGNIZED'
+  | 'STORY_PHASE_UNMATCHED'
+  | 'STORY_PHASE_AMBIGUOUS'
+  | 'STORY_PHASE_UNVERIFIED'
+  | 'INTERNAL';
+
+export interface StoryIndexDiagnosticView {
+  code: StoryIndexDiagnosticCode;
+  severity: 'info' | 'warn';
+  /** Index into `stories` when the diagnostic concerns one story. */
+  storyIndex: number | null;
+}
+
+/**
+ * - ok:           stories recognised, nothing structural lost
+ * - partial:      stories recognised, but some content could not be (malformed heading, truncation)
+ * - empty:        the document is available but blank
+ * - no_stories:   phase sections exist without any story
+ * - unrecognized: non-empty document with neither stories nor phase sections
+ * - error:        processing failed; the structure must not be trusted
+ */
+export type StoryIndexParseState = 'ok' | 'partial' | 'empty' | 'no_stories' | 'unrecognized' | 'error';
+
+export interface StructuredStoryIndexView {
+  state: StoryIndexParseState;
+  stories: StoryIndexItemView[];
+  diagnostics: StoryIndexDiagnosticView[];
+}
+
 export type NoteCode =
   | 'STATE_SPLIT_BRAIN'
   | 'MULTIPLE_ACTIVE_MISSIONS'
@@ -333,5 +418,10 @@ export interface DashboardReadModel {
    */
   hypotheses?: Section<KnowledgeData>;
   decisions?: Section<KnowledgeData>;
+  /**
+   * Additive (CORE-GRAPH-002). `data === null` means `story-index.md` is not available
+   * (see `sources[0].status`); never an empty list. Absent from DTOs of older servers.
+   */
+  storyIndex?: Section<StructuredStoryIndexView>;
   diagnostics: ReadDiagnostics;
 }

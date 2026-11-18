@@ -32,12 +32,16 @@ import { ACTIVE_MD_REL } from '../brief/constants.js';
 import { extractCurrentStory } from '../brief/story.js';
 import { parseActiveStoryClaim } from '../brief/freshness.js';
 import { parseRoadmapPhases } from './roadmap.js';
+import { parseStoryIndex } from './story-index.js';
 import { readKnowledge } from './knowledge.js';
 import { sourceFailure } from './source-failure.js';
 import { hasCheckpointOrderMismatch, selectActiveMissions, selectLatestCheckpoint, } from '../brief/selectors.js';
 export const ROADMAP_REL = 'context/maps/roadmap-index.md';
 /** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
 export const MAX_ROADMAP_BYTES = 1024 * 1024;
+export const STORY_INDEX_REL = 'memory/working/story-index.md';
+/** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
+export const MAX_STORY_INDEX_BYTES = 1024 * 1024;
 const CHANGED_RETRIES = 3;
 export { FILE_CODE_MAP } from './source-failure.js';
 function report(id, path, status, code) {
@@ -200,6 +204,7 @@ function unreadableModel(config, rootCode = 'ROOT_INVALID') {
         // The root is untrusted, so nothing below it is read: not available (never an empty list).
         hypotheses: section(null, [report('hypotheses', null, 'forbidden', rootCode)]),
         decisions: section(null, [report('decisions', null, 'forbidden', rootCode)]),
+        storyIndex: section(null, [report('storyIndex', null, 'forbidden', rootCode)]),
         diagnostics: { validation: 'NOT_PERFORMED', sources: [config, state, story, roadmap], notes: [] },
     };
 }
@@ -280,12 +285,29 @@ function buildModel(projectRoot) {
         }
         roadmap = { text: roadmapLoaded.content, structured };
     }
+    // Phase ids come only from the already parsed Roadmap (no second Roadmap parser, D3).
+    // null = the Roadmap could not supply them, so containment is reported as unverified.
+    const roadmapPhaseIds = roadmap?.structured !== undefined && roadmap.structured.state !== 'error'
+        ? roadmap.structured.phases.flatMap((p) => (p.id === null ? [] : [p.id]))
+        : null;
+    const storyIndexLoaded = load(projectRoot, 'storyIndex', `${root.monolithRoot}/${STORY_INDEX_REL}`, MAX_STORY_INDEX_BYTES);
+    let storyIndex = null;
+    if (storyIndexLoaded.content !== null) {
+        try {
+            storyIndex = parseStoryIndex(storyIndexLoaded.content, roadmapPhaseIds, roadmap?.structured?.state !== 'partial');
+        }
+        catch {
+            // A parser fault is reported as such, never as an empty index.
+            storyIndex = { state: 'error', stories: [], diagnostics: [{ code: 'INTERNAL', severity: 'warn', storyIndex: null }] };
+        }
+    }
     return {
         projectOverview: section(overview, [config.report, stateResult.report, storyLoaded.report]),
         currentMissions: section(currentMissions, [stateResult.report]),
         checkpoints: section(checkpoints, [stateResult.report]),
         roadmap: section(roadmap, [roadmapLoaded.report]),
         ...readKnowledge(projectRoot, root.monolithRoot),
+        storyIndex: section(storyIndex, [storyIndexLoaded.report]),
         diagnostics: {
             validation: 'NOT_PERFORMED',
             sources: [config.report, stateResult.report, storyLoaded.report, roadmapLoaded.report],

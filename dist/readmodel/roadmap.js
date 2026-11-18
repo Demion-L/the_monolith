@@ -28,7 +28,7 @@
  */
 import { maskNonContent } from '../brief/markdown-context.js';
 /** Statuses the documents themselves declare (template comment + the MONOLITH roadmap). */
-const RECOGNIZED_STATUSES = new Set(['PLANNED', 'IN PROGRESS', 'COMPLETE', 'COMPLETED', 'NOT DEFINED']);
+export const RECOGNIZED_STATUSES = new Set(['PLANNED', 'IN PROGRESS', 'COMPLETE', 'COMPLETED', 'NOT DEFINED']);
 /**
  * Parser capacity: a resource guard, not a product limit and not a display limit
  * (the UI shows a small window of the phases and keeps all of them reachable).

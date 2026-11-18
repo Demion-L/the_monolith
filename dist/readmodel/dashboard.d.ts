@@ -27,6 +27,9 @@ import type { DashboardReadModel } from './types.js';
 export declare const ROADMAP_REL = "context/maps/roadmap-index.md";
 /** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
 export declare const MAX_ROADMAP_BYTES: number;
+export declare const STORY_INDEX_REL = "memory/working/story-index.md";
+/** Protective ceiling, like the other SEC-001B.1 limits — not a content policy. */
+export declare const MAX_STORY_INDEX_BYTES: number;
 export { FILE_CODE_MAP } from './source-failure.js';
 export declare function readDashboardModel(projectRoot: string): DashboardReadModel;
 //# sourceMappingURL=dashboard.d.ts.map

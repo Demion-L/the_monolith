@@ -27,6 +27,8 @@
  *   Active Phase: <id> — <title> | —     (read ONLY inside `## Current Focus`)
  */
 import type { StructuredRoadmapView } from './types.js';
+/** Statuses the documents themselves declare (template comment + the MONOLITH roadmap). */
+export declare const RECOGNIZED_STATUSES: ReadonlySet<string>;
 /**
  * Parser capacity: a resource guard, not a product limit and not a display limit
  * (the UI shows a small window of the phases and keeps all of them reachable).

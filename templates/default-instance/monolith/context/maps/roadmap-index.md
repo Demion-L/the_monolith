@@ -27,7 +27,7 @@ Stories:
 
 ## Current Focus
 
-<!-- Keep this in sync with memory/working/active.md -->
+<!-- Sole normative source of the active phase. memory/working/active.md must not define it independently. -->
 
 Active Phase: —
 Active Story: —

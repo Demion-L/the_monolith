@@ -15,7 +15,8 @@ For primary navigation use: `memory/working/active.md`
 
 ## Active Phase
 
-<!-- Phase N — Phase Name -->
+<!-- Legacy reference, not a source of truth. The active phase is defined only by
+     `Active Phase:` in `## Current Focus` of `.monolith/context/maps/roadmap-index.md`. -->
 
 ## Active Story
 

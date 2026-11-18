@@ -54,7 +54,7 @@ Key files (paths relative to the project root):
 
 | File | Role |
 |---|---|
-| `{{MONOLITH_ROOT}}/memory/working/active.md` | The current phase and story. "No active story recorded" means nothing is registered, **not** that the project is complete. |
+| `{{MONOLITH_ROOT}}/memory/working/active.md` | The current story and working context; the active phase is defined only in `roadmap-index.md`. "No active story recorded" means nothing is registered, **not** that the project is complete. |
 | `{{MONOLITH_ROOT}}/memory/working/story-index.md` | Index of finalized stories. |
 | `{{MONOLITH_ROOT}}/context/maps/project-map.md` | Where each kind of knowledge lives in this instance. |
 | `{{MONOLITH_ROOT}}/context/maps/roadmap-index.md` | Phases, stories and their status. |

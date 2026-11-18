@@ -17,7 +17,10 @@ referenced_by:
 
 ## Active Phase
 
-No active phase.
+Authoritative source: `.monolith/context/maps/roadmap-index.md`,
+section `Current Focus`, field `Active Phase`.
+
+This document does not independently define the active phase.
 
 ---
 

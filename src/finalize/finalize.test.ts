@@ -282,8 +282,23 @@ describe('DOCSYNC-001 finalize', () => {
       '.monolith/memory/working/story-index.md',
     ]);
     // the part of active.md outside the two sections is unchanged
-    expect(after['.monolith/memory/working/active.md']).toContain('## Active Phase\n\nNo active phase.');
+    const phaseSection = (t: string) => t.slice(t.indexOf('## Active Phase'), t.indexOf('## Current Story'));
+    expect(phaseSection(after['.monolith/memory/working/active.md'])).toBe(phaseSection(before['.monolith/memory/working/active.md']));
+    expect(phaseSection(after['.monolith/memory/working/active.md'])).not.toBe('');
+    // finalization never touches the roadmap (sole Active Phase authority)
+    expect(after['.monolith/context/maps/roadmap-index.md']).toBe(before['.monolith/context/maps/roadmap-index.md']);
     expect(after['.monolith/memory/working/active.md']).toContain('## Current Operational Focus');
+  });
+
+  it('12b. legacy active.md with "No active phase." still finalizes and its Active Phase section is preserved', async () => {
+    const dir = await instance();
+    const f = join(dir, '.monolith/memory/working/active.md');
+    const legacy = readFileSync(f, 'utf8').replace(/## Active Phase\r?\n[\s\S]*?(?=\r?\n---)/, '## Active Phase\n\nNo active phase.\n');
+    expect(legacy).toContain('## Active Phase\n\nNo active phase.');
+    writeFileSync(f, legacy);
+    const p = proposal();
+    expect((await applyFinalization(dir, p, approve(dir, p))).status).toBe('FINALIZED');
+    expect(read(dir, '.monolith/memory/working/active.md')).toContain('## Active Phase\n\nNo active phase.');
   });
 
   it('13. a freshly scaffolded instance works and CRLF files keep their line endings', async () => {

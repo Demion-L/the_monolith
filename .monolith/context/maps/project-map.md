@@ -127,7 +127,7 @@ Add new design documents here when introducing new capabilities. One file per mo
 
 | Location | Purpose |
 | -------- | ------- |
-| `.monolith/memory/working/active.md` | Active phase and story |
+| `.monolith/memory/working/active.md` | Current story and working context (not the active phase) |
 | `.monolith/memory/working/story-index.md` | Implementation history |
 | `.monolith/memory/long-term/decisions.md` | Decisions that are not ADRs (`DEC-…`) |
 | `.monolith/memory/long-term/architecture-principles.md` | Core principles |

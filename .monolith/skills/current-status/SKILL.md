@@ -18,8 +18,8 @@ Triggered by: "status", "what are we working on", "current status", "where are w
 
 ## Steps
 
-1. Read `memory/working/active.md`
-2. Read `context/maps/roadmap-index.md`
+1. Read `memory/working/active.md` (current story and working context only; it does not define the phase)
+2. Read `context/maps/roadmap-index.md` — the active phase comes only from `Active Phase:` in its `## Current Focus`. If the roadmap is unavailable, say so; if no phase is declared, report "no active phase declared" — do not infer one from the story or phase statuses.
 3. Read `memory/working/story-index.md` (for phase progress)
 4. Report using the output format below
 

@@ -189,3 +189,18 @@ describe('scaffoldInstance — AI chat context (MONOLITH-CHAT-CONTEXT-001)', () 
     expect(existsSync(join(repoRoot, link))).toBe(true);
   });
 });
+
+describe('scaffoldInstance — Active Phase single source of truth (ARCH-001B)', () => {
+  it('roadmap template keeps `Active Phase: —`; working memory only references the roadmap', async () => {
+    const dir = makeTempDir();
+    await scaffoldInstance(dir, CONFIG);
+    const roadmap = readFileSync(join(dir, '.monolith', 'context', 'maps', 'roadmap-index.md'), 'utf8');
+    const active = readFileSync(join(dir, '.monolith', 'memory', 'working', 'active.md'), 'utf8');
+    expect(roadmap).toMatch(/^Active Phase: —$/m);
+    expect(active).toContain('## Active Phase');
+    expect(active).toContain('context/maps/roadmap-index.md');
+    expect(active).toContain('does not independently define the active phase');
+    expect(active).not.toMatch(/No active phase\./);
+    expect(active).not.toMatch(/^Active Phase:/m);
+  });
+});

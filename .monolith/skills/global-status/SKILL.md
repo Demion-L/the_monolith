@@ -18,8 +18,8 @@ Triggered by: "global overview", "project status", "big picture", "explain the p
 
 ## Steps
 
-1. Read `memory/working/active.md`
-2. Read `context/maps/roadmap-index.md`
+1. Read `memory/working/active.md` (current story and working context only; it does not define the phase)
+2. Read `context/maps/roadmap-index.md` — the active phase comes only from `Active Phase:` in its `## Current Focus`. If the roadmap is unavailable, say so; if no phase is declared, report "no active phase declared" — do not infer one from the story or phase statuses.
 3. Read `docs/adr/README.md` (ADR Index)
 4. Read `README.md` (project description and stack)
 5. Read `MANIFESTO.md` (engineering principles)

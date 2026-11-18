@@ -15,7 +15,7 @@ Navigation guide for the cognitive architecture of this project.
 
 | Location                                                        | Purpose                 |
 | --------------------------------------------------------------- | ----------------------- |
-| `{{MONOLITH_ROOT}}/memory/working/active.md`                    | Active phase and story  |
+| `{{MONOLITH_ROOT}}/memory/working/active.md`                    | Current story and working context |
 | `{{MONOLITH_ROOT}}/memory/working/story-index.md`               | Implementation history  |
 | `{{MONOLITH_ROOT}}/memory/long-term/decisions.md`               | Non-ADR decisions (`DEC-…`) |
 | `{{MONOLITH_ROOT}}/memory/long-term/architecture-principles.md` | Core principles         |

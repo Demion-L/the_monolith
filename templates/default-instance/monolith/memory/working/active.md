@@ -28,7 +28,10 @@ refuses to finalize. Keep the field above any "---" line or heading in that sect
 
 ## Active Phase
 
-No active phase.
+Authoritative source: `{{MONOLITH_ROOT}}/context/maps/roadmap-index.md`,
+section `Current Focus`, field `Active Phase`.
+
+This document does not independently define the active phase.
 
 ---
 

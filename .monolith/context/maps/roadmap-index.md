@@ -9,7 +9,7 @@ authority: authoritative
 
 Navigable index of project phases and their status.
 
-Keep in sync with `memory/working/active.md` and `memory/working/story-index.md`.
+This document is the sole normative source of the active phase (`Active Phase:` in `## Current Focus`). `memory/working/active.md` holds the current story and working context and does not define the phase. Keep the story data in sync with `memory/working/active.md` and `memory/working/story-index.md`.
 
 ---
 

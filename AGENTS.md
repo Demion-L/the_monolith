@@ -79,7 +79,7 @@ On every session start, read in this order:
 1. This file (`AGENTS.md`)
 2. `.monolith/context/maps/project-map.md`
 3. `.monolith/context/maps/routing-map.md` — classify task type
-4. `.monolith/memory/working/active.md` — current phase and story
+4. `.monolith/memory/working/active.md` — current story and working context (not the active phase)
 5. `.monolith/context/maps/roadmap-index.md`
 6. `.monolith/protocols/governance/memory-governance.md`
 7. Relevant skill from `.monolith/skills/` (resolved via routing-map Table 2)
@@ -87,6 +87,8 @@ On every session start, read in this order:
 9. `.monolith/protocols/cognition/cognitive-modes.md` — apply behavioral constraints
 
 Full sequence: `.monolith/protocols/boot/boot-sequence.md`
+
+**Phase authority.** The active project phase MUST be determined exclusively from the `Active Phase` field in the `Current Focus` section of `.monolith/context/maps/roadmap-index.md`. Working-memory documents MUST NOT independently define or override the active phase. If the roadmap is unavailable, report that explicitly; if no active phase is declared, do not assign one (no guessing from story or phase statuses). The current story and working context live in `.monolith/memory/working/active.md`.
 
 ---
 

@@ -169,7 +169,7 @@ describe('Roadmap phase explorer', () => {
 import { statusBadgeTone } from '../knowledge';
 describe('status badge tone', () => {
   it.each([
-    ['IN PROGRESS', true, 'progress'], ['IN PROGRESS (phase 3)', true, 'progress'], ['NOT DEFINED', true, 'undefined'],
+    ['IN PROGRESS', true, 'progress'], ['IN PROGRESS (phase 3)', true, 'progress'], ['NOT DEFINED', true, 'warn'],
     ['COMPLETED', true, 'done'], ['COMPLETE', true, 'done'], ['PLANNED', true, 'planned'],
     ['IN PROGRESS', false, 'neutral'], ['WEIRD', true, 'neutral'], [null, false, 'neutral'],
   ])('%s (recognized=%s) → %s', (v, r, t) => {
@@ -178,7 +178,7 @@ describe('status badge tone', () => {
   it('is rendered on the roadmap badges', () => {
     const w = mount(RoadmapPanel, { props: { text: '#', structured: rm(), storyIndex: idx() } as never });
     const cls = w.findAll('[data-testid="phase-status"]').map((x) => x.classes());
-    expect(cls[0]).toContain('tone-undefined');
+    expect(cls[0]).toContain('tone-warn');
     expect(cls[1]).toContain('tone-progress');
   });
 });

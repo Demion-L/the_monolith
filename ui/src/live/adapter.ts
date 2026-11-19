@@ -1,4 +1,4 @@
-import type { DashboardReadModel, KnowledgeData, Section, SourceReport } from '../../../src/readmodel/types';
+import type { DashboardReadModel, KnowledgeData, Section, SourceReport, SourceStatus } from '../../../src/readmodel/types';
 import type { Checkpoint, DashboardData, Diagnostic, DiagnosticSeverity, KnowledgeInfo, KnowledgeItem, StoryState } from '../types/dashboard';
 
 /**
@@ -70,6 +70,12 @@ function toKnowledge(sec: Section<KnowledgeData> | undefined): { items?: Knowled
   };
 }
 
+/** How Core reported the canonical state file (`sources[id=state]`); omitted when no such report exists. */
+function stateSourceOf(model: DashboardReadModel): { stateSource?: SourceStatus } {
+  const s = model.diagnostics.sources.find((x) => x.id === 'state');
+  return s === undefined ? {} : { stateSource: s.status };
+}
+
 export function toDashboardData(model: DashboardReadModel): DashboardData {
   const overview = model.projectOverview.data;
   const missions = model.currentMissions.data;
@@ -131,5 +137,6 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
       available: model.diagnostics.sources.filter((s) => s.status === 'available').length,
     },
     provenance: model.diagnostics.state,
+    ...stateSourceOf(model),
   };
 }

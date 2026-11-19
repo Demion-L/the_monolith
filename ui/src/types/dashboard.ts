@@ -9,7 +9,7 @@
 
 /** Core's interpretation of the roadmap (UI-003C). The UI displays it; it never parses Markdown itself. */
 export type { StructuredRoadmapView, RoadmapPhaseView, ActivePhaseView, RoadmapDiagnosticCode } from '../../../src/readmodel/types';
-import type { StructuredRoadmapView, StateProvenanceView, StructuredStoryIndexView, Section } from '../../../src/readmodel/types';
+import type { StructuredRoadmapView, StateProvenanceView, StructuredStoryIndexView, Section, SourceStatus } from '../../../src/readmodel/types';
 export type { StateProvenanceView, Section };
 
 /** Core's interpretation of the story index (CORE-GRAPH-002). Displayed by the Execution Graph; never re-derived in the UI. */
@@ -110,6 +110,8 @@ export interface DashboardData {
   sources?: { total: number; available: number };
   /** Where the operational state lives (Phase 2). `undefined` = not provided (demo, older server, or location unresolved). */
   provenance?: StateProvenanceView;
+  /** How Core reported the canonical state file itself (`diagnostics.sources`, id `state`). `undefined` = not reported. Presentation input only. */
+  stateSource?: SourceStatus;
 }
 
 /**

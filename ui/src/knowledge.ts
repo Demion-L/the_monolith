@@ -56,12 +56,12 @@ export function stripDecorativeMarkers(text: string): string {
  * Border/text colour for a roadmap or story-index status badge (UI-009B). Presentation only: it colours the
  * document's own wording and never changes or derives a status. Unrecognised or missing values stay neutral.
  */
-export type BadgeTone = 'progress' | 'undefined' | 'done' | 'planned' | 'neutral';
+export type BadgeTone = 'progress' | 'warn' | 'done' | 'planned' | 'neutral';
 export function statusBadgeTone(value: string | null, recognized: boolean): BadgeTone {
   if (value === null || !recognized) return 'neutral';
   const v = value.trim().toUpperCase();
   if (v.startsWith('IN PROGRESS')) return 'progress';
-  if (v.startsWith('NOT DEFINED')) return 'undefined';
+  if (v.startsWith('NOT DEFINED')) return 'warn';
   if (v.startsWith('COMPLETE')) return 'done';
   if (v.startsWith('PLANNED')) return 'planned';
   return 'neutral';

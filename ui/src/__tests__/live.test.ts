@@ -225,6 +225,13 @@ describe('toDashboardData', () => {
     expect(d.roadmapText).toBeNull();
     expect(d.isDemo).toBe(false);
   });
+
+  it('carries Core\'s own status of the state file for presentation, and omits it when not reported', () => {
+    const d = toDashboardData(model({ diagnostics: { validation: 'NOT_PERFORMED', sources: [src('config'), src('state', 'absent', 'SOURCE_ABSENT')], notes: [] } }));
+    expect(d.stateSource).toBe('absent');
+    const none = toDashboardData(model({ diagnostics: { validation: 'NOT_PERFORMED', sources: [src('config')], notes: [] } }));
+    expect('stateSource' in none).toBe(false);
+  });
 });
 
 describe('App in LIVE mode (default)', () => {

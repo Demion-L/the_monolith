@@ -62,7 +62,7 @@ const sourceTone = computed((): { label: string; tone: Tone } | null => {
         <header class="dcard-head"><h3>Validation and reconciliation</h3></header>
         <p class="empty">These checks run against a real project. They are not available for demo data.</p>
       </article>
-      <OperationalState v-if="!data.isDemo" :provenance="data.provenance" />
+      <OperationalState v-if="!data.isDemo" :provenance="data.provenance" :state-source="data.stateSource" />
      </div>
      <div class="dcol">
       <ReconciliationCard v-if="runners" :runner="runners.reconciliation" />
@@ -78,6 +78,10 @@ const sourceTone = computed((): { label: string; tone: Tone } | null => {
         </p>
         <p v-if="problems.length > 0" class="source-problem" data-testid="source-problems">
           {{ problems.length }} problem{{ problems.length === 1 ? '' : 's' }}: {{ problems.map((p) => p.message).join('; ') }}
+        </p>
+        <!-- Explanation only: the count, the pill and the problem line above stay exactly as Core reported them. -->
+        <p v-if="!data.isDemo && data.stateSource === 'absent'" class="muted" data-testid="state-absent-note">
+          The missing <code>state</code> source is expected: operational state is created on the first state write, so its absence before then is normal.
         </p>
 
         <details class="more">

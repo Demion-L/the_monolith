@@ -259,7 +259,10 @@ describe('Operational state', () => {
     expect(text(w, 'opstate-schema')).toBe('v3');
     expect(text(w, 'opstate-worktrees')).toBe('3');
     expect(text(w, 'opstate-path')).toBe('<git-common-dir>/monolith/state.json');
-    expect(text(w, 'opstate-consistency')).toContain('NOT VERIFIED');
+    expect(text(w, 'opstate-consistency')).toContain('NOT CHECKED');
+    expect(text(w, 'opstate-consistency')).toContain('State consistency has not been independently verified.');
+    expect(text(w, 'opstate-consistency')).not.toMatch(/PASS|VERIFIED\b(?<!NOT VERIFIED)/);
+    expect(w.find('[data-testid="opstate-initialization"]').exists()).toBe(false);
     expect(w.find('[data-testid="split-brain"]').exists()).toBe(false);
   });
 
@@ -269,6 +272,46 @@ describe('Operational state', () => {
     expect(text(w, 'opstate-schema')).toBe('UNKNOWN');
     expect(text(w, 'opstate-worktrees')).toBe('UNKNOWN');
     expect(text(w, 'opstate-repo')).toBe('Not a git repository');
+  });
+
+  describe('canonical state absent (normal for a fresh project)', () => {
+    const absent = { ...base, revision: null, schemaVersion: null };
+    it('shows NOT INITIALIZED with dashes, only for status absent', () => {
+      const w = mount(OperationalState, { props: { provenance: absent, stateSource: 'absent' } });
+      expect(text(w, 'opstate-initialization')).toContain('NOT INITIALIZED');
+      expect(text(w, 'opstate-initialization')).toContain('No operational state has been recorded yet.');
+      expect(text(w, 'opstate-revision')).toContain('—');
+      expect(text(w, 'opstate-revision')).toContain('Values become available after the first state write.');
+      expect(text(w, 'opstate-schema')).toBe('—');
+      expect(text(w, 'opstate-revision')).not.toContain('UNKNOWN');
+    });
+    it('does not present anything else as NOT INITIALIZED', () => {
+      for (const s of [undefined, 'available', 'corrupt', 'unreadable', 'forbidden'] as const) {
+        const w = mount(OperationalState, { props: { provenance: absent, stateSource: s } });
+        expect(w.find('[data-testid="opstate-initialization"]').exists()).toBe(false);
+        expect(text(w, 'opstate-revision')).toBe('UNKNOWN');
+        expect(text(w, 'opstate-schema')).toBe('UNKNOWN');
+      }
+    });
+    it('shows real values when the state file is available', () => {
+      const w = mount(OperationalState, { props: { provenance: base, stateSource: 'available' } });
+      expect(text(w, 'opstate-revision')).toBe('21');
+      expect(text(w, 'opstate-schema')).toBe('v3');
+      expect(w.find('[data-testid="opstate-initialization"]').exists()).toBe(false);
+    });
+    it('keeps the split-brain warning and never claims NOT INITIALIZED over local state', () => {
+      const provenance = { ...absent, splitBrain: { detected: true, canonicalMissingWithLocalData: true, localStates: [
+        { path: '.monolith/state.json', status: 'ok' as const, schemaVersion: 3, revision: 7, missionCount: 2, checkpointCount: 5, currentWorktree: true },
+      ] } };
+      const w = mount(OperationalState, { props: { provenance, stateSource: 'absent' } });
+      expect(w.find('[data-testid="split-brain"]').exists()).toBe(true);
+      expect(w.find('[data-testid="opstate-initialization"]').exists()).toBe(false);
+      expect(text(w, 'opstate-consistency')).toContain('SPLIT-BRAIN');
+    });
+    it('does not turn a not-performed validation into a pass', () => {
+      const w = mount(OperationalState, { props: { provenance: absent, stateSource: 'absent' } });
+      expect(w.text()).not.toMatch(/\bPASS\b|\bOK\b|VALID\b/);
+    });
   });
 
   it('warns about split-brain, points to the CLI and offers no merge or adopt action', () => {
@@ -317,6 +360,44 @@ describe('Diagnostics section', () => {
     expect(w.get('[data-testid="validation-card"]').text()).toContain("Did the project pass MONOLITH's existing checks?");
     expect(w.get('[data-testid="reconciliation-card"]').text()).toContain('contradictions between the sources');
     expect(w.text()).not.toMatch(/health score/i);
+  });
+
+  describe('absent state source', () => {
+    const msg = (m: string) => ({ severity: 'warning' as const, message: m });
+    const withSources = (extra: object, problems: { severity: 'warning'; message: string }[], available: number) =>
+      ({ ...live, sources: { total: 4, available }, diagnostics: problems, ...extra }) as typeof live;
+    const note = (w: ReturnType<typeof mount>) => w.find('[data-testid="state-absent-note"]');
+
+    it('explains the absent state source and keeps 3/4, PARTIAL and the problem line', () => {
+      const data = withSources({ stateSource: 'absent' }, [msg('state (<git-common-dir>/monolith/state.json): absent [SOURCE_ABSENT]')], 3);
+      const w = mount(DiagnosticsPanel, { props: { data, runners: runners() } });
+      expect(note(w).text()).toContain('expected');
+      expect(note(w).text()).toContain('first state write');
+      expect(w.get('[data-testid="source-summary"]').text()).toBe('3/4 sources available');
+      expect(w.get('[data-testid="source-availability"] [data-testid="pill"]').text()).toBe('PARTIAL');
+      expect(w.get('[data-testid="source-problems"]').text()).toContain('SOURCE_ABSENT');
+      expect(w.get('[data-testid="source-availability"]').text()).not.toMatch(/4\/4|\bPASS\b/);
+    });
+    it('does not explain other absent sources, and keeps their problems', () => {
+      const data = withSources({ stateSource: 'available' }, [msg('roadmap (docs/roadmap.md): absent [SOURCE_ABSENT]')], 3);
+      const w = mount(DiagnosticsPanel, { props: { data, runners: runners() } });
+      expect(note(w).exists()).toBe(false);
+      expect(w.get('[data-testid="source-problems"]').text()).toContain('roadmap');
+    });
+    it('keeps other problems visible next to an absent state', () => {
+      const data = withSources({ stateSource: 'absent' }, [msg('state (x): absent [SOURCE_ABSENT]'), msg('roadmap (y): absent [SOURCE_ABSENT]')], 2);
+      const w = mount(DiagnosticsPanel, { props: { data, runners: runners() } });
+      expect(w.get('[data-testid="source-problems"]').text()).toContain('2 problems');
+      expect(w.get('[data-testid="source-problems"]').text()).toContain('roadmap');
+    });
+    it('is silent for other state statuses, an unreported status and demo data', () => {
+      for (const st of ['corrupt', 'unreadable', 'forbidden', undefined] as const) {
+        const data = withSources(st === undefined ? {} : { stateSource: st }, [msg('state (x): problem')], 3);
+        expect(note(mount(DiagnosticsPanel, { props: { data, runners: runners() } })).exists()).toBe(false);
+      }
+      const demo = { ...withSources({ stateSource: 'absent' }, [], 3), isDemo: true } as typeof live;
+      expect(note(mount(DiagnosticsPanel, { props: { data: demo } })).exists()).toBe(false);
+    });
   });
 
   it('running one diagnostic does not run, or change the state of, the other', async () => {

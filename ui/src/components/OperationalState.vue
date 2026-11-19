@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { StateProvenanceView } from '../../../src/readmodel/types';
+import type { SourceStatus, StateProvenanceView } from '../../../src/readmodel/types';
 import StatusPill from './StatusPill.vue';
 
-const props = defineProps<{ provenance: StateProvenanceView | undefined }>();
+const props = defineProps<{ provenance: StateProvenanceView | undefined; stateSource?: SourceStatus }>();
 
 const LOCAL_REASON: Record<string, string> = {
   ISOLATED_MODE: 'Per-worktree state was chosen explicitly.',
@@ -18,6 +18,15 @@ const LOCAL_STATE: Record<string, string> = {
 };
 
 const sb = computed(() => props.provenance?.splitBrain);
+
+/**
+ * Presentation only. Core reports the canonical state file as `absent` (a normal condition: the state is created
+ * lazily on the first write). That exact status, and nothing else, is shown as NOT INITIALIZED. A missing report,
+ * any other status, or a detected split-brain (local state with data exists) is never presented this way.
+ */
+const notInitialized = computed(
+  () => props.stateSource === 'absent' && props.provenance?.splitBrain.detected !== true,
+);
 </script>
 
 <template>
@@ -54,18 +63,31 @@ const sb = computed(() => props.provenance?.splitBrain);
         <dd data-testid="opstate-mode">{{ provenance.mode.toUpperCase() }}
           <span v-if="provenance.localReason !== null" class="muted">— {{ LOCAL_REASON[provenance.localReason] ?? provenance.localReason }}</span>
         </dd>
-        <dt>Revision</dt>
-        <dd data-testid="opstate-revision">{{ provenance.revision ?? 'UNKNOWN' }}</dd>
-        <dt>Schema</dt>
-        <dd data-testid="opstate-schema">{{ provenance.schemaVersion === null ? 'UNKNOWN' : `v${provenance.schemaVersion}` }}</dd>
+        <template v-if="notInitialized">
+          <dt>State</dt>
+          <dd data-testid="opstate-initialization">
+            <StatusPill tone="neutral" label="NOT INITIALIZED" />
+            <span class="muted"> No operational state has been recorded yet.</span>
+          </dd>
+          <dt>Revision</dt>
+          <dd data-testid="opstate-revision">—<span class="muted"> Values become available after the first state write.</span></dd>
+          <dt>Schema</dt>
+          <dd data-testid="opstate-schema">—</dd>
+        </template>
+        <template v-else>
+          <dt>Revision</dt>
+          <dd data-testid="opstate-revision">{{ provenance.revision ?? 'UNKNOWN' }}</dd>
+          <dt>Schema</dt>
+          <dd data-testid="opstate-schema">{{ provenance.schemaVersion === null ? 'UNKNOWN' : `v${provenance.schemaVersion}` }}</dd>
+        </template>
         <dt>Worktrees</dt>
         <dd data-testid="opstate-worktrees">{{ provenance.worktreeCount ?? 'UNKNOWN' }}</dd>
         <dt>Consistency</dt>
         <dd data-testid="opstate-consistency">
           <template v-if="sb?.detected"><StatusPill tone="warn" label="SPLIT-BRAIN" /></template>
           <template v-else>
-            <StatusPill tone="neutral" label="NOT VERIFIED" />
-            <span class="muted"> No independent state copies were found. The contents of the state are not cross-checked.</span>
+            <StatusPill tone="neutral" label="NOT CHECKED" />
+            <span class="muted"> State consistency has not been independently verified. No independent state copies were found.</span>
           </template>
         </dd>
       </dl>

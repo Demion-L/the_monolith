@@ -561,6 +561,6 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 /* Status badge tones (roadmap phases, story rows): border + text only, existing tokens. */
 .status-badge.tone-progress { border-color: var(--ok); color: var(--ok); }
-.status-badge.tone-undefined { border-color: var(--warn); color: var(--warn); }
+.status-badge.tone-warn { border-color: var(--warn); color: var(--warn); }
 .status-badge.tone-done { border-color: var(--accent); color: var(--accent); }
 .status-badge.tone-planned { border-color: var(--muted); color: var(--muted); }

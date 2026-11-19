@@ -51,5 +51,15 @@ No finalization recorded yet.
 
 ## Current Operational Focus
 
+<!--
+Operational notes and next actions only.
+- This section is NOT a normative source for the Active Story. The normative source
+  is "## Current Story" above.
+- Do not duplicate Story Status here, and do not make standalone ACTIVE / COMPLETED
+  claims about a story: they go stale when the story changes or is finalized.
+- When the current story changes (started, switched, finalized), review these notes
+  and fix or remove anything that no longer holds.
+- `monolith finalize` does not touch this section; keeping it current is yours.
+-->
 <!-- Update this section when starting the first phase. -->
 <!-- Describe what the project is building and what is in focus now. -->

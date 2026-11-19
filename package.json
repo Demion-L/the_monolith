@@ -31,7 +31,9 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/sync-skill-templates.mjs && tsc -p tsconfig.json",
+    "sync:skills": "node scripts/sync-skill-templates.mjs",
+    "check:skills": "node scripts/sync-skill-templates.mjs --check",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsc -p tsconfig.json --watch",
     "test": "vitest run",

@@ -81,6 +81,9 @@ jobs:
       - name: UI build
         run: pnpm run build:ui
 
+      - name: Skill templates equal their canonical sources
+        run: pnpm run check:skills
+
       - name: Build Integrity Gate (tracked dist/ must equal fresh build)
         run: pnpm run check:build-integrity
 

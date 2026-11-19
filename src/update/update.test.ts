@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, lstatSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, relative } from 'path';
-import { scaffoldInstance } from '../init/scaffold.js';
+import { scaffoldInstance, substitute } from '../init/scaffold.js';
 import type { ProjectConfig } from '../init/types.js';
 import { applyPlan, integrationComplete, planUpdate } from './index.js';
 import { inspectBlock, blockBody, renderBlock } from '../managed/index.js';
@@ -744,7 +744,8 @@ describe('monolith update — F-4 help and F-6 template', () => {
 const FIN = '.monolith/skills/finalize-story/SKILL.md';
 const fixture = (n: string): string => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
 const shaOf = (s: string): string => createHash('sha256').update(s).digest('hex');
-const TEMPLATE_FIN = readFileSync(join(TEMPLATES_ROOT, 'monolith/skills/finalize-story/SKILL.md'), 'utf8');
+// The shipped template is generated from the canonical skill and carries {{MONOLITH_ROOT}}; installed text has it substituted.
+const TEMPLATE_FIN = substitute(readFileSync(join(TEMPLATES_ROOT, 'monolith/skills/finalize-story/SKILL.md'), 'utf8'), { MONOLITH_ROOT: '.monolith' });
 
 describe('monolith update — DOGFOOD-002 finalize-story skill', () => {
   it('a new instance carries the current skill, which forbids manual finalization and states the flow', async () => {

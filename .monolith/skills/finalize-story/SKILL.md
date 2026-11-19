@@ -104,12 +104,8 @@ if `monolith.config.json` lists them in `finalization.requiredDocs` / `allowedDo
 
 ### Step 1 — Verify build
 
-Run both checks. Both must pass before continuing.
-
-```
-pnpm typecheck
-pnpm test
-```
+Run the project's own build checks (typecheck and tests, as defined by its
+scripts and `AGENTS.md`). All must pass before continuing.
 
 Report: N tests passing, typecheck clean (or list failures if any).
 Write summary to `memory/working/integrity-result.md`.
@@ -247,6 +243,26 @@ architectural decision, stop and flag it to the user instead of guessing.
 Report per document: **UPDATED** (drift found and fixed) or **VERIFIED**
 (checked, already current). This step blocks Step 7 (commit) and any
 push — do not proceed while a known contradiction is unresolved.
+
+**`active.md` → `## Current Operational Focus` check (mandatory, before `plan`).**
+`monolith finalize` rewrites only `## Current Story` and `## Last Finalization`;
+`## Current Operational Focus` is preserved byte for byte, so it can keep claims
+about the story being closed that become false at finalization. It is an
+operational-notes section, not a normative source for the Active Story (that is
+`## Current Story`). Before finalizing, check whether it contains statements about
+the story being closed that will go stale (ACTIVE / IN PROGRESS / COMPLETED status,
+"next step" for that story, its test counts, its scope). If it does:
+
+1. Prepare the minimal proposed diff (Operational Focus only).
+2. Show it to the owner.
+3. Get the owner's permission. Never edit it automatically.
+4. Update only `## Current Operational Focus`.
+5. Re-run `monolith finalize plan` (the earlier plan no longer describes the file).
+6. Get the new approval digest from that plan.
+7. Only then run `apply`, on a separate owner approval.
+
+Do not use `docUpdates` for `active.md`: it is already a canonical finalize target.
+If the section has no such statements, report it **VERIFIED**.
 
 ---
 

@@ -5,26 +5,28 @@ trigger: finalize-story
 enforcement: mandatory
 protocols:
   - memory-governance
-  - integrity-verification
+  - skills-governance
 ---
 
 # Skill: Finalize Story
 
-Workflow for completing a story and updating all memory artifacts.
+Workflow for closing a completed story and updating all memory artifacts.
 
 ---
 
 ## Activation
 
-Triggered by: "finalize story", "complete story", "mark story done"
+Triggered by: "finalize story", "finalize X.Y", "complete story", "mark story done", "финализируй"
 
 ---
 
 ## Pre-conditions
 
-- [ ] Active story exists in `memory/working/active.md`, identified by exactly one `**Story:** <id>` line in `## Current Story`
-- [ ] All story tasks are complete
-- [ ] No blocking issues open
+- Story implementation is complete
+- User has confirmed the story is done (or the request itself implies it)
+- No active blockers
+
+Note: `monolith finalize` requires the structural `**Story:** <id>` line in `active.md` (see Deterministic Execution, item 0). If it is missing, do not fall back to manual finalization: report it to the owner.
 
 ---
 
@@ -40,14 +42,15 @@ Proposal -> monolith finalize plan -> READY + digest -> Owner Approval
 **Do not finalize by hand.** Never edit `active.md`, `story-index.md`,
 `execution-history.md`, a story capsule or any other finalization target yourself
 in order to "finalize" a story, and never skip `plan`, the owner's approval or
-`apply`. If `monolith finalize` is unavailable, fails or reports `NOT_READY` /
-`REFUSED` / `INCOMPLETE`, stop, report the output and ask the owner; do not fall
-back to the manual Steps below. This is an instruction to you, not a technical
-barrier: the CLI cannot stop an assistant from editing Markdown directly, so
-following it is your responsibility.
+`apply`. If `monolith finalize` fails or reports `NOT_READY` / `REFUSED` /
+`INCOMPLETE`, stop, report the output and ask the owner; do not fall back to the
+Steps below. This is an instruction to you, not a technical barrier: the CLI cannot
+stop an assistant from editing Markdown directly, so following it is your responsibility.
 
-Steps 2-6 below only describe what `monolith finalize apply` writes; they are not a
-manual procedure. Step 1 (the integrity and governance results, item 1 below) stays yours.
+Steps 2-6 below describe what `monolith finalize apply` writes (capsule, `active.md`,
+story index, execution history, optional `HANDOFF.md` and `docUpdates`); they are reference, not a manual procedure. Yours remain: Step 1
+(build and integrity/governance results), Step 2.5 (lessons), Step 5.5
+(documentation synchronization, before `plan`) and Step 7 (commit, only when the owner asks).
 
 0. **Structural story identity (required before `plan`).** `monolith finalize` knows
    which story is active only from one field line in the `## Current Story` section of
@@ -96,57 +99,205 @@ if `monolith.config.json` lists them in `finalization.requiredDocs` / `allowedDo
 
 ## Steps
 
-### Step 1 — Verify integrity (yours)
+> Reference for what `monolith finalize apply` writes. Do not perform Steps 2-6 by hand;
+> see Deterministic Execution above. Steps 1, 2.5, 5.5 and 7 are yours.
 
-Run integrity verification. All checks must pass before proceeding.
+### Step 1 — Verify build
 
-Expected output: `memory/working/integrity-result.md` updated with PASS.
+Run the project's own build checks (typecheck and tests, as defined by its
+scripts and `AGENTS.md`). All must pass before continuing.
 
-### Step 2 — Run governance evaluation
+Report: N tests passing, typecheck clean (or list failures if any).
+Write summary to `memory/working/integrity-result.md`.
 
-Verify no governance rules are violated.
+---
 
-Expected output: `memory/working/governance-result.md` updated with PASS.
+### Step 2 — Write story capsule
 
-### Step 3 — Write story capsule
+Create file: `memory/working/phases/<phase-id>/stories/<story-id>-<story-slug>.md`
 
-Create `memory/working/phases/<phase-id>/stories/<story-id>.md` with:
+Capsule must include:
 
-- Objective
-- Implementation summary
-- Files changed
-- Key decisions
-- Lessons learned
+```markdown
+---
+type: story-capsule
+id: story-X.Y
+phase: phase-N
+title: <story title>
+date: YYYY-MM-DD
+status: COMPLETED
+---
 
-### Step 4 — Update working memory
+# STORY X.Y — <story title>
+
+## Objective
+<what this story was meant to deliver>
+
+## Implementation Summary
+<what was actually built, sub-story by sub-story if applicable>
+
+## Files Changed
+<list of new/modified files>
+
+## Tests
+<test counts, coverage notes>
+
+## Key Decisions
+<architectural choices made during this story>
+
+## ADRs Written
+<links to docs/adr/ entries created during this story, or "None">
+
+## Lessons Learned
+<what worked, what was surprising, what to carry forward>
+```
+
+---
+
+### Step 2.5 — Extract and evaluate lessons (self-improvement sub-step)
+
+Read the "Lessons Learned" section of the capsule just written.
+
+For each item, apply the self-improvement write criteria (see `{{MONOLITH_ROOT}}/skills/self-improvement/SKILL.md`).
+
+Output a decision table — then write LESSON-*.md files only for WRITE verdicts.
+
+This step is mandatory. If there are no lessons in the capsule, output: "No lesson candidates — skipping."
+
+---
+
+### Step 3 — Update active.md
 
 Update `memory/working/active.md`:
 
-- Mark current story as COMPLETED
-- Clear "Current Story" section
+- Set "Current Story" → "No active story."
+- Set "Previous" → completed story name + date
+- Update "Last Finalization" block
 
-### Step 5 — Update story index
+---
 
-Add story entry to `memory/working/story-index.md`.
+### Step 4 — Update story-index.md
 
-### Step 6 — Update long-term memory
+Append story entry to `memory/working/story-index.md` under the correct phase heading.
 
-- Append entry to `memory/long-term/execution-history.md`
-- If the story introduced an ADR: add or update its row in the ADR Index, `docs/adr/README.md` — the only index of ADRs; add no pointer or summary to `decisions.md`
-- If the story recorded a decision that is not an ADR: add a `DEC-` record to `memory/long-term/decisions.md`
+Format:
+```markdown
+### STORY X.Y — <story title>
 
-### Step 7 — Update HANDOFF.md
+**Date:** YYYY-MM-DD
+**Status:** COMPLETED
+**Capsule:** `{{MONOLITH_ROOT}}/memory/working/phases/<phase>/stories/<capsule-file>.md`
 
-Write session handoff with story completion status.
+**Summary:** One paragraph covering what was built and why it mattered.
+
+**Key outputs:** <comma-separated list of notable files, ADRs, reports>
+```
+
+---
+
+### Step 5 — Update long-term memory
+
+**Always:** Append entry to `memory/long-term/execution-history.md` (append-only — never edit past entries):
+
+```markdown
+## STORY X.Y — <title> (YYYY-MM-DD)
+
+**Phase:** N — <phase name>
+**Decision:** <one-sentence summary of the architectural decision or outcome>
+**Build:** PASS — N tests, typecheck clean.
+**Capsule:** `{{MONOLITH_ROOT}}/memory/working/phases/<phase>/stories/<capsule-file>.md`
+```
+
+**If story introduced an ADR:** add or update its row in the ADR Index of `docs/adr/README.md` — the only index of ADRs. Do not add a pointer or summary to `decisions.md`.
+
+**If story recorded a decision that is not an ADR:** add a `DEC-` record to `memory/long-term/decisions.md` using the template in that file.
+
+---
+
+### Step 5.5 — Documentation Synchronization (mandatory)
+
+Finalization is not complete while project documentation contradicts the
+implementation it just closed out. Check each of the following against the
+actual code/tests/ADRs (the source of truth — never copy a claim from one
+doc into another without verifying it), and update only where it has
+drifted:
+
+- `README.md` — positioning, implemented-vs-not-yet-implemented lists, CLI
+  examples, limitations
+- `AGENTS.md` — current scope, Success Criteria status, component/CLI
+  references, no contradictions with README.md
+- `CLAUDE.md` — mission framing, instructions, no contradictions with
+  AGENTS.md
+- `package.json` — description, keywords, scripts match reality
+- Architecture docs (`docs/architecture/`) — component contracts match
+  implemented behavior; no planned feature described as implemented
+- Governance docs (tech-debt, roadmap, ADR index) — statuses current,
+  cross-references correct
+- CLI docs/usage/help text — matches actual commands and flags
+
+Do not invent unstable metrics (test/node/edge counts) not backed by an
+actual check just run. Do not rewrite a document wholesale when a targeted
+fix covers the drift. If a contradiction can't be resolved without a new
+architectural decision, stop and flag it to the user instead of guessing.
+
+Report per document: **UPDATED** (drift found and fixed) or **VERIFIED**
+(checked, already current). This step blocks Step 7 (commit) and any
+push — do not proceed while a known contradiction is unresolved.
+
+**`active.md` → `## Current Operational Focus` check (mandatory, before `plan`).**
+`monolith finalize` rewrites only `## Current Story` and `## Last Finalization`;
+`## Current Operational Focus` is preserved byte for byte, so it can keep claims
+about the story being closed that become false at finalization. It is an
+operational-notes section, not a normative source for the Active Story (that is
+`## Current Story`). Before finalizing, check whether it contains statements about
+the story being closed that will go stale (ACTIVE / IN PROGRESS / COMPLETED status,
+"next step" for that story, its test counts, its scope). If it does:
+
+1. Prepare the minimal proposed diff (Operational Focus only).
+2. Show it to the owner.
+3. Get the owner's permission. Never edit it automatically.
+4. Update only `## Current Operational Focus`.
+5. Re-run `monolith finalize plan` (the earlier plan no longer describes the file).
+6. Get the new approval digest from that plan.
+7. Only then run `apply`, on a separate owner approval.
+
+Do not use `docUpdates` for `active.md`: it is already a canonical finalize target.
+If the section has no such statements, report it **VERIFIED**.
+
+---
+
+### Step 6 — Update HANDOFF.md
+
+Rewrite `context/boot/HANDOFF.md` with current state:
+
+- Active Story: None (+ what was just finalized)
+- Completed This Session: bullet list of what was done
+- Constraints: any active constraints the next session should know
+- Next Step: next story if known, or "ask the user"
+
+---
+
+### Step 7 — Git commit
+
+After `apply` printed `FINALIZED` / `ALREADY_FINALIZED` and the owner asks for a commit, stage the modified memory files and commit:
+
+```
+git add {{MONOLITH_ROOT}}/memory/ {{MONOLITH_ROOT}}/context/boot/HANDOFF.md
+git commit -m "chore(story-X.Y): finalize — <story title>"
+```
+
+Do NOT push automatically. Ask the user if they want to push.
 
 ---
 
 ## Post-conditions
 
-- [ ] Integrity result: PASS
-- [ ] Governance result: PASS
+- [ ] Build verified: typecheck + tests pass
 - [ ] Story capsule written
-- [ ] active.md updated
-- [ ] story-index.md updated
-- [ ] execution-history.md appended
-- [ ] HANDOFF.md current
+- [ ] `active.md` updated
+- [ ] `story-index.md` updated
+- [ ] `execution-history.md` appended
+- [ ] ADR Index (`docs/adr/README.md`) updated (if ADR was written); `decisions.md` updated (only for a non-ADR decision)
+- [ ] Documentation Synchronization complete (Step 5.5) — no known contradiction between docs and implementation left unresolved
+- [ ] `HANDOFF.md` current
+- [ ] Commit created (only if the owner asked)

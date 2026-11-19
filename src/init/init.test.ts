@@ -149,7 +149,7 @@ describe('scaffoldInstance — ADR index routing', () => {
     expect(read(dir, 'context/maps/semantic-map.md')).not.toMatch(/Architecture decisions/);
     expect(read(dir, 'context/maps/project-map.md')).toMatch(/decisions\.md`\s+\| Non-ADR decisions/);
     expect(read(dir, 'context/maps/dependency-map.md')).toMatch(/global-status\s+\| docs\/adr\/README\.md/);
-    expect(read(dir, 'skills/finalize-story/SKILL.md')).toContain('add no pointer or summary to `decisions.md`');
+    expect(read(dir, 'skills/finalize-story/SKILL.md')).toContain('Do not add a pointer or summary to `decisions.md`');
 
     const decisions = read(dir, 'memory/long-term/decisions.md');
     expect(decisions).toContain('DEC-YYYY-XXXX');

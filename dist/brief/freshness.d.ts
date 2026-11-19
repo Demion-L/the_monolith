@@ -133,6 +133,7 @@ export declare function parseRoadmapActiveStory(content: string): string | null;
 export declare function parseRoadmapStatuses(content: string): Map<string, string>;
 /** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md (outside code fences and comments). */
 export declare function parseStoryIndexStatuses(content: string): Map<string, string>;
+export declare function isDone(status: string | undefined): boolean;
 /** What one state document claims, in a short, comparable phrase (untrusted text; clipped). */
 export interface ContradictionSource {
     document: string;

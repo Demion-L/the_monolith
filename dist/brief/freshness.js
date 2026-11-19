@@ -160,7 +160,7 @@ function listIds(ids) {
         return ids.join(', ');
     return `${ids.slice(0, MAX_LISTED).join(', ')} and ${ids.length - MAX_LISTED} more`;
 }
-function isDone(status) {
+export function isDone(status) {
     return status === 'COMPLETED' || status === 'DONE';
 }
 const MAX_CLAIM_CHARS = 80;

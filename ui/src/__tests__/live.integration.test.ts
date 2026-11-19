@@ -52,7 +52,7 @@ describe('LIVE mode against the real HTTP API', () => {
     expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
     expect(w.find('.nav').exists()).toBe(true);
     const seen: string[] = [];
-    for (const id of ['overview', 'mission', 'checkpoints', 'roadmap']) {
+    for (const id of ['overview', 'checkpoints', 'roadmap']) {
       await goTo(w, id);
       seen.push(w.text());
     }
@@ -69,7 +69,7 @@ describe('LIVE mode against the real HTTP API', () => {
   it('shows an error state (no demo data) once the server is gone, and recovers on retry', async () => {
     const w = mount(App);
     await vi.waitFor(() => expect(w.find('.nav').exists()).toBe(true));
-    await goTo(w, 'mission');
+    await goTo(w, 'overview');
     expect(w.text()).toContain('Integration mission');
     const port = server.port;
     await server.close();

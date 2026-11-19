@@ -21,13 +21,18 @@ The active section is kept in the URL hash, e.g. `#roadmap`.
 
 | Section | Shows |
 |---|---|
-| Project Overview | Project name, instance root, `state.json` schema/revision, active and finished mission counts, and the Current Story section of `active.md` with its classification: no active story, story id(s), or `UNKNOWN` when the section cannot be classified |
-| Current Mission | Active missions |
+| Project Overview | Project name, instance root, `state.json` schema/revision, active and finished mission counts, and the **Current Mission** card: the Current Story section of `active.md` shown as structured fields (story, title, status and other labelled lines when the format is recognised; otherwise a plain source preview), with its classification: no active story, story id(s), or `UNKNOWN` when the section cannot be classified. Active Coordinatorium missions are shown alongside as a separate record. Project Records summarise the other sources |
 | Checkpoints | Latest checkpoints per active mission |
 | Roadmap | Structured roadmap: phases from `roadmap-index.md` with their status, goal and details, and the active phase when the document names one explicitly. The original Markdown stays available under "View original Markdown" |
+| Execution Graph | Interactive constellation view of execution relationships; unchanged by the Mission Control overview work |
 | Hypotheses | Hypotheses from `memory/long-term/hypotheses.md` (headings `## Title {#HYP-NNN}`): id, title, status as declared, short summary and expandable details. A source that cannot be read is shown as NOT AVAILABLE or as an error, never as an empty list; documents that are only partly readable are marked INCOMPLETE |
 | Architecture Decisions | ADRs from `docs/adr/ADR-*.md`, from their frontmatter (`id`, `title`, `status`, `supersedes`, `superseded_by`) as declared; ids are case-sensitive and an id that differs from the file name is reported as an issue. Links between ADRs are shown, never derived. `docs/adr/README.md` is not a source |
 | Diagnostics | Per-source read status (absent / forbidden / corrupt / unreadable) and notes |
+
+> **Current Story vs. Coordinatorium Missions.** The *Current Mission* card on the
+> overview presents the **Current Story** (`active.md`). Coordinatorium missions
+> (`state.json`) are a different concept and are listed separately. There is no
+> separate "Current Mission" navigation entry any more.
 
 ### Structured Roadmap
 
@@ -35,7 +40,10 @@ Phases and statuses are shown as **reported** by the document; Mission Control d
 confirm or derive them. A missing, contradictory or unmatched active-phase pointer is
 shown as such. If the roadmap cannot be fully read, the panel shows a partial or error
 notice with fixed diagnostic messages and the original Markdown, and the rest of the
-interface keeps working. The roadmap cannot be edited from the UI (see Limitations).
+interface keeps working. Each phase is a card (objective, stories, expandable details) with a colour-coded
+status badge; the colour reflects the reported status text only, and unrecognised
+statuses are shown neutral and marked as such. The roadmap cannot be edited from the
+UI (see Limitations).
 
 ## LIVE and DEMO
 

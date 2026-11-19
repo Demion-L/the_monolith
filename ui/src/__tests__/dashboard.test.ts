@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App.vue';
 import CheckpointsPanel from '../components/CheckpointsPanel.vue';
-import CurrentMission from '../components/CurrentMission.vue';
+import ProjectOverview from '../components/ProjectOverview.vue';
 import RoadmapPanel from '../components/RoadmapPanel.vue';
 import { normalScenario } from '../fixtures/dashboard';
 import { goTo, sweep } from './nav';
@@ -33,7 +33,7 @@ describe('dashboard', () => {
 
   it('renders all eight sections, one at a time', async () => {
     const w = mount(App);
-    for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'graph', 'hypotheses', 'decisions', 'diagnostics']) {
+    for (const id of ['overview', 'checkpoints', 'roadmap', 'graph', 'hypotheses', 'decisions', 'diagnostics']) {
       await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
       expect(w.findAll('main section')).toHaveLength(1);
@@ -48,7 +48,7 @@ describe('dashboard', () => {
   });
 
   it('renders every in_progress mission and hides finished ones', () => {
-    const w = mount(CurrentMission, { props: { missions: normalScenario.missions } });
+    const w = mount(ProjectOverview, { props: { overview: normalScenario.overview, missions: normalScenario.missions } });
     const cards = w.findAll('[data-testid="mission"]');
     expect(cards).toHaveLength(2);
     expect(w.text()).toContain('MIS-0003');
@@ -59,7 +59,6 @@ describe('dashboard', () => {
   it('shows empty states in the empty scenario', async () => {
     const w = await appWith('empty');
     const text = (await sweep(w, () => w.text())).join('|');
-    expect(text).toContain('No active missions.');
     expect(text).toContain('No checkpoints recorded.');
     expect(w.findAll('[data-testid="mission"]')).toHaveLength(0);
   });
@@ -68,8 +67,8 @@ describe('dashboard', () => {
     const w = await appWith('partial');
     const unknown = (await sweep(w, () => w.findAll('.unknown').length)).reduce((a, b) => a + b, 0);
     expect(unknown).toBeGreaterThan(3);
-    await goTo(w, 'mission');
-    expect(w.get('#mission').text()).toContain('UNKNOWN');
+    await goTo(w, 'overview');
+    expect(w.get('#overview').text()).toContain('UNKNOWN');
     await goTo(w, 'roadmap');
     expect(w.get('#roadmap').text()).toContain('NOT AVAILABLE');
     await goTo(w, 'diagnostics');

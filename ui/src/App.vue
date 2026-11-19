@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CheckpointsPanel from './components/CheckpointsPanel.vue';
-import CurrentMission from './components/CurrentMission.vue';
 import DecisionsPanel from './components/DecisionsPanel.vue';
 import ExecutionGraphPanel from './components/ExecutionGraphPanel.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
@@ -116,10 +115,21 @@ const loading = computed(() => !demo && live.value.status === 'loading');
       </header>
       <main v-if="data" class="content">
         <Transition name="section-fade" mode="out-in" @after-leave="onSectionLeft">
-          <ProjectOverview v-if="section === 'overview'" key="overview" :overview="data.overview" />
-          <CurrentMission v-else-if="section === 'mission'" key="mission" :missions="data.missions" />
+          <ProjectOverview
+            v-if="section === 'overview'"
+            key="overview"
+            :overview="data.overview"
+            :roadmap="data.roadmap"
+            :story-index="data.storyIndex"
+            :diagnostics="data.diagnostics"
+            :sources="data.sources"
+            :provenance="data.provenance"
+            :checkpoints="data.checkpoints"
+            :missions="data.missions"
+            @navigate="selectSection"
+          />
           <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
-          <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" />
+          <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" :story-index="data.storyIndex" />
           <ExecutionGraphPanel v-else-if="section === 'graph'" key="graph" :roadmap-text="data.roadmapText" :roadmap="data.roadmap" :story-index="data.storyIndex" :story="data.overview.story" />
           <HypothesesPanel v-else-if="section === 'hypotheses'" key="hypotheses" :items="data.hypotheses" :info="data.hypothesesInfo" :demo="data.isDemo" />
           <DecisionsPanel v-else-if="section === 'decisions'" key="decisions" :items="data.decisions" :info="data.decisionsInfo" :demo="data.isDemo" />

@@ -71,7 +71,7 @@ describe('section navigation', () => {
 
   it('follows hashchange (Back/Forward and manual edits)', async () => {
     const w = mount(App);
-    await goTo(w, 'mission');
+    await goTo(w, 'checkpoints');
     await goTo(w, 'roadmap');
     window.history.replaceState({}, '', '/?mode=demo#checkpoints');
     window.dispatchEvent(new HashChangeEvent('hashchange'));
@@ -93,15 +93,15 @@ describe('section navigation', () => {
   it('follows real history traversal without looping', async () => {
     const w = mount(App);
     const push = vi.spyOn(window.history, 'pushState');
-    await goTo(w, 'mission');
+    await goTo(w, 'checkpoints');
     await goTo(w, 'roadmap');
     expect(push).toHaveBeenCalledTimes(2);
     window.history.back();
-    await vi.waitFor(() => expect(visible(w)).toEqual(['mission']));
+    await vi.waitFor(() => expect(visible(w)).toEqual(['checkpoints']));
     window.history.back();
     await vi.waitFor(() => expect(visible(w)).toEqual([IDS[0]]));
     window.history.forward();
-    await vi.waitFor(() => expect(visible(w)).toEqual(['mission']));
+    await vi.waitFor(() => expect(visible(w)).toEqual(['checkpoints']));
     // Traversal never pushes new entries.
     expect(push).toHaveBeenCalledTimes(2);
     push.mockRestore();
@@ -128,26 +128,26 @@ describe('section navigation', () => {
     const toggle = w.get('[data-testid="nav-toggle"]');
     await toggle.trigger('click');
     expect(toggle.attributes('aria-expanded')).toBe('true');
-    await goTo(w, 'mission');
+    await goTo(w, 'checkpoints');
     expect(toggle.attributes('aria-expanded')).toBe('false');
-    expect(visible(w)).toEqual(['mission']);
+    expect(visible(w)).toEqual(['checkpoints']);
   });
 
   it('returns focus to the menu button when a choice closes the menu', async () => {
     const w = mount(App, { attachTo: document.body });
     const toggle = w.get('[data-testid="nav-toggle"]');
     await toggle.trigger('click');
-    w.get<HTMLElement>('.nav a[href="#mission"]').element.focus();
-    await goTo(w, 'mission');
+    w.get<HTMLElement>('.nav a[href="#checkpoints"]').element.focus();
+    await goTo(w, 'checkpoints');
     expect(document.activeElement).toBe(toggle.element);
     w.unmount();
   });
 
   it('does not steal focus from the nav link when the menu is not open', async () => {
     const w = mount(App, { attachTo: document.body });
-    const link = w.get<HTMLElement>('.nav a[href="#mission"]');
+    const link = w.get<HTMLElement>('.nav a[href="#checkpoints"]');
     link.element.focus();
-    await goTo(w, 'mission');
+    await goTo(w, 'checkpoints');
     expect(document.activeElement).toBe(link.element);
     w.unmount();
   });

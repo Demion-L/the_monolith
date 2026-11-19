@@ -465,3 +465,102 @@ button:disabled { opacity: 0.5; cursor: default; }
   .xg-layout { grid-template-columns: minmax(0, 1fr); }
   .xg-viewport { height: 60vh; }
 }
+
+/* ---- Mission Command Overview (UI-009): few large blocks, bounded text, theme tokens only ---- */
+.mc .ov-block + .ov-block { border-top: 0; margin-top: 0; padding-top: 0; }
+.mc { display: grid; gap: 20px; }
+.mc > h2 { margin-bottom: 0; }
+.mc-eyebrow { margin: 0 0 8px; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); }
+.mc-name { margin: 0; font-size: clamp(28px, 5vw, 44px); line-height: 1.1; font-weight: 700; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.mc-desc { margin: 6px 0 0; }
+.mc-chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 16px 0 0; padding: 0; }
+.mc-chips li { display: inline-flex; gap: 8px; align-items: baseline; padding: 4px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); font-size: var(--fs-secondary); }
+.mc-chip-k { color: var(--muted); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; }
+.mc-note { margin: 10px 0 0; font-size: var(--fs-secondary); }
+.mc-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+.mc-card { min-width: 0; overflow-wrap: anywhere; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; }
+.mc-mission { border-left: 3px solid var(--accent); }
+.mc-hero { margin: 0 0 10px; font-size: clamp(26px, 4vw, 38px); font-weight: 700; letter-spacing: 0.03em; color: var(--accent); line-height: 1.1; }
+.mc-srclabel { margin: 14px 0 4px; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.08em; }
+.mc-excerpt, .mc-excerpt-full { font-size: var(--fs-secondary); color: var(--muted); overflow-wrap: anywhere; }
+.mc-excerpt-full { max-height: 320px; overflow: auto; margin-top: 8px; }
+.mc-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0 0; }
+.mc-link { background: none; border: 0; padding: 4px 0; min-height: 32px; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.mc-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mc-contents { display: contents; }
+.mc-att-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mc-att-list > li { display: flex; gap: 12px; align-items: baseline; padding: 6px 12px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px; font-size: var(--fs-secondary); }
+.mc-att-err { border-left-color: var(--err) !important; }
+.mc-att-warn { border-left-color: var(--warn) !important; }
+.mc-att-gap { border-left-color: var(--muted) !important; }
+.mc-att-tag { flex: none; font-size: var(--fs-label); font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+.mc-att-text { min-width: 0; overflow-wrap: anywhere; }
+.mc-act-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 0; }
+.mc-act-list li { font-size: var(--fs-secondary); overflow-wrap: anywhere; padding: 12px 0; border-top: 1px solid var(--border); }
+.mc-act-list li:first-child { border-top: 0; padding-top: 4px; }
+.mc-act-k { margin-right: 8px; color: var(--accent); font-size: var(--fs-label); font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; }
+.mc-act-id { color: var(--text); font-weight: 600; }
+.mc-act-sum { display: block; margin-top: 4px; color: var(--text); font-size: var(--fs-body); font-weight: 500; line-height: var(--lh-heading); }
+.mc-act-date { display: block; margin-top: 6px; color: var(--muted); font-size: var(--fs-meta); letter-spacing: 0.02em; }
+@media (max-width: 800px) {
+  .mc-grid { grid-template-columns: minmax(0, 1fr); }
+  .mc-card { padding: 16px; }
+}
+
+/* ---- UI-009B: Mission card, Roadmap phase explorer. Tokens only; no motion. ---- */
+.mc-title { margin: 0 0 10px; font-size: clamp(18px, 2.4vw, 24px); font-weight: 600; line-height: 1.25; color: var(--text); }
+.mc-statusrow { margin: 0 0 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.mc-status { display: inline-block; padding: 3px 12px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: var(--fs-meta); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; overflow-wrap: anywhere; }
+.mc-prov { font-size: var(--fs-label); }
+.mc-storystate { margin: 0 0 8px; }
+.mc-field { margin: 16px 0 0; }
+.mc-fk, .panel .mc-fk { margin: 0 0 4px; font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.mc-fv { margin: 0; font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text); overflow-wrap: anywhere; }
+.mc-milestone { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 6px 6px 0; }
+.mc-milestone .mc-fv { font-weight: 600; }
+.mc-branch .mc-fv code { display: inline-block; max-width: 100%; padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: var(--fs-secondary); overflow-wrap: anywhere; }
+.mc-mlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+
+.phase-block { margin: 14px 0 0; }
+.phase-k, .panel .phase-k { margin: 0 0 4px; font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.phase-v { margin: 0; line-height: var(--lh-body); overflow-wrap: anywhere; }
+.phase-goal .phase-v { font-size: var(--fs-body); color: var(--text); }
+.story-rows { list-style: none; margin: 0; padding: 0; }
+.story-rows li { display: grid; grid-template-columns: minmax(7.5em, auto) minmax(0, 1fr) auto auto; gap: 4px 14px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border); }
+.story-rows li:first-child { border-top: 0; }
+.story-id { font-weight: 600; overflow-wrap: anywhere; }
+.story-title { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.story-status { white-space: normal; }
+.story-date { font-size: var(--fs-meta); white-space: nowrap; }
+.phase-note { margin: 6px 0 0; font-size: var(--fs-meta); }
+.phase-details > summary { padding: 4px 0; }
+@media (max-width: 640px) {
+  .story-rows li { grid-template-columns: minmax(0, 1fr) auto; }
+  .story-id { grid-column: 1 / -1; }
+  .story-title { grid-column: 1 / -1; }
+  .story-date { white-space: normal; text-align: right; }
+  .story-status { justify-self: start; }
+}
+
+/* ---- UI-009B: Diagnostics layout. Badge column + text column; nothing can touch or overlap. ---- */
+.diag { gap: 8px; }
+.diag li:has(> .sev) { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
+.diag li > .sev { margin-right: 0; letter-spacing: 0.06em; }
+.diag li { overflow-wrap: anywhere; }
+.check-row { flex-wrap: wrap; align-items: flex-start; row-gap: 6px; }
+.check-row > :first-child { flex: 1 1 10em; min-width: 0; overflow-wrap: anywhere; }
+.check-row > .pill, .dcard-head > .pill { flex: none; }
+.dcard-head { row-gap: 8px; }
+.dcard-head > h3 { min-width: 0; flex: 1 1 10em; overflow-wrap: anywhere; }
+.source-problem { overflow-wrap: anywhere; line-height: var(--lh-body); }
+.facts.compact dt { margin-top: 4px; }
+@media (max-width: 480px) {
+  .diag li:has(> .sev) { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+  .check-row > .pill { margin-left: 0; }
+}
+
+/* Status badge tones (roadmap phases, story rows): border + text only, existing tokens. */
+.status-badge.tone-progress { border-color: var(--ok); color: var(--ok); }
+.status-badge.tone-undefined { border-color: var(--warn); color: var(--warn); }
+.status-badge.tone-done { border-color: var(--accent); color: var(--accent); }
+.status-badge.tone-planned { border-color: var(--muted); color: var(--muted); }

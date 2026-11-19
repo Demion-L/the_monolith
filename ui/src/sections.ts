@@ -1,7 +1,6 @@
 // The dashboard sections, in navigation order. Ids match the `id` of each panel's <section>.
 export const SECTIONS = [
   { id: 'overview', label: 'Project Overview' },
-  { id: 'mission', label: 'Current Mission' },
   { id: 'checkpoints', label: 'Checkpoints' },
   { id: 'roadmap', label: 'Roadmap' },
   { id: 'graph', label: 'Execution Graph' },

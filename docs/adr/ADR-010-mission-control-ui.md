@@ -283,6 +283,14 @@ read-only проверках (диагностики чтения Core). SEC-002
 - **Открыты:** Q3, Q5, Q7, Q9 (backlog или вне MVP); Q11 (внутреннее использование
   `BriefModel` — решается в UI-001).
 
+## Note (2026-11-19) — current UI
+
+Historical record; the decision above is unchanged. Since UI-009 the standalone
+"Current Mission" navigation entry from the MVP list no longer exists: the
+Current Story is presented as the Current Mission card inside Project Overview,
+and Coordinatorium missions remain a separate concept. See
+[Mission Control reference](../reference/mission-control.md).
+
 ## References
 
 - Plan: `.monolith/context/templates/plan-ui-mission-control.md`

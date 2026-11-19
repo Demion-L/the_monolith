@@ -30,7 +30,7 @@ describe('sidebar brand', () => {
   it('keeps the Appearance switcher and the section navigation', () => {
     const w = mount(App);
     expect(w.find('[data-testid="skin-select"]').exists()).toBe(true);
-    expect(w.findAll('.nav a')).toHaveLength(8);
+    expect(w.findAll('.nav a')).toHaveLength(7);
   });
 });
 

@@ -152,7 +152,7 @@ describe('RoadmapPanel', () => {
     const w = mountS(structured());
     const d = w.get('[data-testid="phase-details"]');
     expect(d.element.tagName).toBe('DETAILS');
-    expect(d.get('summary').text()).toBe('Show Details');
+    expect(d.get('summary').text()).toBe('Historical notes & evidence');
     expect((d.element as HTMLDetailsElement).open).toBe(false);
     (d.element as HTMLDetailsElement).open = true;
     expect((d.element as HTMLDetailsElement).open).toBe(true);

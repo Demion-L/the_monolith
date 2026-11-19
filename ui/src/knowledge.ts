@@ -38,3 +38,31 @@ export function safeDocPath(raw: string | null): string | null {
   if (p.split('/').some((seg) => seg === '..' || seg === '')) return null;
   return p;
 }
+
+/**
+ * Preview-only cosmetics (UI-009): removes paired `**bold**` and `` `code` `` markers from a single line of text.
+ * Deliberately NOT a Markdown parser. A marker is removed only when it is a matched pair on one line with
+ * non-space content directly inside it, so unpaired text (`src/**` + `/*.ts`, `2 ** 3`, a lone backtick) is
+ * left untouched. Italics, headings, lists and links are never rewritten. The source data is never modified;
+ * full-text views keep showing the original string.
+ */
+export function stripDecorativeMarkers(text: string): string {
+  return text
+    .replace(/\*\*(?=\S)([^*\n]*?\S)\*\*/g, '$1')
+    .replace(/`(?=[^`\s])([^`\n]*?[^`\s]|[^`\s])`/g, '$1');
+}
+
+/**
+ * Border/text colour for a roadmap or story-index status badge (UI-009B). Presentation only: it colours the
+ * document's own wording and never changes or derives a status. Unrecognised or missing values stay neutral.
+ */
+export type BadgeTone = 'progress' | 'undefined' | 'done' | 'planned' | 'neutral';
+export function statusBadgeTone(value: string | null, recognized: boolean): BadgeTone {
+  if (value === null || !recognized) return 'neutral';
+  const v = value.trim().toUpperCase();
+  if (v.startsWith('IN PROGRESS')) return 'progress';
+  if (v.startsWith('NOT DEFINED')) return 'undefined';
+  if (v.startsWith('COMPLETE')) return 'done';
+  if (v.startsWith('PLANNED')) return 'planned';
+  return 'neutral';
+}

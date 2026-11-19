@@ -244,7 +244,7 @@ describe('App in LIVE mode (default)', () => {
     expect(w.find('[data-testid="demo-badge"]').exists()).toBe(false);
     expect(w.find('[data-testid="scenario-select"]').exists()).toBe(false);
     const seen: string[] = [];
-    for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'diagnostics']) {
+    for (const id of ['overview', 'checkpoints', 'roadmap', 'diagnostics']) {
       await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
       seen.push(w.text());
@@ -284,9 +284,10 @@ describe('App in LIVE mode (default)', () => {
     })));
     const w = mount(App);
     await flushPromises();
-    await goTo(w, 'mission');
-    expect(w.get('#mission').text()).toContain('NOT AVAILABLE');
-    expect(w.get('#mission').text()).not.toContain('No active missions.');
+    // There is no Current Mission section any more: an unreadable missions source never shows up as "none".
+    expect(w.find('#mission').exists()).toBe(false);
+    expect(w.findAll('[data-testid="mission"]')).toHaveLength(0);
+    expect(w.get('#overview').text()).not.toContain('No active missions');
     await goTo(w, 'checkpoints');
     expect(w.get('#checkpoints').text()).toContain('NOT AVAILABLE');
   });
@@ -331,7 +332,7 @@ describe('App in LIVE mode (default)', () => {
     const spy = stubFetch(json(model()), json(updated));
     const w = mount(App);
     await flushPromises();
-    await goTo(w, 'mission');
+    await goTo(w, 'overview');
     expect(w.text()).toContain('Live mission');
     await w.get('[data-testid="refresh"]').trigger('click');
     await flushPromises();
@@ -345,7 +346,7 @@ describe('App in LIVE mode (default)', () => {
     stubFetch(json(model()), json({ error: { code: 'INTERNAL_ERROR' } }, 500));
     const w = mount(App);
     await flushPromises();
-    await goTo(w, 'mission');
+    await goTo(w, 'overview');
     expect(w.text()).toContain('Live mission');
     await w.get('[data-testid="refresh"]').trigger('click');
     await flushPromises();

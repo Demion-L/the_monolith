@@ -172,3 +172,27 @@
 /* Spacious layout: primary checks glow softly, secondary context stays calmer. */
 :root[data-skin="cosmic-glass"] .dcard-primary { box-shadow: var(--glass-edge), 0 0 28px rgba(150, 140, 255, 0.1); border-color: rgba(190, 200, 255, 0.3); }
 :root[data-skin="cosmic-glass"] .dcard-secondary { background: rgba(20, 24, 58, 0.5); }
+
+/* UI-009 Mission Command Overview: glass surfaces and a restrained cyan/violet glow. Static; no motion to disable. */
+:root[data-skin="cosmic-glass"] .mc-card {
+  background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+}
+:root[data-skin="cosmic-glass"] .mc-mission { border-left-color: #5ee6ff; box-shadow: var(--glass-edge), var(--glass-shadow), -6px 0 24px -12px rgba(94, 230, 255, 0.45); }
+:root[data-skin="cosmic-glass"] .mc-hero { color: #5ee6ff; text-shadow: 0 0 18px rgba(94, 230, 255, 0.35); }
+:root[data-skin="cosmic-glass"] .mc-name { background: linear-gradient(90deg, #f1f4ff, #b4a9ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+:root[data-skin="cosmic-glass"] .mc-chips li { background: var(--glass-dense); }
+
+/* Project records: cyan label, soft violet id; title stays light, date muted. */
+:root[data-skin="cosmic-glass"] .mc-act-k { color: #5ee6ff; }
+:root[data-skin="cosmic-glass"] .mc-act-id { color: var(--accent); }
+:root[data-skin="cosmic-glass"] .mc-act-sum { color: var(--text); }
+
+/* UI-009B: cyan mission objective/status, violet story ids. Static. */
+:root[data-skin="cosmic-glass"] .mc-title { color: var(--text); }
+:root[data-skin="cosmic-glass"] .mc-status { color: #5ee6ff; border-color: rgba(94, 230, 255, 0.6); background: rgba(94, 230, 255, 0.08); }
+:root[data-skin="cosmic-glass"] .mc-fk,
+:root[data-skin="cosmic-glass"] .phase-k { color: #5ee6ff; }
+:root[data-skin="cosmic-glass"] .mc-milestone { border-left-color: var(--accent); background: rgba(180, 169, 255, 0.08); }
+:root[data-skin="cosmic-glass"] .story-id { color: var(--accent); }

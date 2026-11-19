@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import type { RoadmapDiagnosticCode, RoadmapPhaseView, StructuredRoadmapView } from '../types/dashboard';
+import { statusBadgeTone } from '../knowledge';
+import type { RoadmapDiagnosticCode, RoadmapPhaseView, Section, StoryIndexItemView, StructuredRoadmapView, StructuredStoryIndexView } from '../types/dashboard';
 
 /** UI display limit. Independent of the parser capacity: every phase stays reachable. */
 const PAGE_SIZE = 10;
@@ -8,7 +9,27 @@ const PAGE_SIZE = 10;
 const PHASE_PARAM = 'phase';
 type SortOrder = 'newest' | 'oldest';
 
-const props = defineProps<{ text: string | null; structured?: StructuredRoadmapView }>();
+const props = defineProps<{ text: string | null; structured?: StructuredRoadmapView; storyIndex?: Section<StructuredStoryIndexView> }>();
+
+// Stories per phase: Core's own phase containment (`phase.kind === 'matched'`, strict id match) and nothing else.
+// Statuses are the story index's REPORTED claims; no lifecycle is derived here and the roadmap text is never consulted.
+const storiesByPhase = computed(() => {
+  const map = new Map<string, StoryIndexItemView[]>();
+  const d = props.storyIndex?.data;
+  if (d === undefined || d === null || d.state === 'error' || d.state === 'unrecognized') return map;
+  for (const st of d.stories) {
+    if (st.phase.kind !== 'matched') continue;
+    map.set(st.phase.phaseId, [...(map.get(st.phase.phaseId) ?? []), st]);
+  }
+  return map;
+});
+const storyIndexUsable = computed(() => {
+  const d = props.storyIndex?.data;
+  return d !== undefined && d !== null && d.state !== 'error' && d.state !== 'unrecognized';
+});
+function storiesOf(p: RoadmapPhaseView): StoryIndexItemView[] {
+  return p.id === null || duplicateIds.value.has(p.id) ? [] : (storiesByPhase.value.get(p.id) ?? []);
+}
 
 // Fixed labels for Core's fixed diagnostic codes. Nothing from the document is echoed here.
 const DIAGNOSTIC_LABELS: Record<RoadmapDiagnosticCode, string> = {
@@ -306,14 +327,31 @@ function heading(p: { id: string | null; title: string | null }): string {
             >{{ e.phase.id === selectedId ? 'Selected' : 'Select' }}</button>
           </div>
           <p class="phase-meta">
-            <span class="status-badge" :class="{ 'status-unrecognized': !e.phase.status.recognized }" data-testid="phase-status">{{ statusParts(e.phase).label }}</span>
+            <span class="status-badge" :class="[{ 'status-unrecognized': !e.phase.status.recognized }, `tone-${statusBadgeTone(e.phase.status.value, e.phase.status.recognized)}`]" data-testid="phase-status">{{ statusParts(e.phase).label }}</span>
             <span class="prov" data-testid="phase-provenance">{{ e.phase.status.provenance }}</span>
             <span v-if="e.phase.status.value !== null && !e.phase.status.recognized" class="diag-badge" data-testid="phase-unrecognized">UNRECOGNIZED</span>
             <span v-if="e.phase.id !== null && e.phase.id === activeId" class="tag" data-testid="phase-active">ACTIVE</span>
           </p>
-          <p v-if="e.phase.goal !== null" class="phase-goal" data-testid="phase-goal"><span class="muted">Goal:</span> {{ e.phase.goal }}<span v-if="e.phase.goalTruncated === true" class="tag tag-neutral" data-testid="goal-truncated"> Truncated</span></p>
+          <div v-if="e.phase.goal !== null" class="phase-block phase-goal" data-testid="phase-goal">
+            <h4 class="phase-k">Phase objective</h4>
+            <p class="phase-v">{{ e.phase.goal }}<span v-if="e.phase.goalTruncated === true" class="tag tag-neutral" data-testid="goal-truncated"> Truncated</span></p>
+          </div>
+          <div class="phase-block phase-stories" data-testid="phase-stories">
+            <h4 class="phase-k">Stories</h4>
+            <p v-if="!storyIndexUsable" class="muted phase-v" data-testid="phase-stories-unavailable">Story index not available from this data source.</p>
+            <p v-else-if="storiesOf(e.phase).length === 0" class="muted phase-v" data-testid="phase-stories-none">No story-index entry is placed under this phase.</p>
+            <ul v-else class="story-rows">
+              <li v-for="st in storiesOf(e.phase)" :key="`${st.id}-${st.title}`" data-testid="phase-story">
+                <code class="story-id">{{ st.id }}</code>
+                <span class="story-title">{{ st.title ?? 'Untitled' }}</span>
+                <span class="status-badge story-status" :class="[{ 'status-unrecognized': !st.status.recognized }, `tone-${statusBadgeTone(st.status.value, st.status.recognized)}`]">{{ st.status.value ?? 'STATUS NOT STATED' }}</span>
+                <span class="story-date muted">{{ st.date ?? 'date not reported' }}</span>
+              </li>
+            </ul>
+            <p v-if="storyIndexUsable && storiesOf(e.phase).length > 0" class="muted phase-note">Statuses and dates are as reported by the story index; they are not verified.</p>
+          </div>
           <details v-if="e.phase.details !== null || statusParts(e.phase).full !== null || phaseDiagnostics.has(e.index)" class="phase-details" data-testid="phase-details">
-            <summary>Show Details</summary>
+            <summary>Historical notes &amp; evidence</summary>
             <p v-if="statusParts(e.phase).full !== null" class="phase-full-status" data-testid="phase-full-status"><span class="muted">Reported status:</span> {{ statusParts(e.phase).full }}</p>
             <ul v-if="phaseDiagnostics.has(e.index)" class="diag" data-testid="phase-diagnostics">
               <li v-for="(c, k) in phaseDiagnostics.get(e.index)" :key="k" class="sev-warning">{{ DIAGNOSTIC_LABELS[c] ?? c }}</li>

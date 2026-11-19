@@ -81,8 +81,7 @@ no automatic recall or reminders, no idea status management and no idea UI yet.
 ## Quick Start
 
 Requires Node.js >= 20. `0.2.0-beta.1` is a pre-release and is published under the
-`beta` dist-tag. Once it has been
-published to npm, install it with:
+`beta` dist-tag. Install it with:
 
 ```bash
 npm install -g @latysh-development/monolith@beta
@@ -190,8 +189,8 @@ listing — not an official partnership, endorsement or certification.
 ## Project Status
 
 **Beta** (`0.2.0-beta.1`), a pre-release — not a stable production release. The API and
-CLI are experimental and may change without notice. The beta is intended for the `beta`
-dist-tag and is not published yet; the latest published alpha is `0.1.0-alpha.4` (`alpha` dist-tag).
+CLI are experimental and may change without notice. The beta is published on npm under
+the `beta` dist-tag; the previous alpha is `0.1.0-alpha.4` (`alpha` dist-tag).
 Durable State and the Coordinatorium (`monolith durable`, `monolith mission`) are
 experimental and are not part of the Quick Start. Known limitations of this release:
 [release notes](./docs/release/0.2.0-beta.1.md#known-limitations).

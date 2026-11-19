@@ -7,9 +7,10 @@ stability: volatile
 
 # CLI Reference
 
-Commands of the `monolith` CLI (`src/cli/index.ts`). MONOLITH is an alpha
-package published to npm under the `alpha` dist-tag
-(`npm install -g @latysh-development/monolith@alpha`, see the
+Commands of the `monolith` CLI (`src/cli/index.ts`). MONOLITH `0.2.0-beta.1` is a
+pre-release, intended for the `beta` dist-tag once published
+(`npm install -g @latysh-development/monolith@beta`; the last published alpha is
+`@alpha`, see the
 [README](../../README.md#quick-start)). From a clone, run `monolith` after
 `npm link`, or `node dist/cli/index.js`. The examples below use `monolith`.
 

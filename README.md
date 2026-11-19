@@ -12,7 +12,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="./package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-339933.svg" alt="Node.js >= 20"></a>
-  <img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status: alpha">
+  <img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="Status: beta">
   <a href="https://hub.xerj.org/contributors/Demion-L"><img src="https://hub.xerj.org/contributors/Demion-L/badge.svg" alt="XERJ Corpus Hub contributor"></a>
 </p>
 
@@ -80,13 +80,19 @@ no automatic recall or reminders, no idea status management and no idea UI yet.
 
 ## Quick Start
 
-Requires Node.js >= 20. Install the published alpha package from npm:
+Requires Node.js >= 20. `0.2.0-beta.1` is a pre-release and is published under the
+`beta` dist-tag. Once it has been
+published to npm, install it with:
 
 ```bash
-npm install -g @latysh-development/monolith@alpha
+npm install -g @latysh-development/monolith@beta
 ```
 
-To build from source instead, see the [installation and release guide](./docs/release/alpha-installation.md).
+The previous alpha (`0.1.0-alpha.4`) remains available as `@alpha`. To build from
+source, or to install a locally built tarball (`npm pack`, then
+`npm install -g ./latysh-development-monolith-<version>.tgz`), see the
+[installation and release guide](./docs/release/alpha-installation.md).
+Release notes: [`0.2.0-beta.1`](./docs/release/0.2.0-beta.1.md).
 
 Then, in a project directory:
 
@@ -183,10 +189,12 @@ listing — not an official partnership, endorsement or certification.
 
 ## Project Status
 
-**Beta** (`0.2.0-beta.1`, in development). The API and CLI are experimental and may change
-without notice. Published to npm under the alpha dist-tag. Durable State and the Coordinatorium
-(`monolith durable`, `monolith mission`) are experimental and are not part of
-the Quick Start.
+**Beta** (`0.2.0-beta.1`), a pre-release — not a stable production release. The API and
+CLI are experimental and may change without notice. The beta is intended for the `beta`
+dist-tag and is not published yet; the latest published alpha is `0.1.0-alpha.4` (`alpha` dist-tag).
+Durable State and the Coordinatorium (`monolith durable`, `monolith mission`) are
+experimental and are not part of the Quick Start. Known limitations of this release:
+[release notes](./docs/release/0.2.0-beta.1.md#known-limitations).
 
 **Security:** Mission Control is read-only, listens on `127.0.0.1` only and has
 no authentication. Concurrent adversarial mutation of a project is unsupported;

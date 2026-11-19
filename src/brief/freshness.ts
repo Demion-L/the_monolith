@@ -257,7 +257,7 @@ function listIds(ids: string[]): string {
   return `${ids.slice(0, MAX_LISTED).join(', ')} and ${ids.length - MAX_LISTED} more`;
 }
 
-function isDone(status: string | undefined): boolean {
+export function isDone(status: string | undefined): boolean {
   return status === 'COMPLETED' || status === 'DONE';
 }
 

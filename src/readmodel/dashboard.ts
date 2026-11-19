@@ -43,6 +43,7 @@ import { extractCurrentStory } from '../brief/story.js';
 import { parseActiveStoryClaim } from '../brief/freshness.js';
 import { parseRoadmapPhases } from './roadmap.js';
 import { parseStoryIndex } from './story-index.js';
+import { buildStoryAuthorityContext, resolveStoryStateIn } from './story-state.js';
 import { readKnowledge } from './knowledge.js';
 import { sourceFailure } from './source-failure.js';
 import {
@@ -60,6 +61,7 @@ import type {
   StateProvenanceView,
   RoadmapData,
   StoryClaimView,
+  StoryStateView,
   StructuredRoadmapView,
   StructuredStoryIndexView,
   Section,
@@ -259,6 +261,17 @@ function unreadableModel(config: SourceReport, rootCode: SourceErrorCode = 'ROOT
   };
 }
 
+/** ARCH-002B: one resolver, three already-bounded texts. A resolver fault is reported as absent data, never as a state. */
+function storyStateOf(active: string | null, roadmap: string | null, storyIndex: string | null): StoryStateView | null {
+  try {
+    const ctx = buildStoryAuthorityContext({ active, roadmap, storyIndex });
+    const claim = ctx.activeClaim;
+    return { activeStory: claim.kind === 'ids' && claim.ids.length === 1 ? resolveStoryStateIn(ctx, claim.ids[0]) : null, sources: ctx.sources };
+  } catch {
+    return null;
+  }
+}
+
 function buildModel(projectRoot: string): DashboardReadModel {
   const config = loadConfig(projectRoot);
   if (config.read === null) return unreadableModel(config.report);
@@ -363,6 +376,7 @@ function buildModel(projectRoot: string): DashboardReadModel {
     roadmap: section(roadmap, [roadmapLoaded.report]),
     ...readKnowledge(projectRoot, root.monolithRoot),
     storyIndex: section(storyIndex, [storyIndexLoaded.report]),
+    storyState: section(storyStateOf(storyLoaded.content, roadmapLoaded.content, storyIndexLoaded.content), [storyLoaded.report, roadmapLoaded.report, storyIndexLoaded.report]),
     diagnostics: {
       validation: 'NOT_PERFORMED',
       sources: [config.report, stateResult.report, storyLoaded.report, roadmapLoaded.report],

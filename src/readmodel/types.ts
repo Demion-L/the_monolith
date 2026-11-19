@@ -13,6 +13,7 @@
  * that).
  */
 
+import type { StoryStateResolution } from './story-state.js';
 import type { Checkpoint, Mission } from '../coordinatorium/types.js';
 
 /** The fixed, closed set of files this model reads. */
@@ -406,6 +407,12 @@ export interface KnowledgeData {
   complete: boolean;
 }
 
+/** Resolution of the declared active story (ARCH-002B); see `story-state.ts`. */
+export interface StoryStateView {
+  activeStory: StoryStateResolution | null;
+  sources: StoryStateResolution['sources'];
+}
+
 export interface DashboardReadModel {
   projectOverview: Section<ProjectOverview>;
   currentMissions: Section<CurrentMissions>;
@@ -423,5 +430,12 @@ export interface DashboardReadModel {
    * (see `sources[0].status`); never an empty list. Absent from DTOs of older servers.
    */
   storyIndex?: Section<StructuredStoryIndexView>;
+  /**
+   * Additive (ARCH-002B). Core's Story State Resolver applied to the story `active.md`
+   * declares current: Planned / Active / Finalized facts kept apart, with provenance and
+   * consistency. `data.activeStory === null` when no single active story is declared.
+   * Absent from DTOs of older servers; the UI must not rebuild this itself.
+   */
+  storyState?: Section<StoryStateView>;
   diagnostics: ReadDiagnostics;
 }

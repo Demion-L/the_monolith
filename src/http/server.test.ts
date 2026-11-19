@@ -384,7 +384,7 @@ describe('Core integration — knowledge (UI-004B)', () => {
     expect(m.hypotheses!.data!.items.map((i) => i.id)).toEqual(['HYP-001']);
     expect(m.decisions!.data!.items.map((i) => i.id)).toEqual(['ADR-001']);
     expect(m).toEqual(readDashboardModel(dir));
-    expect(Object.keys(m).sort()).toEqual(['checkpoints', 'currentMissions', 'decisions', 'diagnostics', 'hypotheses', 'projectOverview', 'roadmap', 'storyIndex']);
+    expect(Object.keys(m).sort()).toEqual(['checkpoints', 'currentMissions', 'decisions', 'diagnostics', 'hypotheses', 'projectOverview', 'roadmap', 'storyIndex', 'storyState']);
     expect(m.diagnostics.sources.map((x) => x.id)).toEqual(['config', 'state', 'activeStory', 'roadmap']);
   });
 

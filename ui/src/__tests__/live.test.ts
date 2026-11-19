@@ -228,18 +228,19 @@ describe('toDashboardData', () => {
 });
 
 describe('App in LIVE mode (default)', () => {
-  it('shows loading, then real DTO data with the LIVE DATA badge', async () => {
+  it('shows loading, then real DTO data without any LIVE DATA badge', async () => {
     let release!: (r: Response) => void;
     const spy = stubFetch(() => { throw new Error('unused'); });
     spy.mockImplementationOnce(() => new Promise<Response>((r) => { release = r; }));
     const w = mount(App);
     expect(w.find('[data-testid="loading"]').exists()).toBe(true);
-    expect(w.get('[data-testid="live-badge"]').text()).not.toBe('LIVE DATA');
     expect(w.find('section#overview').exists()).toBe(false);
 
     release(json(model()));
     await flushPromises();
-    expect(w.get('[data-testid="live-badge"]').text()).toBe('LIVE DATA');
+    expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
+    expect(w.find('[data-testid="refresh"]').exists()).toBe(true);
+    expect(w.find('.nav').exists()).toBe(true);
     expect(w.find('[data-testid="demo-badge"]').exists()).toBe(false);
     expect(w.find('[data-testid="scenario-select"]').exists()).toBe(false);
     const seen: string[] = [];
@@ -305,7 +306,6 @@ describe('App in LIVE mode (default)', () => {
     expect(err.text()).toMatch(message);
     expect(w.find('[data-testid="retry"]').exists()).toBe(true);
     expect(w.find('[data-testid="demo-badge"]').exists()).toBe(false);
-    expect(w.get('[data-testid="live-badge"]').text()).not.toBe('LIVE DATA');
     expect(w.find('section#overview').exists()).toBe(false);
     expect(w.text()).not.toContain('Tidewatch');
     expect(spy).toHaveBeenCalledTimes(1);
@@ -319,7 +319,9 @@ describe('App in LIVE mode (default)', () => {
     await w.get('[data-testid="retry"]').trigger('click');
     await flushPromises();
     expect(spy).toHaveBeenCalledTimes(2);
-    expect(w.get('[data-testid="live-badge"]').text()).toBe('LIVE DATA');
+    expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
+    expect(w.find('[data-testid="refresh"]').exists()).toBe(true);
+    expect(w.find('.nav').exists()).toBe(true);
     expect(w.find('[data-testid="load-error"]').exists()).toBe(false);
   });
 
@@ -350,7 +352,6 @@ describe('App in LIVE mode (default)', () => {
     expect(w.find('[data-testid="load-error"]').exists()).toBe(true);
     expect(w.text()).not.toContain('Live mission');
     expect(w.text()).not.toContain('MIS-0001');
-    expect(w.get('[data-testid="live-badge"]').text()).not.toBe('LIVE DATA');
   });
 
   it('?scenario= alone does not switch to DEMO', async () => {

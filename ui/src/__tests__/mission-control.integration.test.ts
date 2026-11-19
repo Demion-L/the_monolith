@@ -60,7 +60,7 @@ async function mountLive() {
 describe('Unified Mission Control (LIVE, real HTTP)', () => {
   it('lists every section in the navigation and each one opens', async () => {
     const w = await mountLive();
-    expect(SECTIONS.map((s) => s.id)).toEqual(['overview', 'mission', 'checkpoints', 'roadmap', 'hypotheses', 'decisions', 'diagnostics']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['overview', 'mission', 'checkpoints', 'roadmap', 'graph', 'hypotheses', 'decisions', 'diagnostics']);
     for (const { id } of SECTIONS) {
       await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);

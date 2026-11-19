@@ -31,9 +31,9 @@ describe('dashboard', () => {
     }
   });
 
-  it('renders all seven sections, one at a time', async () => {
+  it('renders all eight sections, one at a time', async () => {
     const w = mount(App);
-    for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'hypotheses', 'decisions', 'diagnostics']) {
+    for (const id of ['overview', 'mission', 'checkpoints', 'roadmap', 'graph', 'hypotheses', 'decisions', 'diagnostics']) {
       await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
       expect(w.findAll('main section')).toHaveLength(1);

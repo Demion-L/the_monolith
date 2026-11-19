@@ -115,6 +115,62 @@ function isStructuredRoadmap(v: unknown): boolean {
   );
 }
 
+const STORY_PARSE_STATES = ['ok', 'partial', 'empty', 'no_stories', 'unrecognized', 'error'];
+const STORY_DIAG_CODES = [
+  'DOCUMENT_EMPTY', 'STORIES_NOT_FOUND', 'STORY_HEADING_MALFORMED', 'PHASE_HEADING_MALFORMED', 'STORIES_TRUNCATED', 'STORY_ID_DUPLICATE',
+  'STORY_OUTSIDE_PHASE', 'STORY_STATUS_MISSING', 'STORY_STATUS_EMPTY', 'STORY_STATUS_CONFLICT', 'STORY_STATUS_UNRECOGNIZED',
+  'STORY_PHASE_UNMATCHED', 'STORY_PHASE_AMBIGUOUS', 'STORY_PHASE_UNVERIFIED', 'INTERNAL',
+];
+
+function isStoryPhaseRef(v: unknown): boolean {
+  if (!isObj(v)) return false;
+  if (v.kind === 'outside') return true;
+  if (v.kind === 'matched') return isStr(v.phaseId) && isStr(v.token);
+  return (v.kind === 'unmatched' || v.kind === 'ambiguous' || v.kind === 'unverified') && isStr(v.token);
+}
+
+function isStoryItem(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.id) &&
+    (v.idStatus === 'unique' || v.idStatus === 'duplicate') &&
+    isStrOrNull(v.title) &&
+    isObj(v.status) &&
+    isStrOrNull(v.status.value) &&
+    typeof v.status.recognized === 'boolean' &&
+    (v.status.value !== null || v.status.recognized === false) &&
+    v.status.provenance === 'REPORTED' &&
+    isStrOrNull(v.date) &&
+    isStoryPhaseRef(v.phase)
+  );
+}
+
+/** The optional structured story index (absent in DTOs from older servers). */
+function isStructuredStoryIndex(v: unknown): boolean {
+  if (!isObj(v) || !isStr(v.state) || !STORY_PARSE_STATES.includes(v.state)) return false;
+  if (!Array.isArray(v.stories) || !v.stories.every(isStoryItem)) return false;
+  // A failed or unrecognised parse never carries stories (it must not look like an index).
+  if (v.stories.length > 0 && !(v.state === 'ok' || v.state === 'partial')) return false;
+  // `idStatus` must agree with the ids of this very payload: a payload cannot call a repeated id unique,
+  // because the graph draws an edge only for a unique id.
+  const counts = new Map<string, number>();
+  for (const s of v.stories as Obj[]) counts.set(s.id as string, (counts.get(s.id as string) ?? 0) + 1);
+  if ((v.stories as Obj[]).some((s) => (counts.get(s.id as string) as number > 1) !== (s.idStatus === 'duplicate'))) return false;
+  const n = v.stories.length;
+  return (
+    Array.isArray(v.diagnostics) &&
+    v.diagnostics.every(
+      (d) =>
+        isObj(d) &&
+        isStr(d.code) &&
+        STORY_DIAG_CODES.includes(d.code) &&
+        isStr(d.severity) &&
+        DIAG_SEVERITIES.includes(d.severity) &&
+        (d.storyIndex === null || (isCount(d.storyIndex) && d.storyIndex < n)),
+    )
+  );
+}
+
 const STATE_MODES = ['shared', 'isolated', 'local'];
 const LOCAL_STATE_STATUSES = ['ok', 'incompatible-schema', 'corrupt', 'unreadable'];
 
@@ -212,6 +268,7 @@ export function isDashboardReadModel(v: unknown): v is DashboardReadModel {
         ),
     ) &&
     isSection(v.roadmap, (d) => isObj(d) && isStr(d.text) && (d.structured === undefined || isStructuredRoadmap(d.structured))) &&
+    (v.storyIndex === undefined || isSection(v.storyIndex, isStructuredStoryIndex)) &&
     (v.hypotheses === undefined || isSection(v.hypotheses, isKnowledgeData)) &&
     (v.decisions === undefined || isSection(v.decisions, isKnowledgeData)) &&
     isObj(diag) &&

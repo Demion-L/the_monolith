@@ -74,12 +74,7 @@
   box-shadow: 0 6px 24px rgba(2, 3, 14, 0.3);
 }
 :root[data-skin="cosmic-glass"] .project { font-size: var(--fs-project); letter-spacing: 0.01em; }
-:root[data-skin="cosmic-glass"] .live-badge {
-  background: #14532f; color: #eafff3;
-  border: 1px solid #5fd68a;
-}
-:root[data-skin="cosmic-glass"] .live-badge-off { background: var(--glass-dense); color: var(--muted); border-color: var(--border); }
-:root[data-skin="cosmic-glass"] .demo-badge { border: 1px solid #ffd978; }
+:root[data-skin="cosmic-glass"] :root[data-skin="cosmic-glass"] :root[data-skin="cosmic-glass"] .demo-badge { border: 1px solid #ffd978; }
 
 /* Panels and cards */
 :root[data-skin="cosmic-glass"] .panel {

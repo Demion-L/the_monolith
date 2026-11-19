@@ -227,12 +227,6 @@ code, pre { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fo
   .facts dd { margin-bottom: 6px; }
 }
 
-.live-badge {
-  background: #1f6f43; color: #eafff3;
-  font-weight: 800; letter-spacing: 0.1em;
-  padding: 4px 12px; border-radius: 4px;
-}
-.live-badge-off { background: var(--surface-2); color: var(--muted, #9aa4b2); border: 1px solid var(--border); }
 .story { white-space: pre-wrap; margin: 0; font: inherit; }
 button {
   background: var(--surface-2); color: var(--text);
@@ -332,3 +326,142 @@ button:disabled { opacity: 0.5; cursor: default; }
 .tag.tone-neutral { color: var(--muted); border-color: var(--muted); }
 .notice { margin: 8px 0; }
 .issues { margin: 4px 0; padding-left: 18px; overflow-wrap: anywhere; }
+
+/* ---- Project Execution Graph (UI-008B): MONOLITH Constellation Graph — one cyan accent, glass tiles, HUD corners ---- */
+.xg-intro { margin: 0 0 12px; }
+.xg-notices { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.xg-notice { padding: 6px 10px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 6px; background: var(--surface-2); font-size: var(--fs-secondary); }
+.xg-notice.xg-warn { border-left-color: var(--warn); }
+.xg-notice.xg-error { border-left-color: var(--err); }
+.xg-notice.xg-info { border-left-color: #5ee6ff; }
+.xg-notice .sev { margin-right: 8px; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.xg-summary { margin: 0 0 8px; }
+.xg-hint { margin: 0 0 10px; font-size: var(--fs-meta); }
+.xg-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.xg-zoom { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; color: #8aa0b4; font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; }
+/* Toolbar in the same language as the graph: transparent, 1px frame, monospace (beats the skin's generic button rule). */
+:root .xg-toolbar button {
+  min-height: 34px; min-width: 34px; padding: 4px 12px; background: transparent; border: 1px solid rgba(94, 230, 255, 0.28); border-radius: 2px;
+  color: #c9d6e3; font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500;
+}
+:root .xg-toolbar button:hover:not(:disabled) { border-color: rgba(94, 230, 255, 0.7); background: rgba(94, 230, 255, 0.07); box-shadow: 0 0 14px rgba(94, 230, 255, 0.15); }
+:root .xg-toolbar button:disabled { opacity: 0.45; border-style: solid; border-color: rgba(94, 230, 255, 0.14); color: #8aa0b4; }
+:root .xg-toolbar button.btn-primary { border-color: rgba(94, 230, 255, 0.6); color: #5ee6ff; }
+.xg-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+
+/* Canvas: near-black, a soft glow in the middle, edges falling into darkness, a barely visible grid and scan lines. */
+.xg-viewport {
+  position: relative; overflow: hidden; height: clamp(420px, 70vh, 780px);
+  border: 1px solid rgba(94, 230, 255, 0.14); border-radius: 4px;
+  background: radial-gradient(ellipse at center, rgba(40, 90, 120, 0.18), transparent 65%), #05080d;
+  cursor: grab; touch-action: none; user-select: none; overscroll-behavior: contain;
+}
+.xg-viewport::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 50%, #03060a 100%); }
+.xg-viewport::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px); }
+.xg-viewport.xg-panning, .xg-viewport.xg-dragging { cursor: grabbing; }
+.xg-viewport:focus-visible { outline: 2px solid #5ee6ff; outline-offset: 2px; }
+.xg-bg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+.xg-hex-line { fill: none; stroke: #8cc8ff; stroke-width: 1; opacity: 0.03; stroke-linecap: round; }
+.xg-world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; z-index: 1; }
+
+/* Edges: a dim gradient line (fading towards the story) with a small bright "data packet" running along it. */
+.xg-edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+.xg-edge { fill: none; stroke: rgba(94, 230, 255, 0.18); stroke-width: 1.1; stroke-linejoin: round; stroke-linecap: round; }
+.xg-edge-hot { stroke: #5ee6ff; stroke-width: 1.8; }
+.xg-edge-dim { opacity: 0.55; }
+.xg-edge-blocked { stroke-dasharray: 5 4; }
+.xg-edge-flow { fill: none; stroke: #5ee6ff; stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 4 120; animation: xg-flow 3s linear infinite; animation-delay: calc(var(--e, 0) * -0.37s); }
+@keyframes xg-flow { to { stroke-dashoffset: -124; } }
+.xg-edge-dots { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 2; }
+.xg-edge-dot { fill: #5ee6ff; filter: drop-shadow(0 0 4px #5ee6ff); }
+.xg-edge-dot-dim { opacity: 0.55; }
+.xg-hub {
+  position: absolute; z-index: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  border: 1px dashed rgba(94, 230, 255, 0.2); border-radius: 50%; color: #8aa0b4; font-size: var(--fs-meta); padding: 10px; pointer-events: none;
+}
+
+/* Tiles: dark glass, a faint cyan frame, HUD corners. Monospace. Glow only on accents (current, hover, selection). */
+.xg-node {
+  --c: #5ee6ff;
+  position: absolute; z-index: 1; display: flex; flex-direction: column; justify-content: flex-start; gap: 6px; padding: 10px 12px; overflow: visible;
+  text-align: left; color: #c9d6e3; cursor: grab; touch-action: none;
+  font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: linear-gradient(180deg, rgba(30, 70, 90, 0.55), rgba(12, 28, 38, 0.75)); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 20px color-mix(in srgb, var(--c) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: xg-appear 0.5s ease-out backwards; animation-delay: min(calc(var(--i, 0) * 65ms), 1.4s);
+}
+@keyframes xg-appear { from { opacity: 0; } to { opacity: 1; } }
+.xg-node::before, .xg-node::after { content: ""; position: absolute; width: 10px; height: 10px; border: 1px solid var(--c); pointer-events: none; }
+.xg-node::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+.xg-node::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }
+:root .xg-viewport .xg-node { background: linear-gradient(180deg, rgba(30, 70, 90, 0.55), rgba(12, 28, 38, 0.75)); border-color: color-mix(in srgb, var(--c) 35%, transparent); }
+:root .xg-viewport .xg-node:hover:not(:disabled),
+:root .xg-viewport .xg-node.xg-selected { border-color: var(--c); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 30px color-mix(in srgb, var(--c) 30%, transparent); }
+.xg-bar { position: absolute; top: 0; left: 0; right: 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--c), transparent); }
+.xg-node:focus-visible { outline: 2px solid #5ee6ff; outline-offset: 3px; }
+.xg-unlinked { border-style: dashed; }
+.xg-dim { opacity: 0.78; }
+.xg-moving { cursor: grabbing; z-index: 3; }
+.xg-related { border-color: color-mix(in srgb, var(--c) 45%, transparent); }
+.xg-current:not(.xg-phase) { --c: #fbbf24; }
+.xg-kind { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: #5ee6ff; line-height: 1.2; }
+.xg-current:not(.xg-phase) .xg-kind { color: #fbbf24; }
+.xg-kind .tag { margin-left: 0; padding: 0 6px; border: 1px solid var(--c); border-radius: 2px; background: transparent; color: var(--c); font-size: 10px; letter-spacing: 0.15em; }
+.xg-title { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 14.5px; font-weight: 500; line-height: 1.35; color: #e8f4fb; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.xg-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; }
+.xg-status { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #aebccb; white-space: nowrap; }
+.xg-status.status-unrecognized { color: #f87171; }
+.xg-dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; vertical-align: 0.05em; }
+.dot-ok { background: #4ade80; }
+.dot-current { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.6); }
+.dot-planned { background: #7cb8ff; }
+.dot-idle { background: #8a97a6; }
+.dot-none { background: transparent; border: 1px dashed #8a97a6; }
+.xg-count { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: #8aa0b4; }
+.xg-meta .diag-badge { font-size: 10px; letter-spacing: 0.12em; border: 0; padding: 0; color: #f87171; }
+
+/* Phase: a transparent disc inside thin rings. The button is a circle, so only the disc and rings are clickable. */
+:root .xg-viewport .xg-phase,
+:root .xg-viewport .xg-phase:hover:not(:disabled),
+:root .xg-viewport .xg-phase.xg-selected { background: transparent; border-color: transparent; border-radius: 50%; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; align-items: stretch; padding: 0; }
+.xg-phase::before, .xg-phase::after { display: none; }
+.xg-rings { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.xg-disc { fill: rgba(94, 230, 255, 0.07); stroke: rgba(94, 230, 255, 0.42); stroke-width: 1; }
+.xg-ring-static { fill: none; stroke: rgba(94, 230, 255, 0.26); stroke-width: 1; }
+.xg-ring { fill: none; stroke: rgba(94, 230, 255, 0.58); stroke-width: 1.2; transform-origin: center; transform-box: fill-box; }
+.xg-ring-arcs { stroke: rgba(94, 230, 255, 0.72); stroke-linecap: round; }
+/* Only the current phase's rings turn: one full turn in 60 s and in 90 s, in opposite directions. */
+.xg-current .xg-ring { stroke: rgba(94, 230, 255, 0.7); animation: xg-spin 60s linear infinite; }
+.xg-current .xg-ring.rev { animation-direction: reverse; animation-duration: 90s; }
+@keyframes xg-spin { to { transform: rotate(360deg); } }
+.xg-phase:not(.xg-current) .xg-disc, .xg-phase:not(.xg-current) .xg-ring-static, .xg-phase:not(.xg-current) .xg-ring { opacity: 0.8; }
+.xg-phase:hover .xg-rings, .xg-phase.xg-selected .xg-rings { filter: drop-shadow(0 0 10px rgba(94, 230, 255, 0.35)); }
+.xg-phase.xg-selected .xg-disc { fill: rgba(94, 230, 255, 0.1); stroke: #5ee6ff; }
+.xg-content { pointer-events: none; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; height: 100%; padding: 0 58px; }
+.xg-phase .xg-kind, .xg-phase .xg-meta { justify-content: center; }
+.xg-phase .xg-title { font-size: 16.5px; font-weight: 600; line-height: 1.3; -webkit-line-clamp: 3; line-clamp: 3; text-align: center; }
+.xg-id { font-family: "JetBrains Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; font-weight: 600; letter-spacing: 0.02em; }
+/* CURRENT on the phase: a filled, softly glowing chip (accent only). */
+.xg-phase.xg-current .xg-kind .tag { padding: 2px 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: #04222c; background: #5ee6ff; border-color: #5ee6ff; box-shadow: 0 0 14px rgba(94, 230, 255, 0.55); }
+
+/* Aura: a soft glow behind the CURRENT phase only. Fill only, no strokes; invisible to the pointer. */
+.xg-aura { position: absolute; z-index: 0; overflow: visible; pointer-events: none; }
+.xg-aura-glow { fill: #5ee6ff; fill-opacity: 0.2; stroke: none; filter: blur(26px); animation: xg-pulse-aura 3.6s ease-in-out infinite; }
+.xg-aura-selected .xg-aura-glow { fill-opacity: 0.3; }
+@keyframes xg-pulse-aura { 0%, 100% { fill-opacity: 0.12; } 50% { fill-opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) {
+  .xg-aura-glow, .xg-current .xg-ring, .xg-edge-flow, .xg-node { animation: none; }
+}
+
+.xg-details { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 12px 14px; min-width: 0; overflow-wrap: anywhere; }
+.xg-details h3 { margin: 0 0 8px; }
+.xg-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0 0 10px; font-size: var(--fs-secondary); }
+.xg-dl dt { color: var(--muted); }
+.xg-dl dd { margin: 0; }
+.xg-note { font-size: var(--fs-meta); margin: 0 0 8px; }
+.xg-warn { color: var(--warn); font-size: var(--fs-secondary); margin: 0 0 8px; }
+@media (max-width: 900px) {
+  .xg-layout { grid-template-columns: minmax(0, 1fr); }
+  .xg-viewport { height: 60vh; }
+}

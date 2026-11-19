@@ -9,8 +9,17 @@
 
 /** Core's interpretation of the roadmap (UI-003C). The UI displays it; it never parses Markdown itself. */
 export type { StructuredRoadmapView, RoadmapPhaseView, ActivePhaseView, RoadmapDiagnosticCode } from '../../../src/readmodel/types';
-import type { StructuredRoadmapView, StateProvenanceView } from '../../../src/readmodel/types';
-export type { StateProvenanceView };
+import type { StructuredRoadmapView, StateProvenanceView, StructuredStoryIndexView, Section } from '../../../src/readmodel/types';
+export type { StateProvenanceView, Section };
+
+/** Core's interpretation of the story index (CORE-GRAPH-002). Displayed by the Execution Graph; never re-derived in the UI. */
+export type {
+  StructuredStoryIndexView,
+  StoryIndexItemView,
+  StoryPhaseRef,
+  StoryIndexDiagnosticCode,
+  StoryIndexParseState,
+} from '../../../src/readmodel/types';
 
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
@@ -82,6 +91,11 @@ export interface DashboardData {
   roadmapText: string | null;
   /** Core's structured roadmap. `undefined` = the source predates it (legacy DTO) or is a demo: fall back to the raw text. */
   roadmap?: StructuredRoadmapView;
+  /**
+   * Core's structured story index, as the read model carries it. `undefined` = the source predates it (older
+   * server) or is a demo; `data === null` = `story-index.md` is not available (see `sources[0]`), never "no stories".
+   */
+  storyIndex?: Section<StructuredStoryIndexView>;
   /**
    * `undefined` = the data source provides no such section (LIVE today: Core has no read model for it);
    * `null` = the source exists but could not be read; `[]` = readable and genuinely empty.

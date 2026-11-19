@@ -209,7 +209,8 @@ describe('section navigation in LIVE', () => {
     for (const id of IDS) await goTo(w, id);
     await goTo(w, 'roadmap');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(w.get('[data-testid="live-badge"]').text()).toBe('LIVE DATA');
+    expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
+    expect(w.find('.nav').exists()).toBe(true);
 
     await w.get('[data-testid="refresh"]').trigger('click');
     await flushPromises();

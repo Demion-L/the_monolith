@@ -49,7 +49,8 @@ describe('LIVE mode against the real HTTP API', () => {
     const w = mount(App);
     await flushPromises();
     await vi.waitFor(() => expect(w.find('[data-testid="loading"]').exists()).toBe(false));
-    expect(w.get('[data-testid="live-badge"]').text()).toBe('LIVE DATA');
+    expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
+    expect(w.find('.nav').exists()).toBe(true);
     const seen: string[] = [];
     for (const id of ['overview', 'mission', 'checkpoints', 'roadmap']) {
       await goTo(w, id);
@@ -67,7 +68,7 @@ describe('LIVE mode against the real HTTP API', () => {
 
   it('shows an error state (no demo data) once the server is gone, and recovers on retry', async () => {
     const w = mount(App);
-    await vi.waitFor(() => expect(w.find('[data-testid="live-badge"]').text()).toBe('LIVE DATA'));
+    await vi.waitFor(() => expect(w.find('.nav').exists()).toBe(true));
     await goTo(w, 'mission');
     expect(w.text()).toContain('Integration mission');
     const port = server.port;
@@ -79,7 +80,7 @@ describe('LIVE mode against the real HTTP API', () => {
 
     server = await startDashboardServer({ projectRoot: dir, port });
     await w.get('[data-testid="retry"]').trigger('click');
-    await vi.waitFor(() => expect(w.find('[data-testid="live-badge"]').text()).toBe('LIVE DATA'));
+    await vi.waitFor(() => expect(w.find('.nav').exists()).toBe(true));
     expect(w.text()).toContain('Integration mission');
   });
 });

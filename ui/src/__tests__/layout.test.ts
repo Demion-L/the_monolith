@@ -7,7 +7,7 @@ import SideNav from '../components/SideNav.vue';
 import { SKIN_STORAGE_KEY } from '../skin';
 import { goTo } from './nav';
 
-const SECTION_IDS = ['overview', 'mission', 'checkpoints', 'roadmap', 'hypotheses', 'decisions', 'diagnostics'];
+const SECTION_IDS = ['overview', 'mission', 'checkpoints', 'roadmap', 'graph', 'hypotheses', 'decisions', 'diagnostics'];
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -83,7 +83,8 @@ describe('layout shell in LIVE', () => {
     expect(w.find('[data-testid="loading"]').exists()).toBe(true);
     expect(w.find('.nav').exists()).toBe(false);
     expect(w.find('aside [data-testid="skin-select"]').exists()).toBe(true);
-    expect(w.find('[data-testid="live-badge"]').text()).toBe('LIVE · NO DATA');
+    expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
+    expect(w.find('[data-testid="refresh"]').exists()).toBe(true);
   });
 
   it('error: no section links, retry and switcher available, no demo badge', async () => {

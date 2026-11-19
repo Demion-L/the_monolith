@@ -121,6 +121,8 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
     roadmapText: roadmap === null ? null : roadmap.text,
     // Present only when Core supplied it; an older DTO yields `undefined` (legacy fallback), never invented phases.
     roadmap: roadmap?.structured,
+    // Passed through untouched: the Execution Graph reads Core's relations, the adapter adds none.
+    ...(model.storyIndex !== undefined ? { storyIndex: model.storyIndex } : {}),
     ...(hyp.items !== undefined ? { hypotheses: hyp.items, hypothesesInfo: hyp.info } : {}),
     ...(dec.items !== undefined ? { decisions: dec.items, decisionsInfo: dec.info } : {}),
     diagnostics,

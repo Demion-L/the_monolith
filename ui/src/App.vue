@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CheckpointsPanel from './components/CheckpointsPanel.vue';
 import CurrentMission from './components/CurrentMission.vue';
 import DecisionsPanel from './components/DecisionsPanel.vue';
+import ExecutionGraphPanel from './components/ExecutionGraphPanel.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
 import HypothesesPanel from './components/HypothesesPanel.vue';
 import ProjectOverview from './components/ProjectOverview.vue';
@@ -111,8 +112,6 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           </label>
           <button v-else type="button" data-testid="refresh" :disabled="loading" @click="load">Refresh</button>
           <span v-if="demo" class="demo-badge" data-testid="demo-badge">DEMO DATA</span>
-          <span v-else-if="data" class="live-badge" data-testid="live-badge">LIVE DATA</span>
-          <span v-else class="live-badge live-badge-off" data-testid="live-badge">LIVE · NO DATA</span>
         </div>
       </header>
       <main v-if="data" class="content">
@@ -121,6 +120,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           <CurrentMission v-else-if="section === 'mission'" key="mission" :missions="data.missions" />
           <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
           <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" />
+          <ExecutionGraphPanel v-else-if="section === 'graph'" key="graph" :roadmap-text="data.roadmapText" :roadmap="data.roadmap" :story-index="data.storyIndex" :story="data.overview.story" />
           <HypothesesPanel v-else-if="section === 'hypotheses'" key="hypotheses" :items="data.hypotheses" :info="data.hypothesesInfo" :demo="data.isDemo" />
           <DecisionsPanel v-else-if="section === 'decisions'" key="decisions" :items="data.decisions" :info="data.decisionsInfo" :demo="data.isDemo" />
           <DiagnosticsPanel v-else key="diagnostics" :data="data" :runners="demo ? undefined : runners" />

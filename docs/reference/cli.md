@@ -123,7 +123,7 @@ monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] 
 monolith mission checkpoints <missionId>
 ```
 
-Records missions and checkpoints in `.monolith/state.json`. Not runtime-enforced:
+Records missions and checkpoints in the operational state: by default one `state.json` shared by all Git worktrees in the Git common directory (`<git-common-dir>/monolith/state.json`); `.monolith/state.json` only outside Git or in isolated mode. `monolith brief` reports the location. Not runtime-enforced:
 it is a recommended discipline, not a gate. Rationale and checkpoint semantics:
 [ADR-008](../adr/ADR-008-coordinatorium-tactical-mission-lifecycle.md) and
 `AGENTS.md` → Mission Lifecycle.

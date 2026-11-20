@@ -70,8 +70,10 @@ monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] 
 monolith mission checkpoints <missionId>
 ```
 
-This records development missions in `{{MONOLITH_ROOT}}/state.json`,
-independent of any single AI session's memory. **This is not
+This records development missions in the project's operational state (by
+default one `state.json` shared by all Git worktrees, stored in the Git common
+directory; `{{MONOLITH_ROOT}}/state.json` only outside Git or in isolated mode;
+`monolith brief` shows where), independent of any single AI session's memory. **This is not
 runtime-enforced in v0.1:** nothing prevents an AI session from editing
 code without ever calling `mission start`/`finish`. It is a recommended
 discipline, not a gate.

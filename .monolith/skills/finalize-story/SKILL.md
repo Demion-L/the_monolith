@@ -20,6 +20,16 @@ Triggered by: "finalize story", "finalize X.Y", "complete story", "mark story do
 
 ---
 
+## Governance document formats
+
+Before you write or edit the Roadmap, `story-index.md`, `active.md`, a story capsule or an
+ADR, read `.monolith/protocols/governance/document-formats.md`: it lists the formats the toolkit
+parses (Phase statuses, `Active Phase: <id> — <title>`, ADR frontmatter, capsule sections).
+Do not invent statuses or fields and do not delete the format comments. `monolith governance check`
+verifies the result read-only.
+
+---
+
 ## Pre-conditions
 
 - Story implementation is complete

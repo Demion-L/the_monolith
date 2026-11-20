@@ -12,6 +12,7 @@ export const FINALIZE_STORY_LEGACY: Readonly<Record<string, string>> = {
   '1b8ee0c357de7edb858e211d8a6ae8af1ae0a77a9289259deac25bbcfb138121': 'pre-release development template (DOCSYNC-003)',
   '31cc69d09ba4996f71b497f1f4454912ab497c1bcd766f4b7b337c34384efd2d': '0.1.0-alpha.2; does not forbid manual finalization',
   '9a779ee52327b5dfe64917228eb4dda60bf4901e2ac0cd116339eb70d51d2723': 'beta.1 template (deterministic finalize; before the single canonical source and the Operational Focus check)',
+  '7db4c463f67317d6d3e16050c3696eafb5d116cf0cb78b5cdf10b22c0c5bb6cc': '0.2.0-beta.1 published template (before the Governance document formats pointer)',
 };
 
 /**
@@ -19,4 +20,4 @@ export const FINALIZE_STORY_LEGACY: Readonly<Record<string, string>> = {
  * that test until the previous hash is moved into FINALIZE_STORY_LEGACY (so instances that
  * carry the unedited previous text keep updating) and this value is replaced.
  */
-export const FINALIZE_STORY_CURRENT = '7db4c463f67317d6d3e16050c3696eafb5d116cf0cb78b5cdf10b22c0c5bb6cc';
+export const FINALIZE_STORY_CURRENT = 'de69e1522622c3c7c395d8eb817aa23b8fd21a61bfb507bba342d9699ba55323';

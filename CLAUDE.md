@@ -72,6 +72,24 @@ Details: `AGENTS.md` → Project Brief.
 
 ---
 
+## Autonomous Development: Reporting Discipline
+
+When you finish a stretch of autonomous work, your final report is a claim, not evidence. Before writing it:
+
+1. Run `monolith governance check`.
+2. Run `monolith handover check` (add `--json` for the structured form).
+3. Compare each statement in your report with the result: missions, checkpoints, story state, verification evidence.
+4. State every discrepancy (a completed mission is not a finalized story; a result you only reported is not verified).
+5. Never present as confirmed what the handover lists as REPORTED, STALE, UNKNOWN or unverified.
+
+Record verification so it can be checked: `monolith evidence run [--story <ID>] -- <command>` runs the command itself and
+records its exit status (OBSERVED); `monolith evidence report ...` records only a statement (REPORTED, not verification).
+Record progress with `monolith mission checkpoint` at significant milestones, before context compaction, before handing
+work to another agent, on a significant blocker, and before finishing a long mission — not after every file, and never
+with invented content. Finalization stays an owner-approved step (`monolith finalize`).
+
+---
+
 ## Key Protocols
 
 - Memory governance: `.monolith/protocols/governance/memory-governance.md`

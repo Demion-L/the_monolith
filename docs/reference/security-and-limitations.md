@@ -151,6 +151,23 @@ See the [DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REM
 `AGENTS.md` and
 [Durable State Retention Safety](../architecture/DURABLE-STATE-RETENTION-SAFETY.md).
 
+## Handover and verification evidence
+
+- `monolith handover check` and `GET /api/handover` are read-only. The only subprocess is read-only `git`
+  (`rev-parse`, `status`, `diff --name-only`, `cat-file`) with the same hardening as `brief` freshness: no shell, no pager,
+  no external diff, no lazy fetch, no helper programs. Git being absent or failing makes freshness UNKNOWN.
+- `monolith evidence run` is the one command that executes something. It runs exactly the argv the user typed, with no
+  shell (so `;`, `&&`, `$(...)` are data), and records only the exit status — never output. It is an explicit user action,
+  never triggered by a hook, a dashboard read or `handover check`. `MONOLITH_HOOK_ACTIVE=1` is set for the child so a hook
+  it starts exits silently. A command run this way has the full rights of the user: do not run commands you would not run
+  yourself.
+- Evidence files are created exclusively (no overwrite) through the safe-write primitive, read through the bounded reader
+  (8 KiB each, 500 newest read), and parsed strictly: a malformed or self-contradicting file is listed as unreadable, never repaired.
+- Redaction of command lines and notes is best effort; do not put secrets on a command line.
+- Check-then-use races (SEC-001B.3, TM-C) are not defended, as elsewhere.
+- Not established: that a recorded command is an adequate test, that its result still holds after later changes
+  (a matching revision only shows the committed files are unchanged), or that the project is correct.
+
 ## Coordinatorium
 
 `monolith mission` and `.monolith/state.json` (Coordinatorium, ADR-008) are

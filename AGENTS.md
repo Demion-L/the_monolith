@@ -195,6 +195,14 @@ What MONOLITH does today (1737 tests passing in the full `vitest run` as of 2026
 - Reads `.monolith/state.json` once and never writes; no LLM, network, or ERG involved
 - `monolith context <topic>` (CONTEXT-001B) is **not implemented**
 
+**Handover & Evidence — `monolith handover check`, `monolith evidence`** (ACCOUNTABILITY-001; `src/handover/`):
+- `monolith handover check [--json] [--strict]` — read-only, deterministic report of what autonomous work left behind: project/phase/story, development progress (Planned/Active/Finalized/Listed-not-final kept apart), mission history, ADRs, verification evidence, outstanding issues and owner decisions. Status: `READY FOR REVIEW | REVIEW WITH ISSUES | INCOMPLETE | UNKNOWN` — reviewability only, never "correct" or "production ready". No tests are run; no LLM, no network; the only subprocess is read-only `git`
+- Evidence (`<monolithRoot>/memory/long-term/verification/EVD-NNNN.json`, one small file per check, not part of Durable State): `evidence run -- <cmd>` executes the command (no shell) and records its exit status as **OBSERVED**; `evidence report` records a statement as **REPORTED**. **VERIFIED** is never stored: it is computed at read time as an OBSERVED pass whose recorded revision still equals HEAD on a clean working tree. Output is not stored; command lines are redacted for obvious secrets
+- Freshness: HEAD differs with non-evidence changes → `STALE`; dirty tree → not VERIFIED; no git → `UNKNOWN`. A matching revision never proves a check is adequate
+- `governance check` additionally reports Mission→Story links no document supports (`MISSION_STORY_UNKNOWN`) and open missions on finalized stories; it never guesses when a document is unreadable
+- Hooks (opt-in): SessionStart uses the same recovery packet (`handover/recovery.ts`, every field names its source, `UNKNOWN` when missing, bounded); `hook pre-compact` prints compaction-summary instructions (never blocks, never writes a checkpoint); `hook stop` stays a non-blocking diagnostic
+- Agent rule: before a final report on autonomous work run `monolith governance check` and `monolith handover check` and reconcile your claims (see `CLAUDE.md`). Finalize is unchanged
+
 ---
 
 ## Mission Lifecycle (Coordinatorium v0.1)

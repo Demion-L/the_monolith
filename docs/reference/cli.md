@@ -27,7 +27,9 @@ monolith idea       # capture and recall deferred ideas: add|list|show (implemen
 monolith update     # bring an existing instance up to the agent entry point + Idea Capture [--apply] (implemented, DX-UPDATE-001/003)
 monolith durable    # Durable State: list|show|assess|packet|verify|retention (implemented; see below)
 monolith governance # read-only governance integrity check: governance check [--json] [--strict] (implemented; see below)
-monolith hook       # opt-in Claude Code hooks: session-start|stop|print-config (implemented; see below)
+monolith handover   # read-only autonomous-development handover: handover check [--json] [--strict] (implemented; see below)
+monolith evidence   # verification evidence: run|report|list (implemented; see below)
+monolith hook       # opt-in Claude Code hooks: session-start|stop|pre-compact|print-config (implemented; see below)
 monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented); first stdout line: `MONOLITH Mission Control: <url>`
 monolith ui dev     # Mission Control with Vite hot reload [--port N] (implemented, source checkout only)
 monolith status     # active protocol, phase, story, drift summary (NOT implemented)
@@ -518,11 +520,101 @@ described in `.monolith/protocols/governance/document-formats.md`.
 `monolith validate` is unchanged: it checks the installed scaffold and still passes when document
 contents are malformed. `governance check` is never a precondition of `monolith finalize`.
 
+**Workflow integrity (Mission → Story).** The *Missions* area also checks the story link a mission
+records (`monolith mission start --story <ID>`), against the Story State Resolver's facts only:
+
+| Code | Severity | Meaning |
+|---|---|---|
+| `MISSION_STORY_UNKNOWN` | WARNING | the mission's story is listed by none of the roadmap, `active.md` and `story-index.md`, **and all three were read**. An unreadable document produces no finding (the fact is UNKNOWN, not "absent") |
+| `MISSION_ACTIVE_ON_FINALIZED_STORY` | WARNING | a mission is `in_progress` on a story `story-index.md` reports finalized |
+
+Not errors, on purpose: a mission without a story link (exploratory work), a finished mission whose story
+is not finalized (finalization is a separate, owner-approved step), and a story whose index entry says
+`READY FOR REVIEW`. Stories do not point to missions in this model, so there is no "story names a missing
+mission" check. The link is recorded, never verified; the exit codes above are unchanged.
+
+## `monolith handover`
+
+```bash
+monolith handover check [--json] [--strict]
+```
+
+Read-only report of what autonomous work left behind, built only from sources Core already owns:
+the roadmap, `story-index.md`, `active.md` (through the Story State Resolver), Development History
+(missions and checkpoints), ADR frontmatter, `monolith governance check`, recorded verification
+evidence and read-only `git` (HEAD and working tree). It writes nothing, **runs no test**, makes no
+network or LLM call and is reproducible: unchanged files, git state and evidence give the same output.
+It never finalizes a story, closes a mission, creates an approval or commits.
+
+Sections: Project (name, active phase, current story, governance result) · Development progress
+(planned / active / finalized / listed-not-final kept apart; "awaiting review" only when `story-index.md`
+itself says `READY FOR REVIEW`) · Mission history (completed / failed / cancelled / active, checkpoints,
+missions without a story link, active missions without a checkpoint) · Architecture decisions (accepted,
+proposed, other statuses verbatim, unrecognised files, missing metadata) · Verification evidence ·
+Outstanding issues (`conflict`, `unverified`, `attention`) · Owner decisions required (a story with completed
+missions that is not finalized; ADRs declared `proposed`; contradicting documents) · what the report does not establish.
+
+| Status | Meaning |
+|---|---|
+| `READY FOR REVIEW` | every core source was readable and nothing needs attention before a human reviews |
+| `REVIEW WITH ISSUES` | reviewable, but issues are listed (governance findings, failed or stale evidence, completed work without VERIFIED evidence, failed or unfinished missions, a dirty working tree) |
+| `INCOMPLETE` | a core source (state, roadmap, story index, active story, ADRs) is missing or unreadable, or no story is known — an empty instance is INCOMPLETE |
+| `UNKNOWN` | the instance could not be established (corrupt or unsafe configuration) |
+
+The status is about reviewability. It is never "correct" or "production ready", and `READY FOR REVIEW` with no
+issues listed does not mean the project is correct. A completed mission does not mean a finalized story; a
+reported PASS is not verification.
+
+`--json` prints the stable `HandoverReport` (`schema: 1`; fields are only ever added): `status`, `statusReasons`,
+`project`, `progress` (with per-story `planned` / `active` / `finalization` kept as separate facts), `missions`,
+`architecture`, `verification` (counts per level, items, git view), `outstanding`, `sources`, `limitations`.
+
+| Exit | Meaning |
+|---|---|
+| 0 | the check ran |
+| 1 | usage error |
+| 2 | `--strict` and the status is not `READY FOR REVIEW` (opt-in; no global gate) |
+| 3 | the check itself could not be executed |
+
+## `monolith evidence`
+
+```bash
+monolith evidence run [--story <STORY-ID>] [--timeout-sec N] -- <command> [args...]
+monolith evidence report --command "<text>" --result pass|fail [--story <STORY-ID>] [--note "..."]
+monolith evidence list [--json]
+```
+
+Verification evidence is a small JSON file per check, `<monolithRoot>/memory/long-term/verification/EVD-NNNN.json`
+(git-tracked project knowledge, like ideas; **not** part of Durable State or `finalize`, whose contracts are unchanged).
+Fields: story id, command, result, exit code, provenance, recorded time, git HEAD, dirty-tree flag, source, an optional
+note. Nothing else is stored — **no command output** — and obvious secrets in the command line or note (tokens,
+`KEY=…`, bearer values, URL passwords, long opaque strings) are redacted on a best-effort basis.
+
+- `run` executes the command itself (argv, **no shell**, inherited stdio, default timeout 30 min) and records its exit
+  status as **OBSERVED**; its own exit code is the command's, so it can gate a script. A command that cannot start
+  records nothing. If HEAD changed while the command ran, no revision is recorded (freshness UNKNOWN).
+- `report` records a statement as **REPORTED**. It carries no exit code and is never verification.
+- **VERIFIED** is never stored; it is the level `handover check` computes: an OBSERVED pass whose recorded revision
+  still equals HEAD (or differs only by evidence files) on a clean working tree, clean also when recorded.
+
+| Level | Rule |
+|---|---|
+| `VERIFIED` | OBSERVED, passed, revision still current, clean tree then and now |
+| `REPORTED` | a statement (an agent said so); MONOLITH did not observe it |
+| `STALE` | HEAD moved with non-evidence changes since the check ran — potentially stale |
+| `UNKNOWN` | no git, no recorded revision, unreachable revision, or a dirty tree (then or now) |
+| `FAILED` | the check failed |
+
+Freshness limits: a matching revision shows only that the committed files are the same, not that the command is an
+adequate check; a dirty tree is never ignored (evidence files themselves are excluded from "dirty" and from "changed");
+without git every record is UNKNOWN; evidence recorded on another clone whose commit is unknown here is UNKNOWN, not stale.
+
 ## `monolith hook`
 
 ```bash
 monolith hook session-start   # SessionStart: prints additionalContext JSON
 monolith hook stop            # Stop: diagnostic systemMessage only, never blocks
+monolith hook pre-compact     # PreCompact: plain-text instructions for the compaction summary; never blocks
 monolith hook print-config    # prints an opt-in settings snippet; writes nothing
 ```
 
@@ -530,11 +622,22 @@ Hooks are **opt-in**; MONOLITH never edits Claude Code settings. Copy the snippe
 `monolith hook print-config` into the project's `.claude/settings.json` (or your own settings)
 yourself and merge it with hooks you already have. Verified against Claude Code 2.1.329
 (events `SessionStart`, `Stop`, `PreToolUse`, `PostToolUse`; JSON on stdin; `hookSpecificOutput.additionalContext`
-and `systemMessage` on stdout). Only `SessionStart` and `Stop` are used: no per-tool-call work.
+and `systemMessage` on stdout; `PreCompact`: its plain stdout is added to the compaction instructions, while
+`systemMessage` is discarded). Only `SessionStart`, `Stop` and `PreCompact` are used: no per-tool-call work.
+Existing installations of the two-hook snippet keep working unchanged; `PreCompact` is added by merging the new snippet.
 
-- *session-start* injects the active story, the active mission and the governance findings,
-  computed by Core (`governance check` rules); it does not reimplement any rule.
-- *stop* mentions an unfinished mission or governance issues. It never returns `decision`,
+- *session-start* injects a compact **recovery packet** computed by Core (`src/handover/recovery.ts`; the hook is only an
+  adapter): project, active story, active mission(s), the last relevant checkpoint (of an active mission, else the newest
+  of any mission, flagged as such) with its remaining steps *labelled historical, not the current plan*, git HEAD and
+  working-tree state, evidence counts, governance findings and ADRs declared `proposed`. Each line names its source; a
+  missing source is `UNKNOWN`, never a guess. Bounded: at most 3 missions, 5 steps, 6 findings, 160 characters per text and
+  3500 characters in total. Nothing is written.
+- *pre-compact* prints what must survive compaction (active story and mission, last checkpoint) and reminds the agent to
+  record progress made since the last checkpoint with `monolith mission checkpoint` — only facts. It records nothing
+  itself, prints nothing when there is nothing to preserve, never exits with 2 and never returns `decision`; it is not
+  a guarantee of saved state if the agent is terminated abruptly.
+- *stop* mentions an unfinished mission, a dirty working tree while a mission is open, a mission without any checkpoint,
+  or governance issues, and points to `monolith handover check`. It never returns `decision`,
   `continue: false` or exit code 2, and does nothing when `stop_hook_active` is true (no loop).
 - Fail-safe: a missing CLI (the snippet guards with `command -v … || true`), a fault or a
   hook started by a hook (`MONOLITH_HOOK_ACTIVE=1`) ends silently or with a short message;

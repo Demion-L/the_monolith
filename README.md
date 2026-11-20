@@ -100,6 +100,7 @@ monolith init        # scaffold a MONOLITH instance (refuses to overwrite existi
 monolith validate    # static integrity check of the instance
 monolith brief       # bounded, read-only summary of project state
 monolith governance check   # read-only check of the governance documents' format and content
+monolith handover check     # read-only handover of autonomous work: progress, missions, ADRs, evidence (REPORTED vs VERIFIED)
 monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
 ```
 

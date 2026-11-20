@@ -95,3 +95,16 @@ describe('Knowledge Lab', () => {
     expect(isDashboardReadModel({ ...base, ideas: bad })).toBe(false);
   });
 });
+
+describe('empty but incomplete lists are not shown as complete', () => {
+  it('an ADR list that is empty because documents were unreadable says so', async () => {
+    const { default: DecisionsPanel } = await import('../components/DecisionsPanel.vue');
+    const info = { availability: 'available' as const, code: null, complete: false, issues: [{ code: 'ADR_FRONTMATTER_MISSING', severity: 'warn' as const, path: 'docs/adr/ADR-001-x.md', id: null }] };
+    const w = mount(DecisionsPanel, { props: { items: [], info, demo: false } });
+    expect(w.find('[data-testid="knowledge-issue"]').text()).toContain('ADR_FRONTMATTER_MISSING');
+    expect(w.find('[data-testid="knowledge-empty"]').exists()).toBe(false);
+    expect(w.find('[data-testid="knowledge-empty-incomplete"]').exists()).toBe(true);
+    const clean = mount(DecisionsPanel, { props: { items: [], info: { ...info, complete: true, issues: [] }, demo: false } });
+    expect(clean.find('[data-testid="knowledge-empty"]').text()).toBe('No architecture decisions recorded.');
+  });
+});

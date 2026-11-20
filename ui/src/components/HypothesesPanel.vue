@@ -16,7 +16,11 @@ defineProps<{ items?: KnowledgeItem[] | null; demo: boolean; info?: KnowledgeInf
       <span class="unknown">NOT PROVIDED</span> The live data source has no hypotheses yet, so nothing is shown. Nothing is guessed or substituted.
     </p>
     <KnowledgeNotice v-else-if="items === null" :info="info" />
-    <p v-else-if="items.length === 0" class="empty" data-testid="knowledge-empty">No hypotheses recorded.</p>
+    <template v-else-if="items.length === 0">
+      <KnowledgeNotice v-if="info && (!info.complete || info.issues.length > 0)" :info="info" />
+      <p v-if="info && !info.complete" class="empty" data-testid="knowledge-empty-incomplete">No hypothesis could be listed; some entries were not interpretable (see above).</p>
+      <p v-else class="empty" data-testid="knowledge-empty">No hypotheses recorded.</p>
+    </template>
     <template v-else>
       <KnowledgeNotice v-if="info && (!info.complete || info.issues.length > 0)" :info="info" />
       <p v-if="demo" class="muted" data-testid="knowledge-demo">Demonstration data (fictional project), not real records.</p>

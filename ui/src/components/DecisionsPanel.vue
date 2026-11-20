@@ -25,7 +25,11 @@ const total = toRef(() => props.items?.length ?? 0);
       <span class="unknown">NOT PROVIDED</span> The live data source has no architecture decisions yet, so nothing is shown. Nothing is guessed or substituted.
     </p>
     <KnowledgeNotice v-else-if="items === null" :info="info" />
-    <p v-else-if="items.length === 0" class="empty" data-testid="knowledge-empty">No architecture decisions recorded.</p>
+    <template v-else-if="items.length === 0">
+      <KnowledgeNotice v-if="info && (!info.complete || info.issues.length > 0)" :info="info" />
+      <p v-if="info && !info.complete" class="empty" data-testid="knowledge-empty-incomplete">No architecture decision could be listed; some documents were not interpretable (see above).</p>
+      <p v-else class="empty" data-testid="knowledge-empty">No architecture decisions recorded.</p>
+    </template>
     <template v-else>
       <KnowledgeNotice v-if="info && (!info.complete || info.issues.length > 0)" :info="info" />
       <p v-if="demo" class="muted" data-testid="knowledge-demo">Demonstration data (fictional project), not real records.</p>

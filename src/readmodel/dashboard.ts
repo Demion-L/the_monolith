@@ -46,6 +46,7 @@ import { parseStoryIndex } from './story-index.js';
 import { buildStoryAuthorityContext, resolveStoryStateIn } from './story-state.js';
 import { readKnowledge } from './knowledge.js';
 import { buildDevelopmentHistory } from './history.js';
+import { readIdeas } from './ideas.js';
 import { sourceFailure } from './source-failure.js';
 import {
   hasCheckpointOrderMismatch,
@@ -57,6 +58,7 @@ import type {
   CurrentMissions,
   DashboardReadModel,
   DevelopmentHistory,
+  IdeasData,
   KnowledgeData,
   ProjectOverview,
   ReadNote,
@@ -260,6 +262,7 @@ function unreadableModel(config: SourceReport, rootCode: SourceErrorCode = 'ROOT
     decisions: section<KnowledgeData>(null, [report('decisions', null, 'forbidden', rootCode)]),
     storyIndex: section<StructuredStoryIndexView>(null, [report('storyIndex', null, 'forbidden', rootCode)]),
     history: section<DevelopmentHistory>(null, [state]),
+    ideas: section<IdeasData>(null, [report('ideas', null, 'forbidden', rootCode)]),
     diagnostics: { validation: 'NOT_PERFORMED', sources: [config, state, story, roadmap], notes: [] },
   };
 }
@@ -381,6 +384,7 @@ function buildModel(projectRoot: string): DashboardReadModel {
     storyIndex: section(storyIndex, [storyIndexLoaded.report]),
     // Every mission, not only active ones; same single state read as `currentMissions`.
     history: section(stateUsable ? buildDevelopmentHistory(state) : null, [stateResult.report]),
+    ideas: readIdeas(projectRoot, root.monolithRoot),
     storyState: section(storyStateOf(storyLoaded.content, roadmapLoaded.content, storyIndexLoaded.content), [storyLoaded.report, roadmapLoaded.report, storyIndexLoaded.report]),
     diagnostics: {
       validation: 'NOT_PERFORMED',

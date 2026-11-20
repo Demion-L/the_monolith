@@ -116,9 +116,9 @@ describe('panels (demo data)', () => {
 describe('in the dashboard', () => {
   it('lists both sections in navigation and renders them in DEMO', async () => {
     const w = mount(App);
-    expect(w.findAll('.nav a').map((a) => a.text())).toEqual(expect.arrayContaining(['Hypotheses', 'Architecture Decisions']));
+    expect(w.findAll('.nav a').map((a) => a.text())).toEqual(expect.arrayContaining(['Knowledge Lab', 'Architecture Decisions']));
     await goTo(w, 'hypotheses');
-    expect(w.find('section#hypotheses').exists()).toBe(true);
+    expect(w.find('[data-testid="hypotheses-panel"]').exists()).toBe(true);
     expect(w.findAll('[data-testid="knowledge-item"]').length).toBeGreaterThan(0);
     await goTo(w, 'decisions');
     expect(w.find('section#decisions').exists()).toBe(true);

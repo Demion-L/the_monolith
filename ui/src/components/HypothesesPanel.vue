@@ -4,12 +4,13 @@ import KnowledgeCard from './KnowledgeCard.vue';
 import KnowledgeNotice from './KnowledgeNotice.vue';
 
 // `undefined`: the data source offers no such section; `null`: it could not be read; `[]`: none exist.
-defineProps<{ items?: KnowledgeItem[] | null; demo: boolean; info?: KnowledgeInfo }>();
+defineProps<{ items?: KnowledgeItem[] | null; demo: boolean; info?: KnowledgeInfo; embedded?: boolean }>();
 </script>
 
 <template>
-  <section id="hypotheses" class="panel" aria-labelledby="hypotheses-h">
-    <h2 id="hypotheses-h">Hypotheses</h2>
+  <component :is="embedded ? 'div' : 'section'" :id="embedded ? undefined : 'hypotheses'" :class="embedded ? 'kl-embedded' : 'panel'" :aria-labelledby="embedded ? undefined : 'hypotheses-h'">
+    <h2 v-if="!embedded" id="hypotheses-h">Hypotheses</h2>
+    <h3 v-else class="kl-h">Hypotheses</h3>
     <p class="muted">Overview of hypotheses; statuses are those the documents declare</p>
     <p v-if="items === undefined" class="empty" role="status" data-testid="knowledge-unprovided">
       <span class="unknown">NOT PROVIDED</span> The live data source has no hypotheses yet, so nothing is shown. Nothing is guessed or substituted.
@@ -23,5 +24,5 @@ defineProps<{ items?: KnowledgeItem[] | null; demo: boolean; info?: KnowledgeInf
         <KnowledgeCard v-for="(it, i) in items" :key="`${it.id ?? 'no-id'}-${i}`" :item="it" kind="hypothesis" />
       </ul>
     </template>
-  </section>
+  </component>
 </template>

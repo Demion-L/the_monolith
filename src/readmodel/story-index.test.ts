@@ -240,6 +240,6 @@ describe('readDashboardModel — storyIndex', () => {
     expect(m.diagnostics.sources.map((s) => s.id)).toEqual(['config', 'state', 'activeStory', 'roadmap']);
     expect(m.roadmap.data?.structured?.activePhase).toEqual({ kind: 'phase', id: '2' });
     const { storyIndex: _s, ...rest } = m;
-    expect(Object.keys(rest).sort()).toEqual(['checkpoints', 'currentMissions', 'decisions', 'diagnostics', 'history', 'hypotheses', 'projectOverview', 'roadmap', 'storyState']);
+    expect(Object.keys(rest).sort()).toEqual(['checkpoints', 'currentMissions', 'decisions', 'diagnostics', 'history', 'hypotheses', 'ideas', 'projectOverview', 'roadmap', 'storyState']);
   });
 });

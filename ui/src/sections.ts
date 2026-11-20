@@ -4,7 +4,7 @@ export const SECTIONS = [
   { id: 'history', label: 'Development History' },
   { id: 'roadmap', label: 'Roadmap' },
   { id: 'graph', label: 'Execution Graph' },
-  { id: 'hypotheses', label: 'Hypotheses' },
+  { id: 'knowledge', label: 'Knowledge Lab' },
   { id: 'decisions', label: 'Architecture Decisions' },
   { id: 'diagnostics', label: 'Diagnostics' },
 ] as const;
@@ -18,7 +18,7 @@ export function isSectionId(value: unknown): value is SectionId {
 }
 
 // Hash links of earlier releases keep working: `#checkpoints` is now Development History.
-const LEGACY_HASHES: Readonly<Record<string, SectionId>> = { checkpoints: 'history' };
+const LEGACY_HASHES: Readonly<Record<string, SectionId>> = { checkpoints: 'history', hypotheses: 'knowledge' };
 
 // Unknown or empty hashes fall back to the default section.
 export function sectionFromHash(hash: string): SectionId {

@@ -1,4 +1,4 @@
-import type { DashboardData, KnowledgeItem, ScenarioId } from '../types/dashboard';
+import type { DashboardData, IdeasData, KnowledgeItem, ScenarioId, Section } from '../types/dashboard';
 
 /**
  * SYNTHETIC DEMO DATA. The project below ("Tidewatch") is fictional and is
@@ -30,6 +30,20 @@ const demoHypotheses: KnowledgeItem[] = [
     title: 'A deliberately very long hypothesis title that keeps going to check wrapping in narrow layouts: LongUnbrokenIdentifierSegment_ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789_0123456789',
     status: 'draft', summary: '<b>Not bold</b> <script>alert(1)</script> markup in text is shown literally.', path: 'docs/hypotheses.md' },
 ];
+
+const demoSrc = [{ id: 'ideas' as const, path: '.monolith/memory/long-term/ideas', status: 'available' as const, code: null }];
+const demoIdeas: Section<IdeasData> = {
+  sources: demoSrc,
+  data: {
+    items: [
+      { id: 'IDEA-001', title: 'Show tide gauges on a map', status: 'inbox', createdAt: '2026-01-05T09:00:00.000Z', description: 'A map view of every gauge with its last reading. <b>Not bold</b>: markup is shown literally.', descriptionTruncated: false, context: 'Operator feedback', tags: ['ui'], paths: [], path: '.monolith/memory/long-term/ideas/IDEA-001.md' },
+      { id: 'IDEA-002', title: 'Export alerts as CSV', status: 'planned', createdAt: '2026-01-07T09:00:00.000Z', description: 'Operators want a CSV export of the alert log.', descriptionTruncated: false, context: null, tags: [], paths: [], path: '.monolith/memory/long-term/ideas/IDEA-002.md' },
+    ],
+    issues: [], truncated: false, complete: true,
+  },
+};
+const noIdeas: Section<IdeasData> = { sources: demoSrc, data: { items: [], issues: [], truncated: false, complete: true } };
+const absentIdeas: Section<IdeasData> = { sources: [{ ...demoSrc[0], status: 'absent', code: 'SOURCE_ABSENT' }], data: null };
 
 const demoDecisions: KnowledgeItem[] = [
   { id: 'ADR-001', title: 'Store readings in append-only daily files', status: 'superseded',
@@ -93,6 +107,7 @@ export const normalScenario: DashboardData = {
   ],
   roadmapText: roadmap,
   hypotheses: demoHypotheses,
+  ideas: demoIdeas,
   decisions: demoDecisions,
   diagnostics: [
     { severity: 'info', message: 'Fixture "normal" loaded.' },
@@ -124,6 +139,7 @@ export const partialScenario: DashboardData = {
   ],
   roadmapText: null,
   hypotheses: null,
+  ideas: absentIdeas,
   decisions: [{ id: null, title: null, status: null, summary: null, path: null }],
   diagnostics: [
     { severity: 'info', message: 'Fixture "partial" loaded.' },
@@ -138,6 +154,7 @@ export const emptyScenario: DashboardData = {
   checkpoints: [],
   roadmapText: '',
   hypotheses: [],
+  ideas: noIdeas,
   decisions: [],
   diagnostics: [{ severity: 'info', message: 'Fixture "empty" loaded.' }],
 };

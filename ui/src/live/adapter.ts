@@ -130,6 +130,7 @@ export function toDashboardData(model: DashboardReadModel): DashboardData {
     // Passed through untouched: the Execution Graph reads Core's relations, the adapter adds none.
     ...(model.storyIndex !== undefined ? { storyIndex: model.storyIndex } : {}),
     ...(model.history !== undefined ? { history: model.history } : {}),
+    ...(model.ideas !== undefined ? { ideas: model.ideas } : {}),
     ...(hyp.items !== undefined ? { hypotheses: hyp.items, hypothesesInfo: hyp.info } : {}),
     ...(dec.items !== undefined ? { decisions: dec.items, decisionsInfo: dec.info } : {}),
     diagnostics,

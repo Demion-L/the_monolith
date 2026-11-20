@@ -5,7 +5,7 @@ import HistoryPanel from './components/HistoryPanel.vue';
 import DecisionsPanel from './components/DecisionsPanel.vue';
 import ExecutionGraphPanel from './components/ExecutionGraphPanel.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
-import HypothesesPanel from './components/HypothesesPanel.vue';
+import KnowledgeLabPanel from './components/KnowledgeLabPanel.vue';
 import ProjectOverview from './components/ProjectOverview.vue';
 import RoadmapPanel from './components/RoadmapPanel.vue';
 import SideNav from './components/SideNav.vue';
@@ -136,7 +136,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           </template>
           <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" :story-index="data.storyIndex" />
           <ExecutionGraphPanel v-else-if="section === 'graph'" key="graph" :roadmap-text="data.roadmapText" :roadmap="data.roadmap" :story-index="data.storyIndex" :story="data.overview.story" />
-          <HypothesesPanel v-else-if="section === 'hypotheses'" key="hypotheses" :items="data.hypotheses" :info="data.hypothesesInfo" :demo="data.isDemo" />
+          <KnowledgeLabPanel v-else-if="section === 'knowledge'" key="knowledge" :ideas="data.ideas" :hypotheses="data.hypotheses" :hypotheses-info="data.hypothesesInfo" :demo="data.isDemo" />
           <DecisionsPanel v-else-if="section === 'decisions'" key="decisions" :items="data.decisions" :info="data.decisionsInfo" :demo="data.isDemo" />
           <DiagnosticsPanel v-else key="diagnostics" :data="data" :runners="demo ? undefined : runners" />
         </Transition>

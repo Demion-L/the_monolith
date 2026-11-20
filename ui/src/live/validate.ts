@@ -297,6 +297,38 @@ function isHistory(d: unknown): boolean {
   );
 }
 
+const IDEA_STATUSES = ['inbox', 'planned', 'archived'];
+function isIdea(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.id) &&
+    isStr(v.title) &&
+    isStr(v.status) &&
+    IDEA_STATUSES.includes(v.status) &&
+    isStr(v.createdAt) &&
+    isStr(v.description) &&
+    typeof v.descriptionTruncated === 'boolean' &&
+    isStrOrNull(v.context) &&
+    Array.isArray(v.tags) &&
+    v.tags.every(isStr) &&
+    Array.isArray(v.paths) &&
+    v.paths.every(isStr) &&
+    isStr(v.path)
+  );
+}
+
+function isIdeas(d: unknown): boolean {
+  return (
+    isObj(d) &&
+    Array.isArray(d.items) &&
+    d.items.every(isIdea) &&
+    Array.isArray(d.issues) &&
+    d.issues.every((i) => isObj(i) && isStr(i.id) && (i.code === 'IDEA_CORRUPT' || i.code === 'IDEA_UNSAFE_PATH')) &&
+    typeof d.truncated === 'boolean' &&
+    typeof d.complete === 'boolean'
+  );
+}
+
 function isOverview(d: unknown): boolean {
   return (
     isObj(d) &&
@@ -327,6 +359,7 @@ export function isDashboardReadModel(v: unknown): v is DashboardReadModel {
     isSection(v.roadmap, (d) => isObj(d) && isStr(d.text) && (d.structured === undefined || isStructuredRoadmap(d.structured))) &&
     (v.storyIndex === undefined || isSection(v.storyIndex, isStructuredStoryIndex)) &&
     (v.history === undefined || isSection(v.history, isHistory)) &&
+    (v.ideas === undefined || isSection(v.ideas, isIdeas)) &&
     (v.hypotheses === undefined || isSection(v.hypotheses, isKnowledgeData)) &&
     (v.decisions === undefined || isSection(v.decisions, isKnowledgeData)) &&
     isObj(diag) &&

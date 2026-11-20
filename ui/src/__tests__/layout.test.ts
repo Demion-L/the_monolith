@@ -7,7 +7,7 @@ import SideNav from '../components/SideNav.vue';
 import { SKIN_STORAGE_KEY } from '../skin';
 import { goTo } from './nav';
 
-const SECTION_IDS = ['overview', 'history', 'roadmap', 'graph', 'hypotheses', 'decisions', 'diagnostics'];
+const SECTION_IDS = ['overview', 'history', 'roadmap', 'graph', 'knowledge', 'decisions', 'diagnostics'];
 
 beforeEach(() => {
   window.localStorage.clear();

@@ -17,7 +17,7 @@ import type { StoryStateResolution } from './story-state.js';
 import type { Checkpoint, Mission } from '../coordinatorium/types.js';
 
 /** The fixed, closed set of files this model reads. */
-export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions' | 'storyIndex';
+export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions' | 'storyIndex' | 'ideas';
 
 /**
  * - available: read and (where applicable) parsed successfully
@@ -410,6 +410,34 @@ export interface KnowledgeData {
   complete: boolean;
 }
 
+/**
+ * One idea as the existing idea store reads it (GOV-EVOLUTION Phase 4). Read-only; text is untrusted
+ * user data and is shown, never interpreted. `path` is the project-relative source file (provenance).
+ */
+export interface IdeaView {
+  id: string;
+  title: string;
+  status: 'inbox' | 'planned' | 'archived';
+  createdAt: string;
+  description: string;
+  /** True when Core shortened `description` to its limit. */
+  descriptionTruncated: boolean;
+  context: string | null;
+  tags: string[];
+  paths: string[];
+  path: string;
+}
+
+export interface IdeasData {
+  items: IdeaView[];
+  /** Files that could not be read as ideas: fixed code + id only. */
+  issues: { id: string; code: 'IDEA_CORRUPT' | 'IDEA_UNSAFE_PATH' }[];
+  /** True when the item list was cut at the display limit. */
+  truncated: boolean;
+  /** False when some idea file could not be read or the list was cut: the list is not exhaustive. */
+  complete: boolean;
+}
+
 /** Resolution of the declared active story (ARCH-002B); see `story-state.ts`. */
 export interface StoryStateView {
   activeStory: StoryStateResolution | null;
@@ -509,5 +537,10 @@ export interface DashboardReadModel {
    * usable (see `sources[0]`); absent state is an empty history. Absent from DTOs of older servers.
    */
   history?: Section<DevelopmentHistory>;
+  /**
+   * Additive (GOV-EVOLUTION Phase 4). Ideas from the existing idea store. `data === null` means the source is
+   * not available (`absent` = no idea has been captured yet: the directory does not exist). Absent from DTOs of older servers.
+   */
+  ideas?: Section<IdeasData>;
   diagnostics: ReadDiagnostics;
 }

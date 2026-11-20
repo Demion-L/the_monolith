@@ -57,6 +57,8 @@ Commands:
   governance  Read-only governance integrity check of the governance documents
               (roadmap, story index, capsules, ADRs, ...): governance check
               [--json] [--strict]. Reports problems; changes nothing.
+  hook        Claude Code hook entry points (opt-in): session-start | stop | print-config.
+              Read-only; never blocks; 'print-config' only prints a settings snippet.
   ui          Launch Mission Control, the read-only web dashboard, on
               127.0.0.1 (default port 4173). 'ui dev' adds Vite hot reload
               (source checkout only). See 'monolith ui --help'.
@@ -230,6 +232,12 @@ async function main() {
     case 'governance': {
       const { runGovernanceCommand } = await import('../governance/cli.js');
       process.exitCode = await runGovernanceCommand(args.slice(1));
+      break;
+    }
+
+    case 'hook': {
+      const { runHookCommand } = await import('../hooks/index.js');
+      process.exitCode = await runHookCommand(args.slice(1));
       break;
     }
 

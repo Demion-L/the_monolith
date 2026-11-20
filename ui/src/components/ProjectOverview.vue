@@ -17,6 +17,8 @@ import type { SectionId } from '../sections';
 import { stripDecorativeMarkers } from '../knowledge';
 import { extractStoryFields } from '../storyFields';
 import ValueOrUnknown from './ValueOrUnknown.vue';
+import ContinuityPanel from './ContinuityPanel.vue';
+import { lastCompleted, nextStep } from '../continuity';
 
 /**
  * Mission Command Overview (UI-009). Presentation only: every value is a Core
@@ -107,7 +109,6 @@ const storyIndexReason = computed(() => {
   if (si.data.state === 'error' || si.data.state === 'unrecognized') return `Core could not interpret it (${si.data.state})`;
   return null;
 });
-const recentStories = computed(() => (stories.value ? stories.value.stories.slice(-3).reverse() : []));
 
 // ---- Recent Activity: Core's latest recorded events (Development History), nothing derived here ----
 const EVENT_LABEL = { mission_started: 'Mission started', checkpoint: 'Checkpoint', mission_finished: 'Mission finished' } as const;
@@ -118,37 +119,25 @@ const problems = computed(() => (props.diagnostics ?? []).filter((d) => d.severi
 const errorCount = computed(() => problems.value.filter((d) => d.severity === 'error').length);
 const warningCount = computed(() => problems.value.filter((d) => d.severity === 'warning').length);
 
-interface Attention { key: string; tag: string; tone: 'err' | 'warn' | 'gap'; text: string }
-const attention = computed<Attention[]>(() => {
-  const out: Attention[] = [];
-  const s = story.value;
-  if (props.provenance?.splitBrain.detected) {
-    out.push({ key: 'split', tag: 'SPLIT-BRAIN', tone: 'warn', text: 'Core found independent operational states. MONOLITH does not choose between them.' });
-  }
-  for (const [i, d] of problems.value.entries()) {
-    out.push({ key: `d${i}`, tag: d.severity.toUpperCase(), tone: d.severity === 'error' ? 'err' : 'warn', text: d.message });
-  }
-  if (s !== null && (s.kind === 'unknown' || s.kind === 'no_section')) {
-    out.push({ key: 'story', tag: 'UNRESOLVED', tone: 'gap', text: 'The current story could not be classified from its source.' });
-  }
-  const ap = props.roadmap?.activePhase.kind;
-  if (ap === 'unmatched' || ap === 'ambiguous') {
-    out.push({ key: 'phase', tag: 'UNRESOLVED', tone: 'gap', text: `Active phase is uncertain: Core reports “${ap}”.` });
-  }
-  if (props.roadmap === undefined) {
-    out.push({ key: 'roadmap', tag: 'NOT PROVIDED', tone: 'gap', text: 'This data source provides no structured roadmap.' });
-  }
-  if (storyIndexReason.value !== null) {
-    out.push({ key: 'index', tag: 'NOT PROVIDED', tone: 'gap', text: `Story index: ${storyIndexReason.value}.` });
-  }
-  return out;
+const continuityInput = computed(() => ({
+  roadmap: props.roadmap,
+  storyIndex: props.storyIndex,
+  history: props.history,
+  missions: props.missions,
+  activeMissionCount: props.overview.activeMissionCount ?? null,
+  story: story.value,
+}));
+const last = computed(() => lastCompleted(continuityInput.value));
+const next = computed(() => nextStep(continuityInput.value));
+/** The mission card is the working context only when there is something active; otherwise Last Completed → What's Next lead. */
+const showMission = computed(() => {
+  if (activeMissions.value.length > 0 || (props.overview.activeMissionCount ?? 0) > 0) return true;
+  const st = story.value;
+  if (st === null) return props.overview.currentStory !== undefined; // legacy DTO: the excerpt only
+  // "No active story recorded" is a normal state: the pulse says it. An unclassifiable story is shown on the card.
+  return st.kind !== 'none';
 });
-const attentionHead = computed(() => attention.value.slice(0, 5));
-const attentionRest = computed(() => attention.value.slice(5));
-
-// ---- Project records: structured records Core already carries; chronological order is not confirmed ----
-const checkpointList = computed(() => (props.checkpoints ?? []).slice(0, 3));
-const hasActivity = computed(() => checkpointList.value.length > 0 || recentStories.value.length > 0);
+const splitBrain = computed(() => props.provenance?.splitBrain.detected === true);
 </script>
 
 <template>
@@ -182,9 +171,11 @@ const hasActivity = computed(() => checkpointList.value.length > 0 || recentStor
       </p>
     </div>
 
-    <div class="mc-grid">
+    <ContinuityPanel v-if="!showMission" :last="last" :next="next" @navigate="go" />
+
+    <div class="mc-grid" :class="{ 'mc-grid-single': !showMission }">
       <!-- 2. Current mission. Untrusted project text: interpolation only, never HTML. -->
-      <div v-if="story !== null || overview.currentStory !== undefined" class="ov-block mc-card mc-mission" data-testid="ov-focus">
+      <div v-if="showMission" class="ov-block mc-card mc-mission" data-testid="ov-focus">
         <h3 class="mc-eyebrow">Current mission</h3>
         <p v-if="story !== null && story.kind === 'active'" class="mc-hero" data-testid="story-ids">{{ story.ids.join(', ') }}</p>
         <p v-if="fields !== null && fields.title !== null" class="mc-title" data-testid="story-title">{{ fields.title }}</p>
@@ -291,8 +282,15 @@ const hasActivity = computed(() => checkpointList.value.length > 0 || recentStor
           <dd data-testid="pulse-diagnostics">
             <span v-if="diagnostics === undefined" class="muted">Unavailable</span>
             <span v-else-if="problems.length === 0" class="muted">No problems reported</span>
-            <template v-else>{{ errorCount }} error(s), {{ warningCount }} warning(s)</template>
+            <template v-else>
+              <span v-if="errorCount > 0" class="mc-ind mc-ind-err" data-testid="pulse-errors">{{ errorCount }} error(s)</span>
+              <span v-if="warningCount > 0" class="mc-ind mc-ind-warn" data-testid="pulse-warnings">{{ warningCount }} warning(s)</span>
+            </template>
           </dd>
+          <template v-if="splitBrain">
+            <dt>State</dt>
+            <dd data-testid="pulse-splitbrain"><span class="mc-ind mc-ind-warn">Split-brain detected</span> <span class="muted">— MONOLITH does not choose between the states.</span></dd>
+          </template>
           <dt>Freshness</dt>
           <dd data-testid="pulse-freshness" class="muted">Not reported by Core</dd>
         </dl>
@@ -302,60 +300,7 @@ const hasActivity = computed(() => checkpointList.value.length > 0 || recentStor
       </div>
     </div>
 
-    <!-- 4. Attention required -->
-    <div class="ov-block mc-card mc-attention" data-testid="ov-attention">
-      <h3 class="mc-eyebrow">Attention required</h3>
-      <p v-if="attention.length === 0" class="empty" data-testid="attention-empty">
-        Core reports no problems. This reflects source availability, not a validation result.
-      </p>
-      <template v-else>
-        <ul class="mc-att-list">
-          <li v-for="a in attentionHead" :key="a.key" :class="`mc-att-${a.tone}`" data-testid="attention-item">
-            <span class="mc-att-tag">{{ a.tag }}</span>
-            <span class="mc-att-text">{{ a.text }}</span>
-          </li>
-        </ul>
-        <details v-if="attentionRest.length > 0" class="more" data-testid="attention-more">
-          <summary>Show {{ attentionRest.length }} more</summary>
-          <ul class="mc-att-list">
-            <li v-for="a in attentionRest" :key="a.key" :class="`mc-att-${a.tone}`" data-testid="attention-item">
-              <span class="mc-att-tag">{{ a.tag }}</span>
-              <span class="mc-att-text">{{ a.text }}</span>
-            </li>
-          </ul>
-        </details>
-      </template>
-      <p class="mc-actions">
-        <button type="button" class="mc-link" data-testid="go-diagnostics-att" @click="go('diagnostics')">Open Diagnostics</button>
-      </p>
-    </div>
-
-    <!-- 5. Project records: structured records only; no chronological claim -->
-    <div class="ov-block mc-card mc-activity" data-testid="ov-activity">
-      <h3 class="mc-eyebrow">Project records</h3>
-      <p v-if="!hasActivity" class="empty" data-testid="activity-empty">
-        No structured project records are available from Core.
-      </p>
-      <template v-else>
-        <ul v-if="checkpointList.length > 0" class="mc-act-list" data-testid="activity-checkpoints">
-          <li v-for="c in checkpointList" :key="c.id">
-            <span class="mc-act-k">Checkpoint</span>
-            <code class="mc-act-id">{{ c.id }}</code>
-            <span v-if="c.summary" class="mc-act-sum">{{ preview(c.summary).short }}</span>
-            <span class="mc-act-date"><ValueOrUnknown :value="c.createdAt" /></span>
-          </li>
-        </ul>
-        <ul v-if="recentStories.length > 0" class="mc-act-list" data-testid="activity-stories">
-          <li v-for="s in recentStories" :key="`${s.id}-${s.title}`">
-            <span class="mc-act-k">Story index</span>
-            <code class="mc-act-id">{{ s.id }}</code>
-            <span v-if="s.title" class="mc-act-sum">{{ s.title }}</span>
-            <span class="mc-act-date">{{ s.date ?? 'date not reported' }}</span>
-          </li>
-        </ul>
-        <p v-if="recentStories.length > 0" class="muted mc-note">Last entries in document order of the story index; not a verified timeline. Checkpoints are listed as Core returns them, not sorted by time.</p>
-      </template>
-    </div>
+    <ContinuityPanel v-if="showMission" :last="last" :next="next" @navigate="go" />
 
     <!-- 6. Recent activity: the latest recorded mission events (same model as Development History) -->
     <div v-if="history !== undefined" class="ov-block mc-card mc-activity" data-testid="ov-recent">

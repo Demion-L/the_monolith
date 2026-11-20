@@ -53,7 +53,10 @@ describe('Mission Command Overview', () => {
     expect(mnt({ roadmap: roadmap({ kind: 'phase', id: '3' }) }).get('[data-testid="pulse-phase"]').text()).toContain('CURRENT');
     const w = mnt();
     expect(w.get('[data-testid="pulse-phase"]').text()).toBe('Unavailable');
-    expect(w.text()).toContain('no structured roadmap');
+    // with no active work the continuity block states why nothing can be suggested
+    const idle = mnt({ overview: baseOv({ activeMissionCount: 0, story: { kind: 'none', excerpt: null } }) });
+    expect(idle.get('[data-testid="next-reason"]').text()).toContain('no structured roadmap');
+    expect(idle.get('[data-testid="next-kind"]').text()).toBe('UNKNOWN');
   });
 
   it('active story comes from the story claim only', () => {
@@ -81,41 +84,38 @@ describe('Mission Command Overview', () => {
     expect(mnt({ storyIndex: idx(3) }).get('[data-testid="pulse-stories"]').text()).toContain('not overall project completion');
   });
 
-  it('diagnostics: Core severities shown as given; attention lists them; empty state when none', () => {
+  it('diagnostics: Core severities shown as given in a compact indicator, not a duplicated list', () => {
     const d: Diagnostic[] = [
       { severity: 'info', message: 'Source availability only' },
       { severity: 'error', message: 'activeStory (p): corrupt [SOURCE_EMPTY]' },
       { severity: 'warning', message: 'MULTIPLE_ACTIVE_MISSIONS' },
     ];
     const w = mnt({ diagnostics: d, roadmap: roadmap({ kind: 'none' }), storyIndex: idx(1) });
-    expect(w.get('[data-testid="pulse-diagnostics"]').text()).toBe('1 error(s), 1 warning(s)');
-    const items = w.findAll('[data-testid="attention-item"]').map((i) => i.text());
-    expect(items.some((t) => t.includes('ERROR') && t.includes('SOURCE_EMPTY'))).toBe(true);
-    expect(items.some((t) => t.includes('WARNING') && t.includes('MULTIPLE_ACTIVE_MISSIONS'))).toBe(true);
-    expect(items.join()).not.toContain('Source availability only');
+    expect(w.get('[data-testid="pulse-errors"]').text()).toBe('1 error(s)');
+    expect(w.get('[data-testid="pulse-warnings"]').text()).toBe('1 warning(s)');
+    expect(w.text()).not.toContain('SOURCE_EMPTY'); // the full list lives in Diagnostics
     const ok = mnt({ diagnostics: [d[0]!], roadmap: roadmap({ kind: 'none' }), storyIndex: idx(1) });
-    expect(ok.find('[data-testid="attention-empty"]').exists()).toBe(true);
-    expect(ok.get('[data-testid="attention-empty"]').text()).toContain('not a validation result');
+    expect(ok.get('[data-testid="pulse-diagnostics"]').text()).toBe('No problems reported');
+    expect(ok.find('[data-testid="pulse-errors"]').exists()).toBe(false);
   });
 
-  it('attention distinguishes missing data from errors and keeps problems visible', () => {
-    const w = mnt({ diagnostics: [], overview: baseOv({ story: { kind: 'unknown', excerpt: 'x' } }) });
-    const t = w.findAll('[data-testid="attention-item"]').map((i) => i.text()).join('|');
-    expect(t).toContain('UNRESOLVED');
-    expect(t).toContain('NOT PROVIDED');
-    expect(t).not.toContain('ERROR');
+  it('the Attention required and Project records blocks are gone; nothing is shown twice', () => {
+    const w = mnt({ diagnostics: [{ severity: 'warning', message: 'W' }], checkpoints: [{ id: 'CP-1', missionId: 'M', createdAt: '2026-01-01', summary: 'did it', remainingSteps: null }], storyIndex: idx(5) });
+    for (const id of ['ov-attention', 'attention-item', 'attention-empty', 'ov-activity', 'activity-checkpoints', 'activity-stories']) {
+      expect(w.find(`[data-testid="${id}"]`).exists(), id).toBe(false);
+    }
+    expect(w.text()).not.toMatch(/attention required|project records/i);
   });
 
-  it('attention is bounded: first five shown, the rest behind a toggle', () => {
-    const d: Diagnostic[] = Array.from({ length: 9 }, (_, i) => ({ severity: 'warning', message: `W${i}` }));
-    const w = mnt({ diagnostics: d, roadmap: roadmap({ kind: 'none' }), storyIndex: idx(1) });
-    expect(w.get('[data-testid="attention-more"]').text()).toContain('Show 4 more');
-    expect(w.findAll('[data-testid="attention-item"]')).toHaveLength(9);
+  it('an unclassifiable story keeps its card and the pulse says Unresolved (nothing is hidden)', () => {
+    const w = mnt({ diagnostics: [], overview: baseOv({ activeMissionCount: 0, story: { kind: 'unknown', excerpt: 'x' } }) });
+    expect(w.get('[data-testid="story-state"]').text()).toContain('UNKNOWN');
+    expect(w.get('[data-testid="pulse-story"]').text()).toBe('Unresolved');
   });
 
-  it('split-brain reported by Core is surfaced', () => {
+  it('split-brain reported by Core stays visible as a compact indicator in the pulse', () => {
     const provenance = { splitBrain: { detected: true, localStates: [] } } as unknown as StateProvenanceView;
-    expect(mnt({ provenance, diagnostics: [] }).text()).toContain('SPLIT-BRAIN');
+    expect(mnt({ provenance, diagnostics: [] }).get('[data-testid="pulse-splitbrain"]').text()).toContain('Split-brain');
   });
 
   it('long markdown: bounded preview, full text reachable, nothing lost, no v-html', () => {
@@ -126,17 +126,6 @@ describe('Mission Command Overview', () => {
     expect(w.get('[data-testid="story-full"]').element.tagName).toBe('DETAILS');
     const src = readFileSync(join(__dirname, '../components/ProjectOverview.vue'), 'utf8');
     expect(src).not.toMatch(/v-html|innerHTML/);
-  });
-
-  it('project records: structured records only, no chronology claimed, honest empty state', () => {
-    expect(mnt().find('[data-testid="activity-empty"]').exists()).toBe(true);
-    const cp: Checkpoint[] = [{ id: 'CP-1', missionId: 'M', createdAt: '2026-01-01', summary: 'did it', remainingSteps: null }];
-    const w = mnt({ checkpoints: cp, storyIndex: idx(5) });
-    expect(w.get('[data-testid="activity-checkpoints"]').text()).toContain('CP-1');
-    expect(w.findAll('[data-testid="activity-stories"] li')).toHaveLength(3);
-    expect(w.text()).toContain('not a verified timeline');
-    expect(w.get('[data-testid="ov-activity"] h3').text()).toBe('Project records');
-    expect(w.text()).not.toMatch(/recent activity|latest checkpoint/i);
   });
 
   it('preview drops paired ** and ` markers; full text and unpaired text stay raw', async () => {
@@ -163,8 +152,7 @@ describe('Mission Command Overview', () => {
     const w = mnt();
     await w.get('[data-testid="go-graph"]').trigger('click');
     await w.get('[data-testid="go-diagnostics"]').trigger('click');
-    await w.get('[data-testid="go-diagnostics-att"]').trigger('click');
-    expect(w.emitted('navigate')!.map((e) => e[0])).toEqual(['graph', 'diagnostics', 'diagnostics']);
+    expect(w.emitted('navigate')!.map((e) => e[0])).toEqual(['graph', 'diagnostics']);
   });
 
   it('theme compatibility: styling uses theme tokens, no hard-coded colour outside the Cosmic Glass skin block', () => {

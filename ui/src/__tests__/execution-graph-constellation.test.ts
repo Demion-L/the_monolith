@@ -523,13 +523,13 @@ describe('Constellation keeps the data guarantees', () => {
     expect(st.find('.xg-dot.dot-ok').exists()).toBe(true);
   });
 
-  it('maps statuses to dots: completed green, planned light blue, anything else grey (in progress is NOT amber); unknown stays visible', () => {
+  it('maps statuses to dots: completed green, in progress cyan, planned light blue, anything else grey; unknown stays visible', () => {
     const road = roadmapDoc(1);
     const idx = '## Phase 1 — N\n\n### A-1 — a\n**Status:** COMPLETED\n\n### A-2 — b\n**Status:** IN PROGRESS\n\n### A-3 — c\n**Status:** PLANNED\n\n### A-4 — d\n**Status:** Mystery\n\n### A-5 — e\n';
     const r = parseRoadmapPhases(road);
     const w = mount(ExecutionGraphPanel, { props: { roadmapText: road, roadmap: r, storyIndex: { data: parseStoryIndex(idx, ['1'], true), sources: [SRC] } }, attachTo: document.body });
     const dots = w.findAll('[data-testid="graph-story"]').map((n) => n.find('.xg-dot').classes().find((x) => x.startsWith('dot-')));
-    expect(dots).toEqual(['dot-ok', 'dot-idle', 'dot-planned', 'dot-idle', 'dot-none']);
+    expect(dots).toEqual(['dot-ok', 'dot-progress', 'dot-planned', 'dot-idle', 'dot-none']);
     expect(w.findAll('[data-testid="graph-story"]')[3]!.find('.status-unrecognized').exists()).toBe(true);
     expect(w.findAll('[data-testid="graph-story"]')[4]!.text()).toContain('STATUS NOT STATED');
   });
@@ -895,12 +895,12 @@ describe('Final polish: readable titles, expressive CURRENT, status colours, tig
     expect(w.get('[data-testid="graph-current-outside"] .xg-id').text()).toBe('CUR-1');
   });
 
-  it('colours only Core-provided states: green completed, amber current, light blue planned, red diagnostics', () => {
+  it('colours only Core-provided states: green completed, amber current, light blue planned, amber diagnostics (never red for a status)', () => {
     expect(css).toMatch(/\.dot-ok \{ background: #4ade80; \}/);
     expect(css).toMatch(/\.dot-current \{ background: #fbbf24;/);
     expect(css).toMatch(/\.dot-planned \{ background: #7cb8ff; \}/);
-    expect(css).toMatch(/\.xg-meta \.diag-badge \{[^}]*color: #f87171/);
-    expect(css).toMatch(/\.xg-status\.status-unrecognized \{ color: #f87171; \}/);
+    expect(css).toMatch(/\.xg-meta \.diag-badge \{[^}]*color: #fbbf24/);
+    expect(css).not.toMatch(/\.xg-status\.status-unrecognized \{[^}]*#f87171/);
     const road = roadmapDoc(2, 1).replace('Phase 2 — Title 2\n\n**Status:** COMPLETED', 'Phase 2 — Title 2\n\n**Status:** PLANNED');
     const r = parseRoadmapPhases(road);
     const w = mount(ExecutionGraphPanel, { props: { roadmapText: road, roadmap: r, story: { kind: 'active', ids: ['CUR-1'], excerpt: null } }, attachTo: document.body });

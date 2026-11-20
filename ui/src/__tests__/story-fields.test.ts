@@ -74,7 +74,9 @@ describe('Current Mission card', () => {
     const w = mnt({ overview: ov('**Status:** COMPLETED\n**Title:** T') });
     expect(w.get('[data-testid="story-state"]').text()).toBe('Active');
     const none = mnt({ overview: ov('**Status:** IN PROGRESS', { story: { kind: 'none', excerpt: '**Status:** IN PROGRESS' } }) });
-    expect(none.get('[data-testid="story-state"]').text()).toBe('No active story recorded');
+    // "No active story recorded" is a normal state: no empty card; the pulse states it
+    expect(none.find('[data-testid="ov-focus"]').exists()).toBe(false);
+    expect(none.get('[data-testid="pulse-story"]').text()).toBe('None recorded');
   });
   it('unknown format: plain source preview fallback, no structured fields', () => {
     const w = mnt({ overview: ov('Just some prose about the story.') });
@@ -84,7 +86,8 @@ describe('Current Mission card', () => {
   });
   it('no story at all: honest state, no card fields', () => {
     const w = mnt({ overview: ov(null, { story: { kind: 'none', excerpt: null } }) });
-    expect(w.get('[data-testid="story-state"]').text()).toBe('No active story recorded');
+    expect(w.find('[data-testid="ov-focus"]').exists()).toBe(false);
+    expect(w.get('[data-testid="pulse-story"]').text()).toBe('None recorded');
     expect(w.find('[data-testid="story-objective"]').exists()).toBe(false);
   });
   it('untrusted text is escaped', () => {

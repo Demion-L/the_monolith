@@ -88,7 +88,8 @@ describe('Project Overview — structured story state', () => {
     expect(w.text()).toContain('Proj');
     expect(w.text()).toContain('12');
     expect(w.text()).not.toContain('Description');
-    expect(w.text()).not.toMatch(/health|%|progress/i);
+    expect(w.text()).not.toMatch(/health|%/i);
+    expect(w.find('progress, [role="progressbar"]').exists()).toBe(false); // no progress figure; the words "in progress" may appear in a mission reason
   });
 
   it('HTML-like project text stays text', () => {

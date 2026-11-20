@@ -9,6 +9,7 @@ import {
   projectExecutionGraph,
 } from '../graph/projection';
 import type { PhaseNode, StatusView, StoryNode } from '../graph/projection';
+import { leadingStatus, lifecycleTone, statesFinalized } from '../statusTone';
 import type { Section, StoryState, StructuredRoadmapView, StructuredStoryIndexView } from '../types/dashboard';
 
 const props = defineProps<{
@@ -36,6 +37,25 @@ const rects = computed(() => {
   return m;
 });
 const edges = computed(() => routeEdges(graph.value.edges, rects.value));
+
+/**
+ * Roadmap sequence: consecutive phases in the roadmap's own document order. Drawn only between two phases that have
+ * an id each and are unique (a duplicate or id-less phase breaks the chain; nothing is bridged or invented), and only
+ * when the roadmap was read completely. It is NOT a dependency, a verified execution order or a lifecycle transition.
+ */
+const sequenceEdges = computed(() => {
+  if (graph.value.roadmapReliable === false) return [];
+  const ph = [...graph.value.phases].sort((a, b) => a.index - b.index);
+  const out: { key: string; from: string; to: string }[] = [];
+  for (let i = 1; i < ph.length; i++) {
+    const a = ph[i - 1]!;
+    const b = ph[i]!;
+    if (a.id === null || b.id === null || a.duplicateId || b.duplicateId) continue;
+    out.push({ key: `seq:${a.key}>${b.key}`, from: a.key, to: b.key });
+  }
+  return out;
+});
+const seqEdges = computed(() => routeEdges(sequenceEdges.value, rects.value));
 
 const linkedCount = computed(() => graph.value.edges.length);
 const unlinkedCount = computed(() => graph.value.stories.length - linkedCount.value);
@@ -272,8 +292,10 @@ function onKeydown(e: KeyboardEvent): void {
 // ---- Presentation helpers ----
 function statusLabel(s: StatusView): string {
   if (s.value === null) return 'STATUS NOT STATED';
-  return s.value.length > 28 ? `${s.value.slice(0, 28).trimEnd()}…` : s.value;
+  const head = leadingStatus(s.value) ?? s.value;
+  return head.length > 28 ? `${head.slice(0, 28).trimEnd()}…` : head;
 }
+const statusTone = (s: StatusView): string => `xg-st-${lifecycleTone(s.value)}`;
 function phaseHeading(p: PhaseNode): string {
   const id = p.id === null ? 'Phase (no id)' : `Phase ${p.id}`;
   return p.title === null ? id : `${id} · ${p.title}`;
@@ -311,12 +333,13 @@ const storyColor = (s: StoryNode): string => (s.current ? AMBER : ACCENT);
  */
 function dotClass(s: StatusView, current = false): string {
   if (current) return 'dot-current';
-  const v = s.value;
-  if (v === null) return 'dot-none';
-  if (!s.recognized) return 'dot-idle';
-  if (/^complet/i.test(v)) return 'dot-ok';
-  if (/^planned\b/i.test(v)) return 'dot-planned';
-  return 'dot-idle';
+  if (s.value === null) return 'dot-none';
+  switch (lifecycleTone(s.value)) {
+    case 'ok': return 'dot-ok';
+    case 'progress': return 'dot-progress';
+    case 'planned': return 'dot-planned';
+    default: return 'dot-idle';
+  }
 }
 // Edge gradients and the flowing "data packets" (decorative; the geometry is the routed edge).
 const FLOW_LIMIT = 120;
@@ -402,6 +425,16 @@ function roadmapStateNote(): string | null {
         <button v-if="selectedKey !== null" type="button" class="btn btn-primary" data-testid="graph-clear" @click="clear">Clear selection</button>
       </div>
       <p class="muted xg-hint">Drag a node to move it · drag the background to pan · Ctrl + mouse wheel to zoom the graph. Moving nodes changes only this view.</p>
+      <ul class="xg-legend" aria-label="Legend" data-testid="graph-legend">
+        <li v-if="sequenceEdges.length > 0" data-testid="legend-seq">
+          <svg width="34" height="10" aria-hidden="true"><line x1="1" y1="5" x2="26" y2="5" class="xg-seq-edge" /><path d="M 24 1.5 L 32 5 L 24 8.5 Z" class="xg-arrow" /></svg>
+          Phase → Phase: Roadmap sequence <span class="muted">(document order; not a dependency or a verified order)</span>
+        </li>
+        <li data-testid="legend-member">
+          <svg width="34" height="10" aria-hidden="true"><line x1="1" y1="5" x2="33" y2="5" class="xg-legend-member" /></svg>
+          Story → Phase: Confirmed membership
+        </li>
+      </ul>
 
       <div class="xg-layout">
         <div
@@ -431,6 +464,14 @@ function roadmapStateNote(): string | null {
           </svg>
 
           <div class="xg-world" :style="worldStyle" :data-k="k" :data-tx="tx" :data-ty="ty" data-testid="graph-canvas">
+            <svg class="xg-seq" width="1" height="1" aria-hidden="true" data-testid="graph-seq-layer">
+              <defs>
+                <marker id="xg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+                  <path d="M 1 1 L 9 5 L 1 9 Z" class="xg-arrow" />
+                </marker>
+              </defs>
+              <path v-for="e in seqEdges" :key="e.key" :d="e.d" class="xg-seq-edge" marker-end="url(#xg-arrow)" :data-from="e.from" :data-to="e.to" data-testid="graph-seq-edge" />
+            </svg>
             <svg class="xg-edges" width="1" height="1" aria-hidden="true">
               <defs>
                 <linearGradient v-for="(e, i) in edges" :id="`xg-g-${i}`" :key="`g-${e.key}`" gradientUnits="userSpaceOnUse" :x1="e.p0.x" :y1="e.p0.y" :x2="e.p1.x" :y2="e.p1.y">
@@ -506,7 +547,8 @@ function roadmapStateNote(): string | null {
                 <span class="xg-content">
                   <span class="xg-kind">PHASE<span v-if="p.current" class="tag" data-testid="graph-current-phase">CURRENT</span></span>
                   <span class="xg-title"><span class="xg-id">{{ p.id === null ? 'Phase (no id)' : `Phase ${p.id}` }}</span><template v-if="p.title !== null"> · {{ p.title }}</template></span>
-                  <span class="xg-status" :class="{ 'status-unrecognized': !p.status.recognized }" data-testid="graph-status"><i class="xg-dot" :class="dotClass(p.status, p.current)" aria-hidden="true"></i>{{ statusLabel(p.status) }}</span>
+                  <span class="xg-status" :class="[statusTone(p.status), { 'status-unrecognized': !p.status.recognized }]" :title="p.status.value ?? undefined" data-testid="graph-status"><i class="xg-dot" :class="dotClass(p.status, p.current)" aria-hidden="true"></i>{{ statusLabel(p.status) }}</span>
+                  <span v-if="statesFinalized(p.status.value)" class="xg-final" title="The status text says finalized (REPORTED by the document, not confirmed here)" data-testid="graph-finalized">FINALIZED</span>
                   <span class="xg-meta">
                     <span v-if="p.storyKeys.length > 0" class="xg-count">{{ p.storyKeys.length }} {{ p.storyKeys.length === 1 ? 'story' : 'stories' }}</span>
                     <span v-if="p.duplicateId" class="diag-badge">▲ DUPLICATE ID</span>
@@ -538,7 +580,8 @@ function roadmapStateNote(): string | null {
               <span class="xg-kind">STORY<span v-if="s.current" class="tag" data-testid="graph-current-story">CURRENT</span></span>
               <span class="xg-title"><span class="xg-id">{{ s.id }}</span><template v-if="s.title !== null"> · {{ s.title }}</template></span>
               <span class="xg-meta">
-                <span class="xg-status" :class="{ 'status-unrecognized': !s.status.recognized }" data-testid="graph-status"><i class="xg-dot" :class="dotClass(s.status, s.current)" aria-hidden="true"></i>{{ statusLabel(s.status) }}</span>
+                <span class="xg-status" :class="[statusTone(s.status), { 'status-unrecognized': !s.status.recognized }]" :title="s.status.value ?? undefined" data-testid="graph-status"><i class="xg-dot" :class="dotClass(s.status, s.current)" aria-hidden="true"></i>{{ statusLabel(s.status) }}</span>
+                <span v-if="statesFinalized(s.status.value)" class="xg-final" title="The status text says finalized (REPORTED by the document, not confirmed here)" data-testid="graph-finalized">FINALIZED</span>
                 <span v-if="s.diagnostics.length > 0" class="diag-badge" data-testid="graph-diag-badge">▲ {{ s.diagnostics.length }} {{ s.diagnostics.length === 1 ? 'DIAG' : 'DIAGS' }}</span>
               </span>
             </button>

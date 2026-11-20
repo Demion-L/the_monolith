@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CheckpointsPanel from './components/CheckpointsPanel.vue';
 import HistoryPanel from './components/HistoryPanel.vue';
+import HandoverPanel from './components/HandoverPanel.vue';
+import { demoHandover } from './fixtures/handover';
 import DecisionsPanel from './components/DecisionsPanel.vue';
 import ExecutionGraphPanel from './components/ExecutionGraphPanel.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
@@ -136,6 +138,7 @@ const loading = computed(() => !demo && live.value.status === 'loading');
           </template>
           <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" :story-index="data.storyIndex" />
           <ExecutionGraphPanel v-else-if="section === 'graph'" key="graph" :roadmap-text="data.roadmapText" :roadmap="data.roadmap" :story-index="data.storyIndex" :story="data.overview.story" />
+          <HandoverPanel v-else-if="section === 'handover'" key="handover" :demo-report="demo ? (scenario === 'normal' ? demoHandover : null) : undefined" @navigate="selectSection" />
           <KnowledgeLabPanel v-else-if="section === 'knowledge'" key="knowledge" :ideas="data.ideas" :hypotheses="data.hypotheses" :hypotheses-info="data.hypothesesInfo" :demo="data.isDemo" />
           <DecisionsPanel v-else-if="section === 'decisions'" key="decisions" :items="data.decisions" :info="data.decisionsInfo" :demo="data.isDemo" />
           <DiagnosticsPanel v-else key="diagnostics" :data="data" :runners="demo ? undefined : runners" />

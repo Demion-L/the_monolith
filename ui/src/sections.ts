@@ -4,6 +4,7 @@ export const SECTIONS = [
   { id: 'history', label: 'Development History' },
   { id: 'roadmap', label: 'Roadmap' },
   { id: 'graph', label: 'Execution Graph' },
+  { id: 'handover', label: 'Handover' },
   { id: 'knowledge', label: 'Knowledge Lab' },
   { id: 'decisions', label: 'Architecture Decisions' },
   { id: 'diagnostics', label: 'Diagnostics' },

@@ -208,13 +208,17 @@ describe('section navigation in LIVE', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     for (const id of IDS) await goTo(w, id);
     await goTo(w, 'roadmap');
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // The dashboard DTO is never refetched by a section change; the Handover section alone fetches its own
+    // read-only report (GET /api/handover) when it opens.
+    const urls = (): string[] => fetchSpy.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(urls().filter((u) => u === '/api/dashboard')).toHaveLength(1);
+    expect(urls().filter((u) => u === '/api/handover')).toHaveLength(1);
     expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
     expect(w.find('.nav').exists()).toBe(true);
 
     await w.get('[data-testid="refresh"]').trigger('click');
     await flushPromises();
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy.mock.calls.map((c) => String((c as unknown[])[0])).filter((u) => u === '/api/dashboard')).toHaveLength(2);
     expect(visible(w)).toEqual(['roadmap']);
     expect(current(w)).toEqual(['#roadmap']);
   });

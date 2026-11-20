@@ -468,7 +468,9 @@ describe('architecture guards', () => {
 
   it('the HTTP layer imports no filesystem module and no Core state/storage', () => {
     const imports = [...code.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
-    expect([...new Set(imports)].sort()).toEqual(['../readmodel/index.js', 'http', 'path']);
+    // `../handover/check.js` is Core's read-only handover report (ACCOUNTABILITY-001); like the read model it is
+    // imported, never reimplemented, and the layer itself still spawns nothing (asserted below).
+    expect([...new Set(imports)].sort()).toEqual(['../handover/check.js', '../readmodel/index.js', 'http', 'path']);
     expect(code).not.toMatch(/\b(readFileSync|readdirSync|createReadStream|openSync|readFile|existsSync|statSync)\b/);
   });
 
@@ -481,5 +483,34 @@ describe('architecture guards', () => {
     // POST exists only for the two diagnostic routes (Phase 3), and those never take a path or a project root.
     expect(code.match(/'POST'/g)).toHaveLength(2);
     expect(code).not.toMatch(/writeFile|appendFile|spawn|exec\(|execFile|child_process/);
+  });
+});
+
+describe('Handover route (ACCOUNTABILITY-001)', () => {
+  it('GET /api/handover serves the handover report, read-only, with the same security headers', async () => {
+    fullProject();
+    const s = await start();
+    const before = readFileSync(join(dir, '.monolith/state.json'), 'utf8');
+    const r = await http(s, { path: '/api/handover' });
+    expect(r.status).toBe(200);
+    expect(r.headers['content-type']).toBe('application/json; charset=utf-8');
+    expect(r.headers['cache-control']).toBe('no-store');
+    const body = JSON.parse(r.body) as { schema: number; status: string; limitations: string[] };
+    expect(body.schema).toBe(1);
+    expect(['READY_FOR_REVIEW', 'REVIEW_WITH_ISSUES', 'INCOMPLETE', 'UNKNOWN']).toContain(body.status);
+    expect(body.limitations.length).toBeGreaterThan(0);
+    expect(noAccessControl(r)).toEqual([]);
+    expect(readFileSync(join(dir, '.monolith/state.json'), 'utf8')).toBe(before);
+  });
+
+  it('accepts only GET and applies the Host/Origin checks', async () => {
+    fullProject();
+    const s = await start();
+    for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
+      expect((await http(s, { method, path: '/api/handover', headers: { 'content-type': 'application/json' } })).status).toBe(405);
+    }
+    expect((await http(s, { path: '/api/handover', headers: { host: 'evil.example' } })).status).toBe(403);
+    expect((await http(s, { path: '/api/handover', headers: { origin: 'http://evil.example' } })).status).toBe(403);
+    expect((await http(s, { path: '/api/handover/' })).status).toBe(404);
   });
 });

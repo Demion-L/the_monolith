@@ -32,6 +32,9 @@ import {
 } from '../root/index.js';
 import { STORY_ID_RE } from '../coordinatorium/types.js';
 import { changedBetween, type GitView } from './git.js';
+import type { EvidenceLevel, EvidenceProvenance, EvidenceResult, Freshness, FreshnessReason } from './types.js';
+
+export type { EvidenceLevel, EvidenceProvenance, EvidenceResult, Freshness, FreshnessReason };
 
 export const EVIDENCE_REL = 'memory/long-term/verification';
 export const EVIDENCE_SCHEMA = 1;
@@ -42,8 +45,6 @@ export const MAX_NOTE_CHARS = 500;
 const EVD_NAME_RE = /^(EVD-\d{4,9})\.json$/;
 const SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
-export type EvidenceProvenance = 'REPORTED' | 'OBSERVED';
-export type EvidenceResult = 'pass' | 'fail';
 
 export interface EvidenceRecord {
   schema: typeof EVIDENCE_SCHEMA;
@@ -293,25 +294,6 @@ export function listEvidence(projectRoot: string): EvidenceListing {
 // Freshness and classification (pure)
 // ---------------------------------------------------------------------------
 
-/**
- * - REVISION_MATCH:       recorded revision equals HEAD (or only evidence files changed since), clean at record time and now.
- * - REVISION_MATCH_DIRTY: revision matches but the tree was or is dirty — the result may not describe the current files.
- * - POTENTIALLY_STALE:    HEAD moved with non-evidence changes since the check ran.
- * - UNKNOWN:              no git, no recorded revision, an unreachable revision, or unknown tree state.
- * A revision match never proves the check is still meaningful; it only says the committed files are the same.
- */
-export type Freshness = 'REVISION_MATCH' | 'REVISION_MATCH_DIRTY' | 'POTENTIALLY_STALE' | 'UNKNOWN';
-export type FreshnessReason =
-  | 'HEAD_MATCH_CLEAN'
-  | 'HEAD_MATCH_EVIDENCE_ONLY_CHANGES'
-  | 'DIRTY_AT_RECORD'
-  | 'DIRTY_NOW'
-  | 'HEAD_CHANGED'
-  | 'NO_GIT'
-  | 'NO_RECORDED_REVISION'
-  | 'REVISION_UNREACHABLE'
-  | 'TREE_STATE_UNKNOWN';
-
 export interface FreshnessAssessment {
   freshness: Freshness;
   reason: FreshnessReason;
@@ -337,8 +319,6 @@ export function assessFreshness(rec: EvidenceRecord, view: GitView, changed: Cha
   return { freshness: 'REVISION_MATCH', reason: evidenceOnly ? 'HEAD_MATCH_EVIDENCE_ONLY_CHANGES' : 'HEAD_MATCH_CLEAN' };
 }
 
-/** Evidence level shown to the owner. VERIFIED exists only here, never on disk. */
-export type EvidenceLevel = 'VERIFIED' | 'REPORTED' | 'STALE' | 'UNKNOWN' | 'FAILED';
 
 export function classifyEvidence(rec: EvidenceRecord, a: FreshnessAssessment): EvidenceLevel {
   if (rec.result === 'fail') return 'FAILED';

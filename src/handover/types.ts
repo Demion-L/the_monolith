@@ -13,7 +13,30 @@
  */
 
 import type { GovernanceResult } from '../governance/types.js';
-import type { EvidenceLevel, Freshness, FreshnessReason, EvidenceProvenance, EvidenceResult } from './evidence.js';
+export type EvidenceProvenance = 'REPORTED' | 'OBSERVED';
+export type EvidenceResult = 'pass' | 'fail';
+
+/**
+ * - REVISION_MATCH:       recorded revision equals HEAD (or only evidence files changed since), clean at record time and now.
+ * - REVISION_MATCH_DIRTY: revision matches but the tree was or is dirty — the result may not describe the current files.
+ * - POTENTIALLY_STALE:    HEAD moved with non-evidence changes since the check ran.
+ * - UNKNOWN:              no git, no recorded revision, an unreachable revision, or unknown tree state.
+ * A revision match never proves the check is still meaningful; it only says the committed files are the same.
+ */
+export type Freshness = 'REVISION_MATCH' | 'REVISION_MATCH_DIRTY' | 'POTENTIALLY_STALE' | 'UNKNOWN';
+export type FreshnessReason =
+  | 'HEAD_MATCH_CLEAN'
+  | 'HEAD_MATCH_EVIDENCE_ONLY_CHANGES'
+  | 'DIRTY_AT_RECORD'
+  | 'DIRTY_NOW'
+  | 'HEAD_CHANGED'
+  | 'NO_GIT'
+  | 'NO_RECORDED_REVISION'
+  | 'REVISION_UNREACHABLE'
+  | 'TREE_STATE_UNKNOWN';
+
+/** Evidence level shown to the owner. VERIFIED exists only as a computed verdict, never on disk. */
+export type EvidenceLevel = 'VERIFIED' | 'REPORTED' | 'STALE' | 'UNKNOWN' | 'FAILED';
 
 export const HANDOVER_SCHEMA = 1;
 

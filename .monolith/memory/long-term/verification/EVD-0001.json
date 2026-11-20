@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "EVD-0001",
+  "storyId": "ACCOUNT-001",
+  "command": "corepack pnpm run typecheck",
+  "result": "pass",
+  "exitCode": 0,
+  "provenance": "OBSERVED",
+  "source": "monolith evidence run",
+  "recordedAt": "2026-11-20T14:08:58.968Z",
+  "gitHead": "baf0cc3b1211cfe092d063aa6a5db00e57681b96",
+  "dirty": false,
+  "note": null,
+  "durationMs": 3947
+}

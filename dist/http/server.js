@@ -37,7 +37,14 @@
 import { createServer } from 'http';
 import { isAbsolute } from 'path';
 import { readDashboardModel, runReconciliation, runValidation } from '../readmodel/index.js';
+import { buildHandoverReport } from '../handover/check.js';
 export const DASHBOARD_PATH = '/api/dashboard';
+/**
+ * Handover report (ACCOUNTABILITY-001): `GET` only, parameterless, read-only. It is a separate route, not part of the
+ * dashboard DTO, because it runs read-only `git` (HEAD / working tree) and so is fetched only when the Handover view
+ * is opened or refreshed — never on every dashboard refresh. It runs no test and writes nothing.
+ */
+export const HANDOVER_PATH = '/api/handover';
 /**
  * On-demand diagnostics (BETA-020 Phase 3). POST only, because a run is an
  * action, not a read of stored data. They are still read-only for the project:
@@ -237,6 +244,20 @@ export async function startDashboardServer(options) {
                     res.destroy();
             });
             return;
+        }
+        if (path === HANDOVER_PATH) {
+            if (req.method !== 'GET')
+                return sendError(res, 'METHOD_NOT_ALLOWED');
+            let out;
+            try {
+                out = JSON.stringify(buildHandoverReport(projectRoot));
+            }
+            catch {
+                return sendError(res, 'INTERNAL_ERROR');
+            }
+            if (Buffer.byteLength(out, 'utf8') > maxBytes)
+                return sendError(res, 'RESPONSE_TOO_LARGE');
+            return send(res, 200, out);
         }
         if (path !== DASHBOARD_PATH) {
             const asset = options.assets?.get(path === '/' ? '/index.html' : path);

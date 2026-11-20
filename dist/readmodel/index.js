@@ -5,4 +5,5 @@ export { buildDevelopmentHistory, MAX_HISTORY_MISSIONS, MAX_HISTORY_CHECKPOINTS_
 export { parseRoadmapPhases } from './roadmap.js';
 export { parseStoryIndex, MAX_INDEX_STORIES } from './story-index.js';
 export { parseHypotheses, parseAdr, readKnowledge, HYPOTHESES_REL, ADR_DIR_REL } from './knowledge.js';
+export { loadStoryAuthority } from './story-links.js';
 export { buildStoryAuthorityContext, resolveStoryState, resolveStoryStateIn, resolveActiveStory } from './story-state.js';

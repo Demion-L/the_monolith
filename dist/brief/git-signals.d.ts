@@ -27,6 +27,20 @@ import type { GitSignals } from './freshness.js';
 export declare const MAX_COMMITS_SINCE = 500;
 /** Largest blob `readBlobAt` will read; checked with `git cat-file -s` before the content is requested. */
 export declare const MAX_BLOB_BYTES: number;
+export declare const SAFE_CONFIG: string[];
+export declare const SAFE_ENV: {
+    GIT_OPTIONAL_LOCKS: string;
+    GIT_TERMINAL_PROMPT: string;
+    GIT_EXTERNAL_DIFF: string;
+    /** git >= 2.44: a missing object is an error instead of a fetch from the promisor remote. */
+    GIT_NO_LAZY_FETCH: string;
+    /** Older git has no GIT_NO_LAZY_FETCH; refusing every transport stops the fetch itself. */
+    GIT_ALLOW_PROTOCOL: string;
+    /** State-document names come from config: never git pathspec magic. */
+    GIT_LITERAL_PATHSPECS: string;
+    /** Replace refs would change the history this check reports. */
+    GIT_NO_REPLACE_OBJECTS: string;
+};
 export declare function isGitSha(s: string): boolean;
 /**
  * @param targetDir project directory (git is run from here; paths are relative to it)

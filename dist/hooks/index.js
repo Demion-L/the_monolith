@@ -7,6 +7,9 @@
  *   monolith hook stop            Stop: diagnostic reminder only. NEVER blocks: no `decision`,
  *                                 no `continue:false`, no exit 2; does nothing when
  *                                 `stop_hook_active` is true (no Stop loop).
+ *   monolith hook pre-compact     PreCompact: prints plain-text instructions that Claude Code adds to the
+ *                                 compaction summary (what to preserve; a reminder to record a checkpoint).
+ *                                 Never blocks (no exit 2, no `decision`), never writes a checkpoint itself.
  *   monolith hook print-config    Prints the opt-in settings snippet to stdout. Writes nothing and
  *                                 never touches any Claude Code settings file.
  *
@@ -17,7 +20,10 @@
 import { readDashboardModel } from '../readmodel/index.js';
 import { buildGovernanceReport } from '../governance/check.js';
 import { sanitizeSingleLine } from '../brief/sanitize.js';
-export const HOOK_USAGE = 'Usage: monolith hook session-start | stop | print-config';
+import { buildRecoveryPacket, renderRecoveryPacket } from '../handover/recovery.js';
+import { evidenceStore } from '../handover/evidence.js';
+import { readGitView } from '../handover/git.js';
+export const HOOK_USAGE = 'Usage: monolith hook session-start | stop | pre-compact | print-config';
 export const MAX_STDIN_BYTES = 256 * 1024;
 const MAX_LINES = 12;
 export function parseHookInput(raw) {
@@ -30,35 +36,12 @@ export function parseHookInput(raw) {
     }
 }
 const one = (s) => sanitizeSingleLine(s).slice(0, 200);
-/** Compact context lines from Core's own results. */
+/** Context lines from Core's recovery packet (host-independent logic lives in `handover/recovery.ts`). */
 export function buildSessionContext(projectRoot) {
     const model = readDashboardModel(projectRoot);
     const report = buildGovernanceReport(projectRoot, model);
-    const lines = ['MONOLITH project context (from `monolith`; read-only; refresh with `monolith brief`).'];
-    const ov = model.projectOverview.data;
-    if (ov === null) {
-        lines.push('Instance: not established (no valid monolith.config.json). Run `monolith validate`.');
-    }
-    else {
-        const claim = ov.storyClaim;
-        lines.push(`Active story: ${claim?.kind === 'ids' ? claim.ids.map(one).join(', ') : claim?.kind === 'none' ? 'none recorded' : 'unresolved'}.`);
-        const active = model.currentMissions.data?.active ?? [];
-        lines.push(active.length === 0
-            ? 'Active mission: none. Record work with `monolith mission start` / `checkpoint` / `finish`.'
-            : `Active mission(s): ${active.map((m) => `${one(m.id)} (${one(m.title)})`).join('; ')}. Record progress with \`monolith mission checkpoint\`.`);
-    }
-    const bad = report.findings.filter((f) => f.severity !== 'INFO');
-    if (bad.length === 0)
-        lines.push('Governance check: no issues.');
-    else {
-        lines.push(`Governance check: ${report.counts.error} error(s), ${report.counts.warning} warning(s). Run \`monolith governance check\`. Fix formats per .monolith/protocols/governance/document-formats.md.`);
-        for (const f of bad.slice(0, MAX_LINES))
-            lines.push(`- [${f.severity}] ${f.area} ${f.code}${f.path ? ` (${f.path})` : ''}`);
-        if (bad.length > MAX_LINES)
-            lines.push(`- … ${bad.length - MAX_LINES} more`);
-    }
-    lines.push('Reminder: update project context (active.md, checkpoints) when work changes; finalize only via `monolith finalize` with owner approval.');
-    return { lines, report };
+    const packet = buildRecoveryPacket(projectRoot, { model, report });
+    return { lines: renderRecoveryPacket(packet).split('\n'), report };
 }
 export function handleSessionStart(projectRoot) {
     try {
@@ -76,12 +59,56 @@ export function handleStop(projectRoot, input) {
         const model = readDashboardModel(projectRoot);
         const notes = [];
         const active = model.currentMissions.data?.active ?? [];
-        if (active.length > 0)
+        if (active.length > 0) {
             notes.push(`mission ${active.map((m) => one(m.id)).join(', ')} is still in progress (checkpoint or finish it)`);
+            // Only an objectively observable signal is reported: uncommitted changes while a mission is open.
+            const dirs = (() => {
+                try {
+                    return [evidenceStore(projectRoot).dirRel];
+                }
+                catch {
+                    return [];
+                }
+            })();
+            const view = readGitView(projectRoot, dirs);
+            if (view.dirty === true)
+                notes.push('the working tree has uncommitted changes — consider `monolith mission checkpoint` to record progress');
+            const withoutCheckpoint = (model.history?.data?.missions ?? []).filter((m) => m.status === 'in_progress' && m.checkpointCount === 0);
+            if (withoutCheckpoint.length > 0)
+                notes.push(`no checkpoint is recorded for ${withoutCheckpoint.map((m) => one(m.id)).join(', ')}`);
+        }
         const report = buildGovernanceReport(projectRoot, model);
         if (report.result === 'ISSUES_FOUND')
             notes.push(`governance check reports ${report.counts.error} error(s), ${report.counts.warning} warning(s)`);
+        if (notes.length > 0)
+            notes.push('before a final report on autonomous work, run `monolith handover check`');
         return notes.length === 0 ? null : { systemMessage: `MONOLITH: ${notes.join('; ')}.` };
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * PreCompact: text for the compaction summary. Plain stdout is the only channel Claude Code documents for it
+ * (`systemMessage` is discarded). It states what MONOLITH knows; it records nothing and invents nothing.
+ */
+export function handlePreCompact(projectRoot) {
+    try {
+        const p = buildRecoveryPacket(projectRoot);
+        const lines = [];
+        if (p.activeStory.known && p.activeStory.value.kind === 'ids')
+            lines.push(`Active story: ${p.activeStory.value.ids.join(', ')}.`);
+        if (p.activeMissions.known && p.activeMissions.value.length > 0) {
+            lines.push(`Active mission(s): ${p.activeMissions.value.map((m) => `${m.id} (${m.title})`).join('; ')}.`);
+            if (p.lastCheckpoint.known)
+                lines.push(`Last recorded checkpoint: ${p.lastCheckpoint.value.id} — ${p.lastCheckpoint.value.summary}`);
+            else
+                lines.push('No checkpoint is recorded for the active mission(s).');
+            lines.push('Preserve in the summary: what is done, what remains, decisions taken and why, and the commands whose results were observed. Progress made since the last checkpoint is not yet recorded: after compaction record it with `monolith mission checkpoint <id> --summary "..." --remaining "..."` — only facts, never invented.');
+        }
+        if (lines.length === 0)
+            return null;
+        return `MONOLITH state to preserve across compaction (read-only snapshot):\n${lines.join('\n')}`;
     }
     catch {
         return null;
@@ -94,6 +121,7 @@ export function hookConfigSnippet() {
         hooks: {
             SessionStart: [{ hooks: [{ type: 'command', command: cmd('session-start'), timeout: 20 }] }],
             Stop: [{ hooks: [{ type: 'command', command: cmd('stop'), timeout: 20 }] }],
+            PreCompact: [{ hooks: [{ type: 'command', command: cmd('pre-compact'), timeout: 20 }] }],
         },
     }, null, 2);
 }
@@ -116,7 +144,7 @@ export async function runHookCommand(args, cwd = process.cwd()) {
         console.log(hookConfigSnippet());
         return 0;
     }
-    if (sub !== 'session-start' && sub !== 'stop') {
+    if (sub !== 'session-start' && sub !== 'stop' && sub !== 'pre-compact') {
         console.error(HOOK_USAGE);
         return 1;
     }
@@ -125,6 +153,12 @@ export async function runHookCommand(args, cwd = process.cwd()) {
     process.env.MONOLITH_HOOK_ACTIVE = '1';
     try {
         const input = parseHookInput(await readStdin());
+        if (sub === 'pre-compact') {
+            const text = handlePreCompact(cwd);
+            if (text !== null)
+                console.log(text);
+            return 0;
+        }
         const out = sub === 'session-start' ? handleSessionStart(cwd) : handleStop(cwd, input);
         if (out !== null)
             console.log(JSON.stringify(out));

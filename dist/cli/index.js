@@ -54,6 +54,11 @@ Commands:
   governance  Read-only governance integrity check of the governance documents
               (roadmap, story index, capsules, ADRs, ...): governance check
               [--json] [--strict]. Reports problems; changes nothing.
+  handover    Read-only autonomous-development handover: handover check [--json] [--strict].
+              Restates project state, mission history, ADRs and recorded verification
+              evidence with provenance; runs no tests. Not a correctness claim.
+  evidence    Record verification evidence: run (executes one command, records its
+              exit status as OBSERVED) | report (records a statement as REPORTED) | list.
   hook        Claude Code hook entry points (opt-in): session-start | stop | print-config.
               Read-only; never blocks; 'print-config' only prints a settings snippet.
   ui          Launch Mission Control, the read-only web dashboard, on
@@ -94,6 +99,12 @@ Update usage:
 
 Governance usage:
   monolith governance check [--json] [--strict]   (exit 0 ran, 1 usage, 2 --strict and issues found, 3 could not run)
+
+Handover usage:
+  monolith handover check [--json] [--strict]   (exit 0 ran, 1 usage, 2 --strict and not READY FOR REVIEW, 3 could not run)
+  monolith evidence run [--story <STORY-ID>] [--timeout-sec N] -- <command> [args...]
+  monolith evidence report --command "..." --result pass|fail [--story <STORY-ID>] [--note "..."]
+  monolith evidence list [--json]
 
 UI usage:
   monolith ui [--port N]
@@ -205,6 +216,16 @@ async function main() {
         case 'governance': {
             const { runGovernanceCommand } = await import('../governance/cli.js');
             process.exitCode = await runGovernanceCommand(args.slice(1));
+            break;
+        }
+        case 'handover': {
+            const { runHandoverCommand } = await import('../handover/cli.js');
+            process.exitCode = await runHandoverCommand(args.slice(1));
+            break;
+        }
+        case 'evidence': {
+            const { runEvidenceCommand } = await import('../handover/cli.js');
+            process.exitCode = await runEvidenceCommand(args.slice(1));
             break;
         }
         case 'hook': {

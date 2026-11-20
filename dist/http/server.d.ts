@@ -36,6 +36,12 @@
  */
 export declare const DASHBOARD_PATH = "/api/dashboard";
 /**
+ * Handover report (ACCOUNTABILITY-001): `GET` only, parameterless, read-only. It is a separate route, not part of the
+ * dashboard DTO, because it runs read-only `git` (HEAD / working tree) and so is fetched only when the Handover view
+ * is opened or refreshed — never on every dashboard refresh. It runs no test and writes nothing.
+ */
+export declare const HANDOVER_PATH = "/api/handover";
+/**
  * On-demand diagnostics (BETA-020 Phase 3). POST only, because a run is an
  * action, not a read of stored data. They are still read-only for the project:
  * they call Core's `validateProject` and `collect` + `reconcile` in-process

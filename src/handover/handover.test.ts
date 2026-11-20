@@ -129,6 +129,16 @@ describe('evidence run (real process)', () => {
     // the evidence files themselves must not make the tree dirty
     expect(readGitView(d, [evidenceStore(d).dirRel]).dirty).toBe(false);
   });
+  it('runs the command in the caller\'s environment, unchanged', async () => {
+    const d = await proj(true);
+    const saved = process.env.MONOLITH_HOOK_ACTIVE;
+    delete process.env.MONOLITH_HOOK_ACTIVE;
+    try {
+      expect(await run(d, ['run', '--', process.execPath, '-e', 'process.exit(process.env.MONOLITH_HOOK_ACTIVE === undefined ? 0 : 7)'])).toBe(0);
+    } finally {
+      if (saved !== undefined) process.env.MONOLITH_HOOK_ACTIVE = saved;
+    }
+  });
   it('refuses unknown commands and bad flags without recording', async () => {
     const d = await proj(true);
     expect(await run(d, ['run', '--', 'definitely-not-a-command-xyz'])).toBe(1);

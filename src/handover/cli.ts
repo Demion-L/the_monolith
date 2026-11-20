@@ -228,8 +228,9 @@ function evidenceRun(args: string[], cwd: string): number {
   const [cmd, ...cmdArgs] = f.rest;
   const before = readGitView(cwd, [store.dirRel]);
   const started = Date.now();
-  // No shell: the command and its arguments are passed as argv, so nothing is interpreted.
-  const res = spawnSync(cmd, cmdArgs, { cwd, stdio: 'inherit', shell: false, timeout: timeoutSec * 1000, env: { ...process.env, MONOLITH_HOOK_ACTIVE: '1' } });
+  // No shell: the command and its arguments are passed as argv, so nothing is interpreted. The environment is the caller's,
+  // unchanged: an altered environment would make the observed result describe a different run than the one being verified.
+  const res = spawnSync(cmd, cmdArgs, { cwd, stdio: 'inherit', shell: false, timeout: timeoutSec * 1000 });
   const durationMs = Date.now() - started;
   if (res.error !== undefined && res.status === null && res.signal === null) {
     console.error(`monolith evidence run: the command could not be started (${one((res.error as NodeJS.ErrnoException).code ?? 'error')}); nothing was recorded.`);

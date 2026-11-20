@@ -380,3 +380,112 @@ describe('CLI process (needs `pnpm build`)', () => {
     expect(spawnSync('node', [CLI, 'hook', 'pre-compact'], { cwd: d, env: { ...process.env, MONOLITH_HOOK_ACTIVE: '1' }, input: '{}', encoding: 'utf8' }).stdout).toBe('');
   });
 });
+
+describe('KAIROS-like end-to-end fixture', () => {
+  it('tells the truth about seven stories, seven completed missions and mixed evidence', async () => {
+    const { addIdea, ideaStore } = await import('../ideas/store.js');
+    const d = await proj(true);
+    const ids = ['S-1', 'S-2', 'S-3', 'S-4', 'S-5', 'S-6', 'S-7'];
+    roadmap(d, ids, '1');
+    finalizedStory(d, '1', 'S-1');
+    finalizedStory(d, '1', 'S-2');
+    finalizedStory(d, '1', 'S-3');
+    write(d, '.monolith/memory/working/story-index.md', readFileSync(join(d, '.monolith/memory/working/story-index.md'), 'utf8') + '\n### S-4 — t\n\n**Date:** 2026-01-04\n**Status:** READY FOR REVIEW\n');
+    activeStory(d, null);
+    adr(d, 1, 'accepted');
+    adr(d, 2, 'accepted');
+    adr(d, 3, 'proposed');
+    write(d, 'docs/adr/ADR-004-x.md', '# no frontmatter\n');
+    for (const id of ids) await mission(d, { story: id, checkpoints: 1, result: 'completed' });
+    for (let i = 1; i <= 3; i++) addIdea(ideaStore(d), { title: `idea ${i}`, description: 'later' });
+    commitAll(d, 'project');
+
+    const quiet = async (args: string[]): Promise<void> => {
+      const log = console.log;
+      console.log = () => undefined;
+      try {
+        await runEvidenceCommand(args, d);
+      } finally {
+        console.log = log;
+      }
+    };
+    await quiet(['run', '--story', 'S-1', '--', process.execPath, '-e', '0']); // will become stale
+    commitAll(d, 'evidence S-1');
+    write(d, 'src/feature.ts', 'export const x = 1;\n');
+    commitAll(d, 'code after S-1 check');
+    await quiet(['run', '--story', 'S-2', '--', process.execPath, '-e', '0']); // current
+    await quiet(['report', '--command', 'pnpm test', '--result', 'pass', '--story', 'S-3']); // only reported
+
+    const r = buildHandoverReport(d);
+    expect(r.progress).toMatchObject({ finalized: 3, listedNotFinal: 1, awaitingReview: ['S-4'] });
+    expect(r.missions).toMatchObject({ total: 7, completed: 7, checkpoints: 7, inProgress: 0, failed: 0 });
+    expect(r.architecture).toMatchObject({ total: 3, accepted: 2, proposed: 1, missingMetadata: 1 });
+    expect(r.verification.counts).toEqual({ verified: 1, reported: 1, stale: 1, unknown: 0, failed: 0 });
+    // Everything except S-2 completed without VERIFIED evidence: claims, not facts.
+    expect(r.verification.storiesWithoutVerifiedEvidence).toEqual(['S-1', 'S-3', 'S-4', 'S-5', 'S-6', 'S-7']);
+    expect(r.status).toBe('REVIEW_WITH_ISSUES');
+    // Mission completion never finalized anything.
+    expect(r.outstanding.ownerDecisions.filter((x) => x.code === 'FINALIZE_STORY').map((x) => x.subject)).toEqual(['S-4', 'S-5', 'S-6', 'S-7']);
+    const s1 = r.progress.stories.find((s) => s.id === 'S-1');
+    expect(s1?.evidence.stale).toBe(1);
+    expect(r.verification.items.find((i) => i.storyId === 'S-3')?.level).toBe('REPORTED');
+    // The report is JSON-stable and makes no correctness claim.
+    expect(JSON.stringify(buildHandoverReport(d))).toBe(JSON.stringify(r));
+    expect(JSON.stringify(r)).not.toMatch(/production[- ]ready/i);
+  });
+
+  it('a project with no git repository never shows fresh or verified evidence', async () => {
+    const d = await proj(false);
+    roadmap(d, ['S-1']);
+    await mission(d, { story: 'S-1', checkpoints: 1, result: 'completed' });
+    const log = console.log;
+    console.log = () => undefined;
+    try {
+      await runEvidenceCommand(['run', '--story', 'S-1', '--', process.execPath, '-e', '0'], d);
+    } finally {
+      console.log = log;
+    }
+    const r = buildHandoverReport(d);
+    expect(r.verification.git.available).toBe(false);
+    expect(r.verification.counts).toMatchObject({ verified: 0, unknown: 1 });
+    expect(r.outstanding.issues.some((i) => i.code === 'GIT_UNAVAILABLE')).toBe(true);
+  });
+});
+
+describe('security of the changed surfaces', () => {
+  it('refuses a symlinked evidence directory and never writes outside the project', async () => {
+    const { symlinkSync, mkdirSync, existsSync } = await import('node:fs');
+    const d = await proj();
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'evd-out-')));
+    dirs.push(outside);
+    mkdirSync(join(d, '.monolith/memory/long-term'), { recursive: true });
+    symlinkSync(outside, join(d, '.monolith/memory/long-term/verification'));
+    expect(() => addEvidence(evidenceStore(d), { storyId: null, command: 'x', result: 'pass', exitCode: 0, provenance: 'OBSERVED', gitHead: null, dirty: null, note: null, durationMs: 1 })).toThrow(/symlink|refus|unsafe|boundary/i);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(existsSync(join(outside, 'EVD-0001.json'))).toBe(false);
+    expect(listEvidence(d).records).toEqual([]); // reading a symlinked directory is refused too, never followed
+  });
+  it('never stores command output or a secret from the command line or note', async () => {
+    const d = await proj(true);
+    const log = console.log;
+    console.log = () => undefined;
+    try {
+      await runEvidenceCommand(['run', '--', process.execPath, '-e', 'console.log("TOPSECRET"+"OUTPUT")', '--token=hunter2hunter2'], d);
+      await runEvidenceCommand(['report', '--command', 'deploy --password hunter3hunter3', '--result', 'pass', '--note', 'key sk-abcdefghijklmnop1234'], d);
+    } finally {
+      console.log = log;
+    }
+    const dir = evidenceStore(d).dirAbs;
+    const all = readdirSync(dir).map((n) => readFileSync(join(dir, n), 'utf8')).join('\n');
+    expect(all).not.toMatch(/TOPSECRETOUTPUT|hunter2|hunter3|sk-abcdefgh/);
+    expect(all).toContain('[REDACTED]');
+  });
+  it('rejects hostile ids and story ids as data, not as paths', async () => {
+    const d = await proj();
+    for (const story of ['../../etc/passwd', 'a b', '', 'x'.repeat(80)]) {
+      expect(() => addEvidence(evidenceStore(d), { storyId: story, command: 'x', result: 'pass', exitCode: 0, provenance: 'OBSERVED', gitHead: null, dirty: null, note: null, durationMs: 1 })).toThrow();
+    }
+    writeFileSync(join(evidenceStore(d).dirAbs.replace(/verification$/, ''), 'x'), '');
+    expect(listEvidence(d).unreadable).toEqual([]);
+  });
+});

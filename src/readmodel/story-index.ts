@@ -60,6 +60,9 @@ function cap(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max);
 }
 
+/** The canonical top-level section of the index (`# Stories`, as in the project template). */
+const STORIES_SECTION_RE = /^#{1,2}[ \t]+Stories[ \t]*$/i;
+
 type Scope = { kind: 'outside' } | { kind: 'phase'; token: string } | { kind: 'malformed'; token: string };
 
 interface Draft {
@@ -216,6 +219,13 @@ export function parseStoryIndex(
 
   let state: StructuredStoryIndexView['state'];
   if (stories.length === 0) {
+    const canonicalEmpty =
+      phaseSections === 0 && malformedStories === 0 && malformedPhases === 0 && masked.some((l) => STORIES_SECTION_RE.test(l));
+    if (canonicalEmpty) {
+      // The canonical shape with nothing finalized yet. Valid; no entry is invented.
+      diag('NO_FINALIZED_STORIES', 'info');
+      return { state: 'none_finalized', stories, diagnostics };
+    }
     if (phaseSections > 0) {
       state = 'no_stories';
     } else {

@@ -105,6 +105,7 @@ export interface GraphProjection {
 export const STORY_DIAGNOSTIC_LABELS: Record<StoryIndexDiagnosticCode, string> = {
   DOCUMENT_EMPTY: 'The story index document is empty.',
   STORIES_NOT_FOUND: 'No story section was found in the story index.',
+  NO_FINALIZED_STORIES: 'No story has been finalized yet. This is expected before the first finalization.',
   STORY_HEADING_MALFORMED: 'A story heading could not be read and was skipped.',
   PHASE_HEADING_MALFORMED: 'A phase heading in the story index could not be read.',
   STORIES_TRUNCATED: 'Too many stories; the list was truncated.',
@@ -148,8 +149,9 @@ const ROADMAP_STATE_TEXT: Record<'empty' | 'no_phases' | 'unrecognized' | 'error
   partial: 'Only part of the roadmap could be read. A phase that is "not found" below may still exist in the document.',
 };
 
-const STORY_STATE_TEXT: Record<'empty' | 'no_stories' | 'unrecognized' | 'error' | 'partial', string> = {
+const STORY_STATE_TEXT: Record<'empty' | 'none_finalized' | 'no_stories' | 'unrecognized' | 'error' | 'partial', string> = {
   empty: 'The story index is empty: no stories are shown.',
+  none_finalized: 'No story has been finalized yet: the story index is valid and empty.',
   no_stories: 'The story index has phase sections but lists no story.',
   unrecognized: 'The story index structure was not recognised: no stories are shown.',
   error: 'The story index could not be interpreted: no stories are shown.',
@@ -251,7 +253,7 @@ export function projectExecutionGraph(input: ProjectionInput): GraphProjection {
   } else {
     storiesSrc = storyIndex.data.stories;
     indexDiag = storyIndex.data.diagnostics;
-    if (storyIndex.data.state !== 'ok') notices.push({ code: `STORY_INDEX_${storyIndex.data.state.toUpperCase()}`, tone: 'warn', text: STORY_STATE_TEXT[storyIndex.data.state] });
+    if (storyIndex.data.state !== 'ok') notices.push({ code: `STORY_INDEX_${storyIndex.data.state.toUpperCase()}`, tone: storyIndex.data.state === 'none_finalized' ? 'info' : 'warn', text: STORY_STATE_TEXT[storyIndex.data.state] });
     for (const d of indexDiag) {
       if (d.storyIndex === null) notices.push({ code: `STORY_${d.code}`, tone: d.severity === 'warn' ? 'warn' : 'info', text: STORY_DIAGNOSTIC_LABELS[d.code] });
     }

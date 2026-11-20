@@ -151,7 +151,7 @@ describe('parseAdr', () => {
 
   it('malformed or missing frontmatter yields no item and a typed issue', () => {
     expect(one('---\nid: ADR-020\nno close\n').issues.list[0]).toMatchObject({ code: 'ADR_FRONTMATTER_MALFORMED', severity: 'warn' });
-    expect(one('# Just a doc\n').issues.list[0]).toMatchObject({ code: 'ADR_FRONTMATTER_MISSING', severity: 'info' });
+    expect(one('# Just a doc\n').issues.list[0]).toMatchObject({ code: 'ADR_FRONTMATTER_MISSING', severity: 'warn' });
     expect(one('---\ntitle: x\n---\n').issues.list[0]).toMatchObject({ code: 'ADR_ID_MISSING' });
     expect(one('---\nid: "bad id <b>"\n---\n').issues.list[0]).toMatchObject({ code: 'ADR_ID_INVALID' });
     expect(one('---\nid: ADR-020\nid: ADR-021\n---\n').item).toBeNull();
@@ -332,7 +332,12 @@ describe('real docs/adr (regression: NOTE-1 false INCOMPLETE)', () => {
     const root = join(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
     const { data } = readDecisions(root);
     expect(data).not.toBeNull();
-    expect((data?.issues ?? []).filter((i) => i.severity === 'warn')).toEqual([]);
-    expect(data?.complete).toBe(true);
+    // GOV-EVOLUTION Phase 2: a file named like an ADR but without frontmatter is no longer hidden.
+    // `docs/adr/ADR-017-followups.md` is such a file (a TODO note, not an ADR); it is the ONLY accepted
+    // warning. Any other warning is a regression.
+    expect((data?.issues ?? []).filter((i) => i.severity === 'warn')).toEqual([
+      { code: 'ADR_FRONTMATTER_MISSING', severity: 'warn', path: 'docs/adr/ADR-017-followups.md', id: null, reason: null },
+    ]);
+    expect(data?.complete).toBe(false);
   });
 });

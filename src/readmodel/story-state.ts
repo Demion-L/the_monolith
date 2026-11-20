@@ -212,7 +212,8 @@ function roadmapState(view: StructuredRoadmapView | null, text: string | null): 
 function storyIndexState(view: StructuredStoryIndexView | null, text: string | null): SourceState {
   if (text === null) return 'missing';
   if (view === null) return 'unrecognized';
-  if (view.state === 'ok') return 'available';
+  // `none_finalized`: a recognised, empty index. Finalization of a story is then answerable: NOT_FINALIZED.
+  if (view.state === 'ok' || view.state === 'none_finalized') return 'available';
   if (view.state === 'partial') return 'partial';
   return 'unrecognized';
 }

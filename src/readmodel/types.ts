@@ -253,6 +253,7 @@ export interface StoryIndexItemView {
 export type StoryIndexDiagnosticCode =
   | 'DOCUMENT_EMPTY'
   | 'STORIES_NOT_FOUND'
+  | 'NO_FINALIZED_STORIES'
   | 'STORY_HEADING_MALFORMED'
   | 'PHASE_HEADING_MALFORMED'
   | 'STORIES_TRUNCATED'
@@ -278,11 +279,13 @@ export interface StoryIndexDiagnosticView {
  * - ok:           stories recognised, nothing structural lost
  * - partial:      stories recognised, but some content could not be (malformed heading, truncation)
  * - empty:        the document is available but blank
+ * - none_finalized: the canonical `# Stories` section exists and lists nothing: a valid state before the
+ *                 first finalization (not an error, and nothing is synthesized from the Roadmap)
  * - no_stories:   phase sections exist without any story
  * - unrecognized: non-empty document with neither stories nor phase sections
  * - error:        processing failed; the structure must not be trusted
  */
-export type StoryIndexParseState = 'ok' | 'partial' | 'empty' | 'no_stories' | 'unrecognized' | 'error';
+export type StoryIndexParseState = 'ok' | 'partial' | 'empty' | 'none_finalized' | 'no_stories' | 'unrecognized' | 'error';
 
 export interface StructuredStoryIndexView {
   state: StoryIndexParseState;

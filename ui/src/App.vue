@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import CheckpointsPanel from './components/CheckpointsPanel.vue';
+import HistoryPanel from './components/HistoryPanel.vue';
 import DecisionsPanel from './components/DecisionsPanel.vue';
 import ExecutionGraphPanel from './components/ExecutionGraphPanel.vue';
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue';
@@ -10,7 +11,7 @@ import RoadmapPanel from './components/RoadmapPanel.vue';
 import SideNav from './components/SideNav.vue';
 import { scenarioIds, scenarios } from './fixtures/dashboard';
 import { toDashboardData } from './live/adapter';
-import { DEFAULT_SECTION, isSectionId, sectionFromHash } from './sections';
+import { DEFAULT_SECTION, isKnownHash, sectionFromHash } from './sections';
 import type { SectionId } from './sections';
 import { DashboardLoadError, fetchDashboard } from './live/client';
 import type { DashboardLoadState } from './live/client';
@@ -55,7 +56,7 @@ const section = ref<SectionId>(sectionFromHash(window.location.hash));
 // An unknown hash is replaced, not pushed: Back must not return to it.
 function normalizeHash(): void {
   const hash = window.location.hash;
-  if (hash !== '' && !isSectionId(hash.slice(1))) {
+  if (hash !== '' && !isKnownHash(hash.slice(1))) {
     window.history.replaceState(window.history.state, '', `#${DEFAULT_SECTION}`);
   }
 }
@@ -125,10 +126,14 @@ const loading = computed(() => !demo && live.value.status === 'loading');
             :sources="data.sources"
             :provenance="data.provenance"
             :checkpoints="data.checkpoints"
+            :history="data.history"
             :missions="data.missions"
             @navigate="selectSection"
           />
-          <CheckpointsPanel v-else-if="section === 'checkpoints'" key="checkpoints" :checkpoints="data.checkpoints" />
+          <template v-else-if="section === 'history'">
+            <HistoryPanel v-if="data.history !== undefined" key="history" :history="data.history" />
+            <CheckpointsPanel v-else key="history-legacy" :checkpoints="data.checkpoints" />
+          </template>
           <RoadmapPanel v-else-if="section === 'roadmap'" key="roadmap" :text="data.roadmapText" :structured="data.roadmap" :story-index="data.storyIndex" />
           <ExecutionGraphPanel v-else-if="section === 'graph'" key="graph" :roadmap-text="data.roadmapText" :roadmap="data.roadmap" :story-index="data.storyIndex" :story="data.overview.story" />
           <HypothesesPanel v-else-if="section === 'hypotheses'" key="hypotheses" :items="data.hypotheses" :info="data.hypothesesInfo" :demo="data.isDemo" />

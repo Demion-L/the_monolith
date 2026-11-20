@@ -9,7 +9,7 @@
 
 /** Core's interpretation of the roadmap (UI-003C). The UI displays it; it never parses Markdown itself. */
 export type { StructuredRoadmapView, RoadmapPhaseView, ActivePhaseView, RoadmapDiagnosticCode } from '../../../src/readmodel/types';
-import type { StructuredRoadmapView, StateProvenanceView, StructuredStoryIndexView, Section, SourceStatus } from '../../../src/readmodel/types';
+import type { DevelopmentHistory, StructuredRoadmapView, StateProvenanceView, StructuredStoryIndexView, Section, SourceStatus } from '../../../src/readmodel/types';
 export type { StateProvenanceView, Section };
 
 /** Core's interpretation of the story index (CORE-GRAPH-002). Displayed by the Execution Graph; never re-derived in the UI. */
@@ -20,6 +20,8 @@ export type {
   StoryIndexDiagnosticCode,
   StoryIndexParseState,
 } from '../../../src/readmodel/types';
+
+export type { DevelopmentHistory, HistoryMissionView, HistoryCheckpointView, HistoryEventView } from '../../../src/readmodel/types';
 
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
@@ -96,6 +98,11 @@ export interface DashboardData {
    * server) or is a demo; `data === null` = `story-index.md` is not available (see `sources[0]`), never "no stories".
    */
   storyIndex?: Section<StructuredStoryIndexView>;
+  /**
+   * Core's Development History (all missions with their checkpoints). `undefined` = the source predates it
+   * (older server) or is a demo: the panel then falls back to the legacy checkpoint list. `data === null` = not available.
+   */
+  history?: Section<DevelopmentHistory>;
   /**
    * `undefined` = the data source provides no such section (LIVE today: Core has no read model for it);
    * `null` = the source exists but could not be read; `[]` = readable and genuinely empty.

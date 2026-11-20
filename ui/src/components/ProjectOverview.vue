@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type {
   ActivePhaseView,
   Checkpoint,
+  DevelopmentHistory,
   Diagnostic,
   Mission,
   ProjectOverview,
@@ -30,6 +31,8 @@ const props = defineProps<{
   sources?: { total: number; available: number };
   provenance?: StateProvenanceView;
   checkpoints?: Checkpoint[] | null;
+  /** Core's Development History; Recent Activity reads its `recent` events. `undefined` = not provided (block hidden). */
+  history?: Section<DevelopmentHistory>;
   /** Operational missions (Core's Coordinatorium model). Listed here only when there are active ones. */
   missions?: Mission[] | null;
 }>();
@@ -105,6 +108,10 @@ const storyIndexReason = computed(() => {
   return null;
 });
 const recentStories = computed(() => (stories.value ? stories.value.stories.slice(-3).reverse() : []));
+
+// ---- Recent Activity: Core's latest recorded events (Development History), nothing derived here ----
+const EVENT_LABEL = { mission_started: 'Mission started', checkpoint: 'Checkpoint', mission_finished: 'Mission finished' } as const;
+const recentEvents = computed(() => props.history?.data?.recent ?? []);
 
 // ---- Diagnostics: Core's own list, severity untouched ----
 const problems = computed(() => (props.diagnostics ?? []).filter((d) => d.severity !== 'info'));
@@ -348,6 +355,24 @@ const hasActivity = computed(() => checkpointList.value.length > 0 || recentStor
         </ul>
         <p v-if="recentStories.length > 0" class="muted mc-note">Last entries in document order of the story index; not a verified timeline. Checkpoints are listed as Core returns them, not sorted by time.</p>
       </template>
+    </div>
+
+    <!-- 6. Recent activity: the latest recorded mission events (same model as Development History) -->
+    <div v-if="history !== undefined" class="ov-block mc-card mc-activity" data-testid="ov-recent">
+      <h3 class="mc-eyebrow">Recent activity</h3>
+      <p v-if="history.data === null" class="empty" data-testid="recent-unavailable">Mission history is not available from Core.</p>
+      <p v-else-if="recentEvents.length === 0" class="empty" data-testid="recent-empty">No mission activity recorded.</p>
+      <ul v-else class="mc-act-list" data-testid="recent-list">
+        <li v-for="(e, i) in recentEvents" :key="`${e.kind}-${e.missionId}-${e.checkpointId ?? ''}-${i}`" data-testid="recent-event">
+          <span class="mc-act-k">{{ EVENT_LABEL[e.kind] }}<template v-if="e.result"> · {{ e.result }}</template></span>
+          <code class="mc-act-id">{{ e.checkpointId ?? e.missionId }}</code>
+          <span class="mc-act-sum">{{ e.summary ? preview(e.summary).short : e.missionTitle }}</span>
+          <span class="mc-act-date">{{ e.at }}</span>
+        </li>
+      </ul>
+      <p class="mc-actions">
+        <button type="button" class="mc-link" data-testid="go-history" @click="go('history')">Open Development History</button>
+      </p>
     </div>
   </section>
 </template>

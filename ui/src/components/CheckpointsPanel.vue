@@ -6,9 +6,9 @@ defineProps<{ checkpoints: Checkpoint[] | null }>();
 </script>
 
 <template>
-  <section id="checkpoints" class="panel" aria-labelledby="checkpoints-h">
-    <h2 id="checkpoints-h">Checkpoints</h2>
-    <p class="muted">Latest checkpoint per active mission</p>
+  <section id="history" class="panel" aria-labelledby="history-h">
+    <h2 id="history-h">Development History</h2>
+    <p class="muted">Latest checkpoint per active mission. This data source provides no mission history</p>
     <p v-if="checkpoints === null" class="empty"><span class="unknown">NOT AVAILABLE</span></p>
     <p v-else-if="checkpoints.length === 0" class="empty">No checkpoints recorded.</p>
     <ul v-else class="cards">

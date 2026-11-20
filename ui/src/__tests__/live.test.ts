@@ -177,8 +177,8 @@ describe('F-1: checkpoint count', () => {
     stubFetch(json(withCount(5)));
     const w = mount(App);
     await flushPromises();
-    await goTo(w, 'checkpoints');
-    const panel = w.get('#checkpoints');
+    await goTo(w, 'history');
+    const panel = w.get('#history');
     expect(panel.text()).toContain('Latest checkpoint per active mission');
     expect(panel.text()).toContain('Live checkpoint');
     expect(panel.get('[data-testid="checkpoint-count"]').text()).toBe('5 recorded checkpoints');
@@ -189,7 +189,7 @@ describe('F-1: checkpoint count', () => {
     stubFetch(json(withCount(1)));
     const w = mount(App);
     await flushPromises();
-    await goTo(w, 'checkpoints');
+    await goTo(w, 'history');
     expect(w.get('[data-testid="checkpoint-count"]').text()).toBe('1 recorded checkpoint');
   });
 
@@ -199,16 +199,16 @@ describe('F-1: checkpoint count', () => {
     stubFetch(json(empty));
     let w = mount(App);
     await flushPromises();
-    await goTo(w, 'checkpoints');
-    expect(w.get('#checkpoints').text()).toContain('No checkpoints recorded.');
-    expect(w.get('#checkpoints').text()).not.toContain('NOT AVAILABLE');
+    await goTo(w, 'history');
+    expect(w.get('#history').text()).toContain('No checkpoints recorded.');
+    expect(w.get('#history').text()).not.toContain('NOT AVAILABLE');
 
     stubFetch(json(model({ checkpoints: { data: null, sources: [src('state', 'corrupt', 'PARSE_ERROR')] } })));
     w = mount(App);
     await flushPromises();
-    await goTo(w, 'checkpoints');
-    expect(w.get('#checkpoints').text()).toContain('NOT AVAILABLE');
-    expect(w.get('#checkpoints').text()).not.toMatch(/recorded checkpoint|0 recorded/);
+    await goTo(w, 'history');
+    expect(w.get('#history').text()).toContain('NOT AVAILABLE');
+    expect(w.get('#history').text()).not.toMatch(/recorded checkpoint|0 recorded/);
     expect(w.find('[data-testid="checkpoint-count"]').exists()).toBe(false);
   });
 });
@@ -251,7 +251,7 @@ describe('App in LIVE mode (default)', () => {
     expect(w.find('[data-testid="demo-badge"]').exists()).toBe(false);
     expect(w.find('[data-testid="scenario-select"]').exists()).toBe(false);
     const seen: string[] = [];
-    for (const id of ['overview', 'checkpoints', 'roadmap', 'diagnostics']) {
+    for (const id of ['overview', 'history', 'roadmap', 'diagnostics']) {
       await goTo(w, id);
       expect(w.find(`section#${id}`).exists(), id).toBe(true);
       seen.push(w.text());
@@ -295,8 +295,8 @@ describe('App in LIVE mode (default)', () => {
     expect(w.find('#mission').exists()).toBe(false);
     expect(w.findAll('[data-testid="mission"]')).toHaveLength(0);
     expect(w.get('#overview').text()).not.toContain('No active missions');
-    await goTo(w, 'checkpoints');
-    expect(w.get('#checkpoints').text()).toContain('NOT AVAILABLE');
+    await goTo(w, 'history');
+    expect(w.get('#history').text()).toContain('NOT AVAILABLE');
   });
 
   it.each([

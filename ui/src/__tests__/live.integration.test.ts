@@ -52,7 +52,7 @@ describe('LIVE mode against the real HTTP API', () => {
     expect(w.find('[data-testid="live-badge"]').exists()).toBe(false);
     expect(w.find('.nav').exists()).toBe(true);
     const seen: string[] = [];
-    for (const id of ['overview', 'checkpoints', 'roadmap']) {
+    for (const id of ['overview', 'history', 'roadmap']) {
       await goTo(w, id);
       seen.push(w.text());
     }

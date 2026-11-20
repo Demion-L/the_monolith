@@ -416,6 +416,69 @@ export interface StoryStateView {
   sources: StoryStateResolution['sources'];
 }
 
+/**
+ * Development History (GOV-EVOLUTION Phase 3): a read-only view over the Missions and Checkpoints
+ * ALREADY in the operational state. Nothing is stored, generated or inferred: a mission without a
+ * checkpoint shows none, a mission without `storyId` has no story, and the Story link is exactly
+ * the one recorded on the mission. Text fields are untrusted.
+ */
+export interface HistoryCheckpointView {
+  id: string;
+  createdAt: string;
+  summary: string;
+  /** Historical record at that checkpoint; not the current plan. */
+  remainingSteps: string[];
+  context: string | null;
+}
+
+export interface HistoryMissionView {
+  id: string;
+  title: string;
+  system: string;
+  status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
+  startedAt: string;
+  updatedAt: string;
+  /** Final summary as recorded when the mission was finished; null when none was recorded. */
+  summary: string | null;
+  /** Exactly the `storyId` recorded on the mission; null when none (never guessed). */
+  storyId: string | null;
+  /** Total checkpoints recorded for the mission (may exceed `checkpoints.length`). */
+  checkpointCount: number;
+  /** Oldest first (id ordinal order, as `brief` treats ids as authoritative), bounded. */
+  checkpoints: HistoryCheckpointView[];
+  checkpointsTruncated: boolean;
+}
+
+export type HistoryEventKind = 'mission_started' | 'checkpoint' | 'mission_finished';
+
+/** One recorded fact, taken from a recorded timestamp. `mission_finished` uses the mission's `updatedAt`. */
+export interface HistoryEventView {
+  kind: HistoryEventKind;
+  at: string;
+  missionId: string;
+  missionTitle: string;
+  /** Checkpoint events only. */
+  checkpointId: string | null;
+  /** Checkpoint summary or mission final summary; null when none. */
+  summary: string | null;
+  /** `mission_finished` only. */
+  result: 'completed' | 'failed' | 'cancelled' | null;
+}
+
+export interface DevelopmentHistory {
+  /** Newest first by (startedAt, id); bounded by `MAX_HISTORY_MISSIONS`. */
+  missions: HistoryMissionView[];
+  totalMissions: number;
+  /** True when `missions` is not all missions: the list is not exhaustive. */
+  truncated: boolean;
+  counts: { in_progress: number; completed: number; failed: number; cancelled: number };
+  totalCheckpoints: number;
+  /** Checkpoints whose mission is not recorded; counted, never shown or attached elsewhere. */
+  orphanCheckpoints: number;
+  /** Latest recorded events, newest first, bounded. */
+  recent: HistoryEventView[];
+}
+
 export interface DashboardReadModel {
   projectOverview: Section<ProjectOverview>;
   currentMissions: Section<CurrentMissions>;
@@ -440,5 +503,11 @@ export interface DashboardReadModel {
    * Absent from DTOs of older servers; the UI must not rebuild this itself.
    */
   storyState?: Section<StoryStateView>;
+  /**
+   * Additive (GOV-EVOLUTION Phase 3). Every mission (active, completed, failed, cancelled) with its
+   * checkpoints, from the same state file as `currentMissions`. `data === null` means the state is not
+   * usable (see `sources[0]`); absent state is an empty history. Absent from DTOs of older servers.
+   */
+  history?: Section<DevelopmentHistory>;
   diagnostics: ReadDiagnostics;
 }

@@ -10,6 +10,7 @@ export type {
   ValidationCheckDto,
   ValidationResultDto,
 } from './diagnostics-types.js';
+export { buildDevelopmentHistory, MAX_HISTORY_MISSIONS, MAX_HISTORY_CHECKPOINTS_PER_MISSION, MAX_HISTORY_RECENT } from './history.js';
 export { parseRoadmapPhases } from './roadmap.js';
 export { parseStoryIndex, MAX_INDEX_STORIES } from './story-index.js';
 export { parseHypotheses, parseAdr, readKnowledge, HYPOTHESES_REL, ADR_DIR_REL } from './knowledge.js';
@@ -18,6 +19,11 @@ export type {
   CheckpointsData,
   CurrentMissions,
   DashboardReadModel,
+  DevelopmentHistory,
+  HistoryCheckpointView,
+  HistoryEventKind,
+  HistoryEventView,
+  HistoryMissionView,
   KnowledgeData,
   KnowledgeIssueCode,
   KnowledgeIssueView,

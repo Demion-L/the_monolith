@@ -51,8 +51,8 @@ describe('section navigation', () => {
 
   it('updates the URL hash', async () => {
     const w = mount(App);
-    await goTo(w, 'checkpoints');
-    expect(window.location.hash).toBe('#checkpoints');
+    await goTo(w, 'history');
+    expect(window.location.hash).toBe('#history');
   });
 
   it('opens the section named by the URL hash', () => {
@@ -71,13 +71,13 @@ describe('section navigation', () => {
 
   it('follows hashchange (Back/Forward and manual edits)', async () => {
     const w = mount(App);
-    await goTo(w, 'checkpoints');
+    await goTo(w, 'history');
     await goTo(w, 'roadmap');
-    window.history.replaceState({}, '', '/?mode=demo#checkpoints');
+    window.history.replaceState({}, '', '/?mode=demo#history');
     window.dispatchEvent(new HashChangeEvent('hashchange'));
     await flushPromises();
-    expect(visible(w)).toEqual(['checkpoints']);
-    expect(current(w)).toEqual(['#checkpoints']);
+    expect(visible(w)).toEqual(['history']);
+    expect(current(w)).toEqual(['#history']);
   });
 
   it('replaces an invalid hash typed in later with the default section', async () => {
@@ -93,15 +93,15 @@ describe('section navigation', () => {
   it('follows real history traversal without looping', async () => {
     const w = mount(App);
     const push = vi.spyOn(window.history, 'pushState');
-    await goTo(w, 'checkpoints');
+    await goTo(w, 'history');
     await goTo(w, 'roadmap');
     expect(push).toHaveBeenCalledTimes(2);
     window.history.back();
-    await vi.waitFor(() => expect(visible(w)).toEqual(['checkpoints']));
+    await vi.waitFor(() => expect(visible(w)).toEqual(['history']));
     window.history.back();
     await vi.waitFor(() => expect(visible(w)).toEqual([IDS[0]]));
     window.history.forward();
-    await vi.waitFor(() => expect(visible(w)).toEqual(['checkpoints']));
+    await vi.waitFor(() => expect(visible(w)).toEqual(['history']));
     // Traversal never pushes new entries.
     expect(push).toHaveBeenCalledTimes(2);
     push.mockRestore();
@@ -128,26 +128,26 @@ describe('section navigation', () => {
     const toggle = w.get('[data-testid="nav-toggle"]');
     await toggle.trigger('click');
     expect(toggle.attributes('aria-expanded')).toBe('true');
-    await goTo(w, 'checkpoints');
+    await goTo(w, 'history');
     expect(toggle.attributes('aria-expanded')).toBe('false');
-    expect(visible(w)).toEqual(['checkpoints']);
+    expect(visible(w)).toEqual(['history']);
   });
 
   it('returns focus to the menu button when a choice closes the menu', async () => {
     const w = mount(App, { attachTo: document.body });
     const toggle = w.get('[data-testid="nav-toggle"]');
     await toggle.trigger('click');
-    w.get<HTMLElement>('.nav a[href="#checkpoints"]').element.focus();
-    await goTo(w, 'checkpoints');
+    w.get<HTMLElement>('.nav a[href="#history"]').element.focus();
+    await goTo(w, 'history');
     expect(document.activeElement).toBe(toggle.element);
     w.unmount();
   });
 
   it('does not steal focus from the nav link when the menu is not open', async () => {
     const w = mount(App, { attachTo: document.body });
-    const link = w.get<HTMLElement>('.nav a[href="#checkpoints"]');
+    const link = w.get<HTMLElement>('.nav a[href="#history"]');
     link.element.focus();
-    await goTo(w, 'checkpoints');
+    await goTo(w, 'history');
     expect(document.activeElement).toBe(link.element);
     w.unmount();
   });

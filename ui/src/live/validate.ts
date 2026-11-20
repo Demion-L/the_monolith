@@ -240,6 +240,63 @@ function isKnowledgeData(d: unknown): boolean {
   );
 }
 
+function isHistoryCheckpoint(v: unknown): boolean {
+  return isObj(v) && isStr(v.id) && isStr(v.createdAt) && isStr(v.summary) && Array.isArray(v.remainingSteps) && v.remainingSteps.every(isStr) && isStrOrNull(v.context);
+}
+
+function isHistoryMission(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.id) &&
+    isStr(v.title) &&
+    isStr(v.system) &&
+    isStr(v.status) &&
+    MISSION_STATUSES.includes(v.status) &&
+    isStr(v.startedAt) &&
+    isStr(v.updatedAt) &&
+    isStrOrNull(v.summary) &&
+    isStrOrNull(v.storyId) &&
+    isCount(v.checkpointCount) &&
+    typeof v.checkpointsTruncated === 'boolean' &&
+    Array.isArray(v.checkpoints) &&
+    v.checkpoints.every(isHistoryCheckpoint)
+  );
+}
+
+const HISTORY_EVENT_KINDS = ['mission_started', 'checkpoint', 'mission_finished'];
+function isHistoryEvent(v: unknown): boolean {
+  return (
+    isObj(v) &&
+    isStr(v.kind) &&
+    HISTORY_EVENT_KINDS.includes(v.kind) &&
+    isStr(v.at) &&
+    isStr(v.missionId) &&
+    isStr(v.missionTitle) &&
+    isStrOrNull(v.checkpointId) &&
+    isStrOrNull(v.summary) &&
+    isStrOrNull(v.result)
+  );
+}
+
+function isHistory(d: unknown): boolean {
+  if (!isObj(d) || !isObj(d.counts)) return false;
+  const c = d.counts;
+  return (
+    Array.isArray(d.missions) &&
+    d.missions.every(isHistoryMission) &&
+    isCount(d.totalMissions) &&
+    typeof d.truncated === 'boolean' &&
+    isCount(c.in_progress) &&
+    isCount(c.completed) &&
+    isCount(c.failed) &&
+    isCount(c.cancelled) &&
+    isCount(d.totalCheckpoints) &&
+    isCount(d.orphanCheckpoints) &&
+    Array.isArray(d.recent) &&
+    d.recent.every(isHistoryEvent)
+  );
+}
+
 function isOverview(d: unknown): boolean {
   return (
     isObj(d) &&
@@ -269,6 +326,7 @@ export function isDashboardReadModel(v: unknown): v is DashboardReadModel {
     ) &&
     isSection(v.roadmap, (d) => isObj(d) && isStr(d.text) && (d.structured === undefined || isStructuredRoadmap(d.structured))) &&
     (v.storyIndex === undefined || isSection(v.storyIndex, isStructuredStoryIndex)) &&
+    (v.history === undefined || isSection(v.history, isHistory)) &&
     (v.hypotheses === undefined || isSection(v.hypotheses, isKnowledgeData)) &&
     (v.decisions === undefined || isSection(v.decisions, isKnowledgeData)) &&
     isObj(diag) &&

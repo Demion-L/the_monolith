@@ -59,6 +59,13 @@ describe('Handover panel', () => {
     expect(w.text()).not.toMatch(/\bCOMPLETE\b/);
   });
 
+  it('separates the status reasons so they stay readable', () => {
+    const w = mount(HandoverPanel, { props: { demoReport: demoHandover } });
+    expect(w.get('[data-testid="handover-reasons"]').text()).toBe(
+      'Because: COMPLETION_UNVERIFIED, EVIDENCE_STALE, MISSIONS_FAILED',
+    );
+  });
+
   it('lists unverified completions, owner decisions and the story awaiting review', () => {
     const w = mount(HandoverPanel, { props: { demoReport: demoHandover } });
     expect(w.get('[data-testid="handover-unverified"]').text()).toContain('S-3');

@@ -70,7 +70,7 @@ function storyLabel(s: HandoverReport['progress']['stories'][number]): string {
           <StatusPill :tone="STATUS_TONE[r.status]" :label="STATUS_LABEL[r.status]" />
         </div>
         <p class="muted">A reviewability status. It does not say the project is correct or production-ready.</p>
-        <p v-if="r.statusReasons.length > 0" class="muted" data-testid="handover-reasons">Because: <code v-for="c in r.statusReasons.slice(0, 10)" :key="c">{{ c }} </code></p>
+        <p v-if="r.statusReasons.length > 0" class="muted" data-testid="handover-reasons">Because: <template v-for="(c, i) in r.statusReasons.slice(0, 10)" :key="c"><template v-if="i > 0">, </template><code>{{ c }}</code></template></p>
         <p>
           Project <strong>{{ r.project.name ?? 'UNKNOWN' }}</strong> · active phase
           <code>{{ r.project.activePhase.kind === 'phase' ? r.project.activePhase.id : r.project.activePhase.kind === 'none' ? 'none declared' : r.project.activePhase.kind }}</code> · current story

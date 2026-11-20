@@ -163,6 +163,13 @@ See the [DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REM
 - Evidence files are created exclusively (no overwrite) through the safe-write primitive, read through the bounded reader
   (8 KiB each, 500 newest read), and parsed strictly: a malformed or self-contradicting file is listed as unreadable, never repaired.
 - Redaction of command lines and notes is best effort; do not put secrets on a command line.
+- Evidence is not tamper-evident. The CLI offers no command that edits or deletes a record (ids are only ever added, and a
+  file is never overwritten by `evidence run|report`), but that is the whole guarantee. Anyone with filesystem access can
+  rewrite or delete an `EVD-NNNN.json`, and `handover check` will not notice: a record edited from `fail` to `pass` is
+  shown as VERIFIED, and a deleted record simply disappears from the list (verified by experiment). Evidence files are
+  excluded from the dirty-tree and changed-files computations, so an uncommitted edit leaves no trace in the report.
+  Git history of committed records is the only audit trail; review `git log`/`git diff` of the verification directory.
+  There is no hash chain, signature or event log, by design.
 - Check-then-use races (SEC-001B.3, TM-C) are not defended, as elsewhere.
 - Not established: that a recorded command is an adequate test, that its result still holds after later changes
   (a matching revision only shows the committed files are unchanged), or that the project is correct.

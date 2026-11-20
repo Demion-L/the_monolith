@@ -609,6 +609,9 @@ Freshness limits: a matching revision shows only that the committed files are th
 adequate check; a dirty tree is never ignored (evidence files themselves are excluded from "dirty" and from "changed");
 without git every record is UNKNOWN; evidence recorded on another clone whose commit is unknown here is UNKNOWN, not stale.
 
+Records are only ever added by the CLI (no edit or delete command), but the store is **not tamper-evident**: editing or
+removing a file by hand is not detected by `handover check`. See `docs/reference/security-and-limitations.md`.
+
 ## `monolith hook`
 
 ```bash

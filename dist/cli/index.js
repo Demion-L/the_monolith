@@ -15,6 +15,7 @@
  *   monolith finalize    — plan/apply a controlled story finalization (documentation sync)
  *   monolith update      — add missing Idea Capture infrastructure to an existing instance
  *   monolith ui          — launch Mission Control (read-only dashboard)
+ *   monolith governance  — read-only governance integrity check (governance check)
  */
 import { MONOLITH_VERSION } from '../version.js';
 import { parseInitArgs } from './init-args.js';
@@ -50,6 +51,11 @@ Commands:
               and may add or refresh managed sections inside your existing
               files; your text outside those sections is kept, and conflicting
               edits are never overwritten (see 'monolith update --help').
+  governance  Read-only governance integrity check of the governance documents
+              (roadmap, story index, capsules, ADRs, ...): governance check
+              [--json] [--strict]. Reports problems; changes nothing.
+  hook        Claude Code hook entry points (opt-in): session-start | stop | print-config.
+              Read-only; never blocks; 'print-config' only prints a settings snippet.
   ui          Launch Mission Control, the read-only web dashboard, on
               127.0.0.1 (default port 4173). 'ui dev' adds Vite hot reload
               (source checkout only). See 'monolith ui --help'.
@@ -85,6 +91,9 @@ Finalize usage:
 
 Update usage:
   monolith update [--apply]
+
+Governance usage:
+  monolith governance check [--json] [--strict]   (exit 0 ran, 1 usage, 2 --strict and issues found, 3 could not run)
 
 UI usage:
   monolith ui [--port N]
@@ -191,6 +200,16 @@ async function main() {
         case 'update': {
             const { runUpdate } = await import('../update/cli.js');
             process.exitCode = await runUpdate(args.slice(1));
+            break;
+        }
+        case 'governance': {
+            const { runGovernanceCommand } = await import('../governance/cli.js');
+            process.exitCode = await runGovernanceCommand(args.slice(1));
+            break;
+        }
+        case 'hook': {
+            const { runHookCommand } = await import('../hooks/index.js');
+            process.exitCode = await runHookCommand(args.slice(1));
             break;
         }
         case 'ui': {

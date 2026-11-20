@@ -13,6 +13,7 @@
  * it was an independent research track with zero runtime coupling to
  * Scriptorium/Graph, see docs/webway-v0.md for the historical record.
  */
+export * as governance from './governance/index.js';
 export { MONOLITH_VERSION } from './version.js';
 export { runInit } from './init/index.js';
 export { compileMarkdownArtifact, isStructuralHeadingNoise } from './scriptorium/index.js';

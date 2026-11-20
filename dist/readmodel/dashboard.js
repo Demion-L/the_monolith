@@ -35,6 +35,8 @@ import { parseRoadmapPhases } from './roadmap.js';
 import { parseStoryIndex } from './story-index.js';
 import { buildStoryAuthorityContext, resolveStoryStateIn } from './story-state.js';
 import { readKnowledge } from './knowledge.js';
+import { buildDevelopmentHistory } from './history.js';
+import { readIdeas } from './ideas.js';
 import { sourceFailure } from './source-failure.js';
 import { hasCheckpointOrderMismatch, selectActiveMissions, selectLatestCheckpoint, } from '../brief/selectors.js';
 export const ROADMAP_REL = 'context/maps/roadmap-index.md';
@@ -206,6 +208,8 @@ function unreadableModel(config, rootCode = 'ROOT_INVALID') {
         hypotheses: section(null, [report('hypotheses', null, 'forbidden', rootCode)]),
         decisions: section(null, [report('decisions', null, 'forbidden', rootCode)]),
         storyIndex: section(null, [report('storyIndex', null, 'forbidden', rootCode)]),
+        history: section(null, [state]),
+        ideas: section(null, [report('ideas', null, 'forbidden', rootCode)]),
         diagnostics: { validation: 'NOT_PERFORMED', sources: [config, state, story, roadmap], notes: [] },
     };
 }
@@ -320,6 +324,9 @@ function buildModel(projectRoot) {
         roadmap: section(roadmap, [roadmapLoaded.report]),
         ...readKnowledge(projectRoot, root.monolithRoot),
         storyIndex: section(storyIndex, [storyIndexLoaded.report]),
+        // Every mission, not only active ones; same single state read as `currentMissions`.
+        history: section(stateUsable ? buildDevelopmentHistory(state) : null, [stateResult.report]),
+        ideas: readIdeas(projectRoot, root.monolithRoot),
         storyState: section(storyStateOf(storyLoaded.content, roadmapLoaded.content, storyIndexLoaded.content), [storyLoaded.report, roadmapLoaded.report, storyIndexLoaded.report]),
         diagnostics: {
             validation: 'NOT_PERFORMED',

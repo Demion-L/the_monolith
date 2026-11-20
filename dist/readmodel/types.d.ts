@@ -15,7 +15,7 @@
 import type { StoryStateResolution } from './story-state.js';
 import type { Checkpoint, Mission } from '../coordinatorium/types.js';
 /** The fixed, closed set of files this model reads. */
-export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions' | 'storyIndex';
+export type SourceId = 'config' | 'state' | 'activeStory' | 'roadmap' | 'hypotheses' | 'decisions' | 'storyIndex' | 'ideas';
 /**
  * - available: read and (where applicable) parsed successfully
  * - absent:    the file does not exist (a legitimate state for a fresh project)
@@ -220,7 +220,7 @@ export interface StoryIndexItemView {
     date: string | null;
     phase: StoryPhaseRef;
 }
-export type StoryIndexDiagnosticCode = 'DOCUMENT_EMPTY' | 'STORIES_NOT_FOUND' | 'STORY_HEADING_MALFORMED' | 'PHASE_HEADING_MALFORMED' | 'STORIES_TRUNCATED' | 'STORY_ID_DUPLICATE' | 'STORY_OUTSIDE_PHASE' | 'STORY_STATUS_MISSING' | 'STORY_STATUS_EMPTY' | 'STORY_STATUS_CONFLICT' | 'STORY_STATUS_UNRECOGNIZED' | 'STORY_PHASE_UNMATCHED' | 'STORY_PHASE_AMBIGUOUS' | 'STORY_PHASE_UNVERIFIED' | 'INTERNAL';
+export type StoryIndexDiagnosticCode = 'DOCUMENT_EMPTY' | 'STORIES_NOT_FOUND' | 'NO_FINALIZED_STORIES' | 'STORY_HEADING_MALFORMED' | 'PHASE_HEADING_MALFORMED' | 'STORIES_TRUNCATED' | 'STORY_ID_DUPLICATE' | 'STORY_OUTSIDE_PHASE' | 'STORY_STATUS_MISSING' | 'STORY_STATUS_EMPTY' | 'STORY_STATUS_CONFLICT' | 'STORY_STATUS_UNRECOGNIZED' | 'STORY_PHASE_UNMATCHED' | 'STORY_PHASE_AMBIGUOUS' | 'STORY_PHASE_UNVERIFIED' | 'INTERNAL';
 export interface StoryIndexDiagnosticView {
     code: StoryIndexDiagnosticCode;
     severity: 'info' | 'warn';
@@ -231,11 +231,13 @@ export interface StoryIndexDiagnosticView {
  * - ok:           stories recognised, nothing structural lost
  * - partial:      stories recognised, but some content could not be (malformed heading, truncation)
  * - empty:        the document is available but blank
+ * - none_finalized: the canonical `# Stories` section exists and lists nothing: a valid state before the
+ *                 first finalization (not an error, and nothing is synthesized from the Roadmap)
  * - no_stories:   phase sections exist without any story
  * - unrecognized: non-empty document with neither stories nor phase sections
  * - error:        processing failed; the structure must not be trusted
  */
-export type StoryIndexParseState = 'ok' | 'partial' | 'empty' | 'no_stories' | 'unrecognized' | 'error';
+export type StoryIndexParseState = 'ok' | 'partial' | 'empty' | 'none_finalized' | 'no_stories' | 'unrecognized' | 'error';
 export interface StructuredStoryIndexView {
     state: StoryIndexParseState;
     stories: StoryIndexItemView[];
@@ -327,10 +329,102 @@ export interface KnowledgeData {
     /** False when any `warn` issue means documents or entries could not be interpreted: the list must not be read as exhaustive. */
     complete: boolean;
 }
+/**
+ * One idea as the existing idea store reads it (GOV-EVOLUTION Phase 4). Read-only; text is untrusted
+ * user data and is shown, never interpreted. `path` is the project-relative source file (provenance).
+ */
+export interface IdeaView {
+    id: string;
+    title: string;
+    status: 'inbox' | 'planned' | 'archived';
+    createdAt: string;
+    description: string;
+    /** True when Core shortened `description` to its limit. */
+    descriptionTruncated: boolean;
+    context: string | null;
+    tags: string[];
+    paths: string[];
+    path: string;
+}
+export interface IdeasData {
+    items: IdeaView[];
+    /** Files that could not be read as ideas: fixed code + id only. */
+    issues: {
+        id: string;
+        code: 'IDEA_CORRUPT' | 'IDEA_UNSAFE_PATH';
+    }[];
+    /** True when the item list was cut at the display limit. */
+    truncated: boolean;
+    /** False when some idea file could not be read or the list was cut: the list is not exhaustive. */
+    complete: boolean;
+}
 /** Resolution of the declared active story (ARCH-002B); see `story-state.ts`. */
 export interface StoryStateView {
     activeStory: StoryStateResolution | null;
     sources: StoryStateResolution['sources'];
+}
+/**
+ * Development History (GOV-EVOLUTION Phase 3): a read-only view over the Missions and Checkpoints
+ * ALREADY in the operational state. Nothing is stored, generated or inferred: a mission without a
+ * checkpoint shows none, a mission without `storyId` has no story, and the Story link is exactly
+ * the one recorded on the mission. Text fields are untrusted.
+ */
+export interface HistoryCheckpointView {
+    id: string;
+    createdAt: string;
+    summary: string;
+    /** Historical record at that checkpoint; not the current plan. */
+    remainingSteps: string[];
+    context: string | null;
+}
+export interface HistoryMissionView {
+    id: string;
+    title: string;
+    system: string;
+    status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
+    startedAt: string;
+    updatedAt: string;
+    /** Final summary as recorded when the mission was finished; null when none was recorded. */
+    summary: string | null;
+    /** Exactly the `storyId` recorded on the mission; null when none (never guessed). */
+    storyId: string | null;
+    /** Total checkpoints recorded for the mission (may exceed `checkpoints.length`). */
+    checkpointCount: number;
+    /** Oldest first (id ordinal order, as `brief` treats ids as authoritative), bounded. */
+    checkpoints: HistoryCheckpointView[];
+    checkpointsTruncated: boolean;
+}
+export type HistoryEventKind = 'mission_started' | 'checkpoint' | 'mission_finished';
+/** One recorded fact, taken from a recorded timestamp. `mission_finished` uses the mission's `updatedAt`. */
+export interface HistoryEventView {
+    kind: HistoryEventKind;
+    at: string;
+    missionId: string;
+    missionTitle: string;
+    /** Checkpoint events only. */
+    checkpointId: string | null;
+    /** Checkpoint summary or mission final summary; null when none. */
+    summary: string | null;
+    /** `mission_finished` only. */
+    result: 'completed' | 'failed' | 'cancelled' | null;
+}
+export interface DevelopmentHistory {
+    /** Newest first by (startedAt, id); bounded by `MAX_HISTORY_MISSIONS`. */
+    missions: HistoryMissionView[];
+    totalMissions: number;
+    /** True when `missions` is not all missions: the list is not exhaustive. */
+    truncated: boolean;
+    counts: {
+        in_progress: number;
+        completed: number;
+        failed: number;
+        cancelled: number;
+    };
+    totalCheckpoints: number;
+    /** Checkpoints whose mission is not recorded; counted, never shown or attached elsewhere. */
+    orphanCheckpoints: number;
+    /** Latest recorded events, newest first, bounded. */
+    recent: HistoryEventView[];
 }
 export interface DashboardReadModel {
     projectOverview: Section<ProjectOverview>;
@@ -356,6 +450,17 @@ export interface DashboardReadModel {
      * Absent from DTOs of older servers; the UI must not rebuild this itself.
      */
     storyState?: Section<StoryStateView>;
+    /**
+     * Additive (GOV-EVOLUTION Phase 3). Every mission (active, completed, failed, cancelled) with its
+     * checkpoints, from the same state file as `currentMissions`. `data === null` means the state is not
+     * usable (see `sources[0]`); absent state is an empty history. Absent from DTOs of older servers.
+     */
+    history?: Section<DevelopmentHistory>;
+    /**
+     * Additive (GOV-EVOLUTION Phase 4). Ideas from the existing idea store. `data === null` means the source is
+     * not available (`absent` = no idea has been captured yet: the directory does not exist). Absent from DTOs of older servers.
+     */
+    ideas?: Section<IdeasData>;
     diagnostics: ReadDiagnostics;
 }
 //# sourceMappingURL=types.d.ts.map

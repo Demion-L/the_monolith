@@ -48,6 +48,8 @@ function normalize(raw) {
 function cap(s, max) {
     return s.length <= max ? s : s.slice(0, max);
 }
+/** The canonical top-level section of the index (`# Stories`, as in the project template). */
+const STORIES_SECTION_RE = /^#{1,2}[ \t]+Stories[ \t]*$/i;
 export function parseStoryIndex(text, roadmapPhaseIds, roadmapIdsComplete = true) {
     const diagnostics = [];
     const diag = (code, severity, storyIndex = null) => {
@@ -201,6 +203,12 @@ export function parseStoryIndex(text, roadmapPhaseIds, roadmapIdsComplete = true
     });
     let state;
     if (stories.length === 0) {
+        const canonicalEmpty = phaseSections === 0 && malformedStories === 0 && malformedPhases === 0 && masked.some((l) => STORIES_SECTION_RE.test(l));
+        if (canonicalEmpty) {
+            // The canonical shape with nothing finalized yet. Valid; no entry is invented.
+            diag('NO_FINALIZED_STORIES', 'info');
+            return { state: 'none_finalized', stories, diagnostics };
+        }
         if (phaseSections > 0) {
             state = 'no_stories';
         }

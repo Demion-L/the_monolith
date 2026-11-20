@@ -83,7 +83,8 @@ function storyIndexState(view, text) {
         return 'missing';
     if (view === null)
         return 'unrecognized';
-    if (view.state === 'ok')
+    // `none_finalized`: a recognised, empty index. Finalization of a story is then answerable: NOT_FINALIZED.
+    if (view.state === 'ok' || view.state === 'none_finalized')
         return 'available';
     if (view.state === 'partial')
         return 'partial';

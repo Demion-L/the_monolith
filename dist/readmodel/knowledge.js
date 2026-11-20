@@ -181,7 +181,8 @@ export function parseAdr(text, fileName, path, issues = new Issues()) {
     const lines = norm(text).split('\n');
     const fm = parseFrontmatter(lines);
     if (fm === null) {
-        issues.add(lines[0]?.trim() === '---' ? 'ADR_FRONTMATTER_MALFORMED' : 'ADR_FRONTMATTER_MISSING', lines[0]?.trim() === '---' ? 'warn' : 'info', path);
+        // A file that is not shown is a real loss of data: both cases make the list incomplete (warn).
+        issues.add(lines[0]?.trim() === '---' ? 'ADR_FRONTMATTER_MALFORMED' : 'ADR_FRONTMATTER_MISSING', 'warn', path);
         return { item: null, issues };
     }
     const single = (key) => {

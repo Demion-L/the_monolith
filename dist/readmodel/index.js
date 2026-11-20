@@ -1,5 +1,7 @@
 export { readDashboardModel, ROADMAP_REL, MAX_ROADMAP_BYTES, STORY_INDEX_REL, MAX_STORY_INDEX_BYTES } from './dashboard.js';
 export { runValidation, runReconciliation } from './diagnostics.js';
+export { readIdeas, MAX_IDEAS } from './ideas.js';
+export { buildDevelopmentHistory, MAX_HISTORY_MISSIONS, MAX_HISTORY_CHECKPOINTS_PER_MISSION, MAX_HISTORY_RECENT } from './history.js';
 export { parseRoadmapPhases } from './roadmap.js';
 export { parseStoryIndex, MAX_INDEX_STORIES } from './story-index.js';
 export { parseHypotheses, parseAdr, readKnowledge, HYPOTHESES_REL, ADR_DIR_REL } from './knowledge.js';

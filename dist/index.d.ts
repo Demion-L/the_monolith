@@ -13,6 +13,7 @@
  * it was an independent research track with zero runtime coupling to
  * Scriptorium/Graph, see docs/webway-v0.md for the historical record.
  */
+export * as governance from './governance/index.js';
 export type { ProjectDefinition } from './types/project-definition.js';
 export type { GateCheckResult } from './types/enforcement.js';
 export type { VerificationContext, VerificationReport } from './types/integrity.js';

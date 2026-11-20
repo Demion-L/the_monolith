@@ -11,5 +11,5 @@ export declare const FINALIZE_STORY_LEGACY: Readonly<Record<string, string>>;
  * that test until the previous hash is moved into FINALIZE_STORY_LEGACY (so instances that
  * carry the unedited previous text keep updating) and this value is replaced.
  */
-export declare const FINALIZE_STORY_CURRENT = "7db4c463f67317d6d3e16050c3696eafb5d116cf0cb78b5cdf10b22c0c5bb6cc";
+export declare const FINALIZE_STORY_CURRENT = "de69e1522622c3c7c395d8eb817aa23b8fd21a61bfb507bba342d9699ba55323";
 //# sourceMappingURL=legacy-skills.d.ts.map

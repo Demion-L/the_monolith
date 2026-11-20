@@ -55,5 +55,6 @@ export type {
   SourceReport,
   SourceStatus,
 } from './types.js';
+export { loadStoryAuthority } from './story-links.js';
 export { buildStoryAuthorityContext, resolveStoryState, resolveStoryStateIn, resolveActiveStory } from './story-state.js';
 export type { StorySources, StoryAuthorityContext, StoryStateResolution, StoryDiagnostic, StoryDiagnosticCode, StoryConsistency, PlanningFact, ActiveFact, FinalizationFact, FinalizationEntry, PhaseAssociation, Provenance, SourceState } from './story-state.js';

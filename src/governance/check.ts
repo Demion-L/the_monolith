@@ -14,7 +14,7 @@
 
 import { sanitizeSingleLine } from '../brief/sanitize.js';
 import { compareStrings } from '../brief/selectors.js';
-import { readDashboardModel } from '../readmodel/index.js';
+import { loadStoryAuthority, readDashboardModel, resolveStoryStateIn } from '../readmodel/index.js';
 import type { DashboardReadModel, KnowledgeData, Section } from '../readmodel/index.js';
 import { validateProject } from '../validate/index.js';
 import { scanCapsules } from './capsules.js';
@@ -271,6 +271,7 @@ export function buildGovernanceReport(projectRoot: string, model: DashboardReadM
   } else {
     statuses.set('missions', 'NOT_CHECKED');
   }
+  if (model.history?.data) missionStoryLinks(c, projectRoot, root, model.history.data.missions);
   for (const n of model.diagnostics.notes) {
     if (n.code === 'STATE_SPLIT_BRAIN') c.add('missions', 'WARNING', n.code, 'Independent operational states exist next to the shared one; MONOLITH does not choose between them.', null);
     if (n.code === 'MULTIPLE_ACTIVE_MISSIONS') c.add('missions', 'INFO', n.code, 'More than one mission is in progress.', null);
@@ -306,5 +307,34 @@ function documentPath(root: string, document: string): string | null {
       return `${root}/memory/working/story-index.md`;
     default:
       return null;
+  }
+}
+
+/**
+ * Workflow integrity (ACCOUNTABILITY-001): Mission → Story links, checked only against what the Story State
+ * Resolver can state definitively. A link is flagged only when every authoritative document was read and none
+ * lists the story (`NOT_LISTED` + `NOT_ACTIVE` + `NOT_FINALIZED`); an unreadable document leaves the fact UNKNOWN
+ * and produces no finding. Nothing is inferred: a mission without a `storyId` is not an error (exploratory work),
+ * a finished mission does not finalize its story, and a story awaiting review is not finalized.
+ */
+function missionStoryLinks(c: Collector, projectRoot: string, root: string, missions: { id: string; status: string; storyId: string | null }[]): void {
+  const linked = missions.filter((m) => m.storyId !== null);
+  if (linked.length === 0) return;
+  const ctx = loadStoryAuthority(projectRoot, root);
+  if (ctx === null) return;
+  const byStory = new Map<string, typeof linked>();
+  for (const m of linked) byStory.set(m.storyId as string, [...(byStory.get(m.storyId as string) ?? []), m]);
+  for (const storyId of [...byStory.keys()].sort(compareStrings)) {
+    const ms = byStory.get(storyId) ?? [];
+    const ids = ms.slice(0, 5).map((m) => m.id).join(', ') + (ms.length > 5 ? ', …' : '');
+    const r = resolveStoryStateIn(ctx, storyId);
+    const notListed = r.planning.state === 'NOT_LISTED' && r.active.state === 'NOT_ACTIVE' && r.finalization.state === 'NOT_FINALIZED';
+    if (notListed) {
+      c.add('missions', 'WARNING', 'MISSION_STORY_UNKNOWN', `Mission(s) ${ids} reference story ${storyId}, which the roadmap, active.md and story-index.md do not list (the link is recorded, not verified).`, null);
+    }
+    const inProgress = ms.filter((m) => m.status === 'in_progress');
+    if (inProgress.length > 0 && r.finalization.state === 'FINALIZED') {
+      c.add('missions', 'WARNING', 'MISSION_ACTIVE_ON_FINALIZED_STORY', `Mission(s) ${inProgress.map((m) => m.id).join(', ')} are in progress on story ${storyId}, which story-index.md reports as finalized.`, null);
+    }
   }
 }

@@ -88,7 +88,7 @@ describe('hook handlers', () => {
     const cmd = cfg.hooks.SessionStart[0].hooks[0].command as string;
     expect(cmd).toContain('command -v monolith');
     expect(cmd.endsWith('|| true')).toBe(true);
-    expect(Object.keys(cfg.hooks).sort()).toEqual(['SessionStart', 'Stop']);
+    expect(Object.keys(cfg.hooks).sort()).toEqual(['PreCompact', 'SessionStart', 'Stop']);
   });
 });
 

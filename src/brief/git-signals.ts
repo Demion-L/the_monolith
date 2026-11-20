@@ -33,7 +33,7 @@ export const MAX_BLOB_BYTES = 256 * 1024;
 const GIT_TIMEOUT_MS = 10_000;
 const GIT_MAX_BUFFER = 8 * 1024 * 1024;
 
-const SAFE_CONFIG = [
+export const SAFE_CONFIG = [
   '-c', 'core.fsmonitor=false',
   '-c', 'core.pager=cat',
   '-c', 'log.showSignature=false',
@@ -43,7 +43,7 @@ const SAFE_CONFIG = [
   '-c', 'protocol.file.allow=never',
 ];
 
-const SAFE_ENV = {
+export const SAFE_ENV = {
   GIT_OPTIONAL_LOCKS: '0',
   GIT_TERMINAL_PROMPT: '0',
   GIT_EXTERNAL_DIFF: '',

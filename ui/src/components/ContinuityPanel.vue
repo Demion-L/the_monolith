@@ -38,7 +38,8 @@ const KIND_TAG: Record<NextStep['kind'], string> = {
           <template v-if="s.slot.kind === 'found'">
             <span class="mc-done-title"><code>{{ s.slot.item.id }}</code><template v-if="s.slot.item.title"> — {{ s.slot.item.title }}</template></span>
             <span class="mc-done-meta">
-              <span class="mc-done-status">{{ s.slot.item.status }}</span>
+              <span class="mc-done-status" :title="s.slot.item.statusVerbatim">{{ s.slot.item.status }}</span>
+              <span v-if="s.slot.item.finalized" class="mc-final" data-testid="last-finalized" title="The status text says finalized (REPORTED, not confirmed here)">FINALIZED</span>
               · <time v-if="s.slot.item.at !== null">{{ s.slot.item.at }}</time><span v-else class="muted">date not reported</span>
               · <span class="muted" data-testid="last-source">{{ s.slot.item.source }}</span>
             </span>

@@ -56,6 +56,8 @@ const sequenceEdges = computed(() => {
   return out;
 });
 const seqEdges = computed(() => routeEdges(sequenceEdges.value, rects.value));
+/** Arrowhead size in canvas units: counter-scaled by the zoom so it stays visible when the whole graph is fitted. */
+const arrowPx = computed(() => Math.min(40, Math.max(7, 9 / k.value)));
 
 const linkedCount = computed(() => graph.value.edges.length);
 const unlinkedCount = computed(() => graph.value.stories.length - linkedCount.value);
@@ -466,7 +468,7 @@ function roadmapStateNote(): string | null {
           <div class="xg-world" :style="worldStyle" :data-k="k" :data-tx="tx" :data-ty="ty" data-testid="graph-canvas">
             <svg class="xg-seq" width="1" height="1" aria-hidden="true" data-testid="graph-seq-layer">
               <defs>
-                <marker id="xg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
+                <marker id="xg-arrow" viewBox="0 0 10 10" refX="9" refY="5" :markerWidth="arrowPx" :markerHeight="arrowPx" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
                   <path d="M 1 1 L 9 5 L 1 9 Z" class="xg-arrow" />
                 </marker>
               </defs>

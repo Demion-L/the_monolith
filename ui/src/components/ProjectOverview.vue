@@ -112,7 +112,9 @@ const storyIndexReason = computed(() => {
 
 // ---- Recent Activity: Core's latest recorded events (Development History), nothing derived here ----
 const EVENT_LABEL = { mission_started: 'Mission started', checkpoint: 'Checkpoint', mission_finished: 'Mission finished' } as const;
-const recentEvents = computed(() => props.history?.data?.recent ?? []);
+const RECENT_SHOWN = 5;
+const allRecent = computed(() => props.history?.data?.recent ?? []);
+const recentEvents = computed(() => allRecent.value.slice(0, RECENT_SHOWN));
 
 // ---- Diagnostics: Core's own list, severity untouched ----
 const problems = computed(() => (props.diagnostics ?? []).filter((d) => d.severity !== 'info'));
@@ -315,6 +317,7 @@ const splitBrain = computed(() => props.provenance?.splitBrain.detected === true
           <span class="mc-act-date">{{ e.at }}</span>
         </li>
       </ul>
+      <p v-if="allRecent.length > recentEvents.length" class="muted mc-note" data-testid="recent-more">Latest {{ recentEvents.length }} of {{ allRecent.length }} recorded events; the full record is in Development History.</p>
       <p class="mc-actions">
         <button type="button" class="mc-link" data-testid="go-history" @click="go('history')">Open Development History</button>
       </p>

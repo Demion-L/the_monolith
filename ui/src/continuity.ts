@@ -8,7 +8,7 @@ import type {
   StructuredStoryIndexView,
 } from './types/dashboard';
 import type { SectionId } from './sections';
-import { lifecycleTone, statesFinalized } from './statusTone';
+import { leadingStatus, lifecycleTone, statesFinalized } from './statusTone';
 
 /**
  * Project continuity (UX-003): "what was completed last" and "what to do next", derived ONLY from records Core already
@@ -19,8 +19,12 @@ import { lifecycleTone, statesFinalized } from './statusTone';
 export interface DoneItem {
   id: string;
   title: string | null;
-  /** The status text exactly as the source states it. */
+  /** The state word(s) of the status text, e.g. `COMPLETED`. */
   status: string;
+  /** The status text exactly as the source states it. */
+  statusVerbatim: string;
+  /** The status text itself says finalized (a REPORTED claim). */
+  finalized: boolean;
   at: string | null;
   source: string;
 }
@@ -70,7 +74,7 @@ function lastMission(h: Section<DevelopmentHistory> | undefined): DoneSlot {
   for (const m of done) if (m.updatedAt > best.updatedAt) best = m;
   return {
     kind: 'found',
-    item: { id: best.id, title: best.title, status: 'COMPLETED', at: best.updatedAt, source: 'Development History (operational state)' },
+    item: { id: best.id, title: best.title, status: 'COMPLETED', statusVerbatim: 'COMPLETED', finalized: false, at: best.updatedAt, source: 'Development History (operational state)' },
     note: h.data.truncated ? 'Chosen among the most recent missions listed; older ones are not shown.' : null,
   };
 }
@@ -88,7 +92,7 @@ function lastStory(si: Section<StructuredStoryIndexView> | undefined): DoneSlot 
   }
   return {
     kind: 'found',
-    item: { id: best.id, title: best.title, status: best.status.value ?? 'status not stated', at: best.date, source: 'story-index.md (REPORTED)' },
+    item: { id: best.id, title: best.title, status: leadingStatus(best.status.value) ?? 'status not stated', statusVerbatim: best.status.value ?? 'status not stated', finalized: statesFinalized(best.status.value), at: best.date, source: 'story-index.md (REPORTED)' },
     note: done.every((s) => isoDay(s.date) !== null) ? null : 'Some entries carry no date, so this is the last entry in document order.',
   };
 }
@@ -101,7 +105,7 @@ function lastPhase(r: StructuredRoadmapView | undefined): DoneSlot {
   const p = done[done.length - 1]!;
   return {
     kind: 'found',
-    item: { id: phaseLabel(p), title: p.title, status: p.status.value ?? 'status not stated', at: null, source: 'roadmap-index.md (REPORTED)' },
+    item: { id: phaseLabel(p), title: p.title, status: leadingStatus(p.status.value) ?? 'status not stated', statusVerbatim: p.status.value ?? 'status not stated', finalized: statesFinalized(p.status.value), at: null, source: 'roadmap-index.md (REPORTED)' },
     note: 'The roadmap carries no completion date; this is the last completed phase in roadmap order.',
   };
 }

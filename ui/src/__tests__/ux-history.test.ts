@@ -81,7 +81,7 @@ describe('UX-005 Development History', () => {
   it('final summary is its own block; a long one is clamped, complete in the page, and expandable', async () => {
     const w = mount(HistoryPanel, { props: { history: all() } });
     const m2 = w.findAll('[data-testid="history-mission"]')[1]!;
-    expect(m2.get('.hist-result [data-testid="history-summary"]').exists()).toBe(true);
+    expect(m2.find('.hist-result [data-testid="history-summary"]').exists()).toBe(true);
     expect(m2.find('[data-testid="history-timeline"] [data-testid="history-summary"]').exists()).toBe(false);
     const p = m2.get('[data-testid="history-summary"]');
     expect(p.text()).toBe(LONG); // nothing truncated in the data
@@ -93,6 +93,11 @@ describe('UX-005 Development History', () => {
     expect(m2.get('[data-testid="history-summary-toggle"]').attributes('aria-expanded')).toBe('true');
     const short = w.findAll('[data-testid="history-mission"]')[2]!;
     expect(short.find('[data-testid="history-summary-toggle"]').exists()).toBe(false);
+  });
+
+  it('the result block takes the colour of the mission outcome', () => {
+    expect(css).toMatch(/\.hist-card\[data-status="failed"\] \.hist-result \{ border-left-color: var\(--err\)/);
+    expect(css).toMatch(/\.hist-card\[data-status="cancelled"\] \.hist-result \{ border-left-color: var\(--ev-cancelled\)/);
   });
 
   it('a missing story stays stated but quiet', () => {

@@ -41,6 +41,13 @@ describe('UX-003 last completed work', () => {
     expect(undated.story.kind === 'found' && undated.story.note).toContain('document order');
   });
 
+  it('a finalized-stated status is shown as its state word plus a separate FINALIZED mark, verbatim text kept', () => {
+    const l = lastCompleted({ roadmap: road([ph('9', 'COMPLETED (finalized 2026-11-20, owner acceptance)')]) });
+    expect(l.phase.kind === 'found' && l.phase.item.status).toBe('COMPLETED');
+    expect(l.phase.kind === 'found' && l.phase.item.finalized).toBe(true);
+    expect(l.phase.kind === 'found' && l.phase.item.statusVerbatim).toContain('owner acceptance');
+  });
+
   it('phase: last completed in roadmap order, with no invented date', () => {
     const l = lastCompleted({ roadmap: road([ph('0', 'COMPLETED (finalized 2026-11-20)'), ph('1', 'COMPLETED'), ph('2', 'PLANNED')]) });
     expect(l.phase.kind === 'found' && l.phase.item.id).toBe('Phase 1');

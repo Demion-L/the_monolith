@@ -7,7 +7,7 @@ stability: volatile
 
 # CLI Reference
 
-Commands of the `monolith` CLI (`src/cli/index.ts`). MONOLITH `0.2.0-beta.1` is a
+Commands of the `monolith` CLI (`src/cli/index.ts`). MONOLITH `0.2.0-beta.2` is a
 pre-release, published under the `beta` dist-tag
 (`npm install -g @latysh-development/monolith@beta`; the previous alpha is
 `@alpha`, see the

@@ -80,7 +80,7 @@ no automatic recall or reminders, no idea status management and no idea UI yet.
 
 ## Quick Start
 
-Requires Node.js >= 20. `0.2.0-beta.1` is a pre-release and is published under the
+Requires Node.js >= 20. `0.2.0-beta.2` is a pre-release and is published under the
 `beta` dist-tag. Install it with:
 
 ```bash
@@ -91,7 +91,7 @@ The previous alpha (`0.1.0-alpha.4`) remains available as `@alpha`. To build fro
 source, or to install a locally built tarball (`npm pack`, then
 `npm install -g ./latysh-development-monolith-<version>.tgz`), see the
 [installation and release guide](./docs/release/alpha-installation.md).
-Release notes: [`0.2.0-beta.1`](./docs/release/0.2.0-beta.1.md).
+Release notes: [`0.2.0-beta.2`](./docs/release/0.2.0-beta.2.md).
 
 Then, in a project directory:
 
@@ -190,12 +190,12 @@ listing — not an official partnership, endorsement or certification.
 
 ## Project Status
 
-**Beta** (`0.2.0-beta.1`), a pre-release — not a stable production release. The API and
+**Beta** (`0.2.0-beta.2`), a pre-release — not a stable production release. The API and
 CLI are experimental and may change without notice. The beta is published on npm under
 the `beta` dist-tag; the previous alpha is `0.1.0-alpha.4` (`alpha` dist-tag).
 Durable State and the Coordinatorium (`monolith durable`, `monolith mission`) are
 experimental and are not part of the Quick Start. Known limitations of this release:
-[release notes](./docs/release/0.2.0-beta.1.md#known-limitations).
+[release notes](./docs/release/0.2.0-beta.2.md#known-limitations).
 
 **Security:** Mission Control is read-only, listens on `127.0.0.1` only and has
 no authentication. Concurrent adversarial mutation of a project is unsupported;

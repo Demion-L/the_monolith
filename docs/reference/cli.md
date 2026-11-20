@@ -26,6 +26,8 @@ monolith brief      # deterministic, read-only project-state summary [--max-char
 monolith idea       # capture and recall deferred ideas: add|list|show (implemented, IDEA-001A)
 monolith update     # bring an existing instance up to the agent entry point + Idea Capture [--apply] (implemented, DX-UPDATE-001/003)
 monolith durable    # Durable State: list|show|assess|packet|verify|retention (implemented; see below)
+monolith governance # read-only governance integrity check: governance check [--json] [--strict] (implemented; see below)
+monolith hook       # opt-in Claude Code hooks: session-start|stop|print-config (implemented; see below)
 monolith ui         # Mission Control, read-only web dashboard [--port N] (implemented); first stdout line: `MONOLITH Mission Control: <url>`
 monolith ui dev     # Mission Control with Vite hot reload [--port N] (implemented, source checkout only)
 monolith status     # active protocol, phase, story, drift summary (NOT implemented)
@@ -488,6 +490,55 @@ Durable State is merged but its security acceptance is still open; see
 `AGENTS.md`, [ADR-017](../adr/ADR-017-durable-execution-state.md),
 [ADR-018](../adr/ADR-018-durable-state-failure-model.md) and
 [Durable State Retention Safety](../architecture/DURABLE-STATE-RETENTION-SAFETY.md).
+
+## `monolith governance`
+
+```bash
+monolith governance check [--json] [--strict]
+```
+
+Read-only report on the quality of the governance documents. It writes nothing, creates no
+state file, needs no LLM and gives the same output for unchanged files. It reuses Core's own
+readers (roadmap, story index, story state, ADR, hypotheses, ideas, missions) and
+`monolith validate`'s scaffold checks, plus a minimal structural check of story capsules
+(frontmatter `type/id/phase/title/date/status`, the seven sections `finalize` writes, leftover
+placeholders, literal `\n`). Areas: Instance structure, Roadmap, Active Story, Story Index,
+Story Capsules, ADR, Hypotheses, Missions, Ideas — each `PASS`, `EMPTY`, `AVAILABLE`, `ABSENT`,
+`ISSUES` or `NOT CHECKED`. Findings are `INFO`, `WARNING` or `ERROR`; an empty story index, no
+capsule, no ideas or no ADR directory are `INFO`, never problems. The format of each document is
+described in `.monolith/protocols/governance/document-formats.md`.
+
+| Exit | Meaning |
+|---|---|
+| 0 | the check ran (findings are printed; they do not change the code) |
+| 1 | usage error |
+| 2 | `--strict` and at least one `WARNING` or `ERROR` (opt-in; `INFO` never counts) |
+| 3 | the check itself could not be executed |
+
+`monolith validate` is unchanged: it checks the installed scaffold and still passes when document
+contents are malformed. `governance check` is never a precondition of `monolith finalize`.
+
+## `monolith hook`
+
+```bash
+monolith hook session-start   # SessionStart: prints additionalContext JSON
+monolith hook stop            # Stop: diagnostic systemMessage only, never blocks
+monolith hook print-config    # prints an opt-in settings snippet; writes nothing
+```
+
+Hooks are **opt-in**; MONOLITH never edits Claude Code settings. Copy the snippet from
+`monolith hook print-config` into the project's `.claude/settings.json` (or your own settings)
+yourself and merge it with hooks you already have. Verified against Claude Code 2.1.329
+(events `SessionStart`, `Stop`, `PreToolUse`, `PostToolUse`; JSON on stdin; `hookSpecificOutput.additionalContext`
+and `systemMessage` on stdout). Only `SessionStart` and `Stop` are used: no per-tool-call work.
+
+- *session-start* injects the active story, the active mission and the governance findings,
+  computed by Core (`governance check` rules); it does not reimplement any rule.
+- *stop* mentions an unfinished mission or governance issues. It never returns `decision`,
+  `continue: false` or exit code 2, and does nothing when `stop_hook_active` is true (no loop).
+- Fail-safe: a missing CLI (the snippet guards with `command -v … || true`), a fault or a
+  hook started by a hook (`MONOLITH_HOOK_ACTIVE=1`) ends silently or with a short message;
+  nothing is written and the session is never stopped. Blocking hooks are not provided.
 
 ## `monolith ui`
 

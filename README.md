@@ -99,6 +99,7 @@ Then, in a project directory:
 monolith init        # scaffold a MONOLITH instance (refuses to overwrite existing files)
 monolith validate    # static integrity check of the instance
 monolith brief       # bounded, read-only summary of project state
+monolith governance check   # read-only check of the governance documents' format and content
 monolith ui          # Mission Control at http://127.0.0.1:4173 ; Ctrl+C to stop
 ```
 

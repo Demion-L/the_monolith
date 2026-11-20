@@ -28,6 +28,17 @@ const statusFilter = ref<'all' | HistoryMissionView['status']>('all');
 const query = ref('');
 
 const data = computed(() => props.history.data);
+
+// Long final summaries are clamped in the card; the full text stays in the page and one click shows it. View state only.
+const LONG_SUMMARY = 320;
+const isLong = (t: string): boolean => t.length > LONG_SUMMARY;
+const expanded = ref<Set<string>>(new Set());
+function toggle(id: string): void {
+  const next = new Set(expanded.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  expanded.value = next;
+}
 const unavailableReason = computed(() => {
   const s = props.history.sources[0];
   return s ? `${s.status}${s.code ? ` [${s.code}]` : ''}` : 'unknown';
@@ -70,66 +81,85 @@ const shown = computed(() => {
 
       <p v-if="data.totalMissions === 0" class="empty" data-testid="history-empty">No missions recorded.</p>
       <template v-else>
-        <div class="list-controls">
-          <label>
-            Status
+        <div class="hist-toolbar" role="search" aria-label="Filter missions">
+          <label class="hist-field hist-field-status">
+            <span class="hist-field-k">Status</span>
             <select v-model="statusFilter" data-testid="history-status">
-              <option value="all">all</option>
-              <option value="in_progress">in progress</option>
-              <option value="completed">completed</option>
-              <option value="failed">failed</option>
-              <option value="cancelled">cancelled</option>
+              <option value="all">All statuses</option>
+              <option value="in_progress">In progress</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
             </select>
           </label>
-          <label>
-            Search
-            <input v-model="query" type="search" data-testid="history-search" placeholder="id, title, summary, story" />
+          <label class="hist-field hist-field-search">
+            <span class="hist-field-k">Search</span>
+            <input v-model="query" type="search" data-testid="history-search" placeholder="Mission id, title, summary or story" />
           </label>
+          <p class="hist-shown muted" data-testid="history-shown">Showing {{ shown.length }} of {{ data.missions.length }}</p>
         </div>
         <p v-if="shown.length === 0" class="empty" data-testid="history-no-match">No mission matches the filter.</p>
-        <ul class="cards">
-          <li v-for="m in shown" :key="m.id" class="card" data-testid="history-mission">
-            <div class="card-head">
-              <code>{{ m.id }}</code>
+        <ul class="hist-list">
+          <li v-for="m in shown" :key="m.id" class="card hist-card" :data-status="m.status" data-testid="history-mission">
+            <header class="hist-head">
+              <code class="hist-id">{{ m.id }}</code>
               <StatusPill :tone="STATUS_TONE[m.status]" :label="STATUS_LABEL[m.status]" />
-            </div>
-            <h3>{{ m.title }}</h3>
-            <p class="muted" data-testid="history-story">
-              Story:
-              <code v-if="m.storyId !== null">{{ m.storyId }}</code>
-              <template v-else>none recorded</template>
-              · system {{ m.system }}
+            </header>
+            <h3 class="hist-title">{{ m.title }}</h3>
+            <p class="hist-meta" data-testid="history-story">
+              <span class="hist-meta-k">Story</span>
+              <code v-if="m.storyId !== null" class="hist-chip">{{ m.storyId }}</code>
+              <span v-else class="hist-nostory">none recorded</span>
+              <span class="hist-meta-sep" aria-hidden="true">·</span>
+              <span class="hist-meta-k">System</span>
+              <span class="hist-chip hist-chip-plain">{{ m.system }}</span>
             </p>
 
-            <h4>Timeline</h4>
-            <ol class="timeline" data-testid="history-timeline">
-              <li data-testid="history-event">
-                <span class="tag">STARTED</span> <time>{{ m.startedAt }}</time>
+            <h4 class="hist-section">Timeline</h4>
+            <ol class="hist-timeline" data-testid="history-timeline">
+              <li class="hist-event ev-started" data-testid="history-event">
+                <span class="hist-dot" aria-hidden="true"></span>
+                <div class="hist-event-body">
+                  <span class="tag hist-badge">STARTED</span> <time class="hist-time">{{ m.startedAt }}</time>
+                </div>
               </li>
-              <li v-for="c in m.checkpoints" :key="c.id" data-testid="history-event">
-                <span class="tag">CHECKPOINT</span> <code>{{ c.id }}</code> <time>{{ c.createdAt }}</time>
-                <div>{{ c.summary }}</div>
-                <details v-if="c.remainingSteps.length > 0 || c.context">
-                  <summary>Details</summary>
-                  <p v-if="c.context" class="muted">{{ c.context }}</p>
-                  <h5>Remaining steps <span class="tag">historical record as of this checkpoint, not the current plan</span></h5>
-                  <ul>
-                    <li v-for="(s, i) in c.remainingSteps" :key="i">{{ s }}</li>
-                  </ul>
-                </details>
+              <li v-for="c in m.checkpoints" :key="c.id" class="hist-event ev-checkpoint" data-testid="history-event">
+                <span class="hist-dot" aria-hidden="true"></span>
+                <div class="hist-event-body">
+                  <span class="tag hist-badge">CHECKPOINT</span> <code class="hist-ckpt-id">{{ c.id }}</code> <time class="hist-time">{{ c.createdAt }}</time>
+                  <div class="hist-ckpt-sum">{{ c.summary }}</div>
+                  <details v-if="c.remainingSteps.length > 0 || c.context" class="hist-details">
+                    <summary>Details</summary>
+                    <p v-if="c.context" class="muted">{{ c.context }}</p>
+                    <h5>Remaining steps <span class="tag">historical record as of this checkpoint, not the current plan</span></h5>
+                    <ul>
+                      <li v-for="(st, i) in c.remainingSteps" :key="i">{{ st }}</li>
+                    </ul>
+                  </details>
+                </div>
               </li>
-              <li v-if="m.checkpointCount === 0" class="muted" data-testid="history-no-checkpoints">No checkpoints recorded.</li>
-              <li v-if="m.checkpointsTruncated" class="muted" data-testid="history-ckpt-truncated">
+              <li v-if="m.checkpointsTruncated" class="hist-note muted" data-testid="history-ckpt-truncated">
                 Showing the first {{ m.checkpoints.length }} of {{ m.checkpointCount }} checkpoints.
               </li>
-              <li v-if="m.status !== 'in_progress'" data-testid="history-event">
-                <span class="tag">{{ STATUS_LABEL[m.status] }}</span> <time>{{ m.updatedAt }}</time>
+              <li v-if="m.status !== 'in_progress'" class="hist-event" :class="`ev-${m.status}`" data-testid="history-event">
+                <span class="hist-dot" aria-hidden="true"></span>
+                <div class="hist-event-body">
+                  <span class="tag hist-badge">{{ STATUS_LABEL[m.status] }}</span> <time class="hist-time">{{ m.updatedAt }}</time>
+                </div>
               </li>
             </ol>
+            <p v-if="m.checkpointCount === 0" class="hist-info" data-testid="history-no-checkpoints">No checkpoints recorded.</p>
 
-            <h4>Final summary</h4>
-            <p v-if="m.summary !== null" data-testid="history-summary">{{ m.summary }}</p>
-            <p v-else class="muted" data-testid="history-summary">{{ m.status === 'in_progress' ? 'Not finished yet.' : 'No final summary recorded.' }}</p>
+            <section class="hist-result" :class="{ 'hist-result-empty': m.summary === null }" aria-label="Final summary">
+              <h4 class="hist-section">Final summary</h4>
+              <template v-if="m.summary !== null">
+                <p class="hist-summary" :class="{ 'hist-clamp': isLong(m.summary) && !expanded.has(m.id) }" data-testid="history-summary">{{ m.summary }}</p>
+                <button v-if="isLong(m.summary)" type="button" class="hist-toggle" :aria-expanded="expanded.has(m.id)" data-testid="history-summary-toggle" @click="toggle(m.id)">
+                  {{ expanded.has(m.id) ? 'Show less' : 'Show full summary' }}
+                </button>
+              </template>
+              <p v-else class="muted hist-summary" data-testid="history-summary">{{ m.status === 'in_progress' ? 'Not finished yet.' : 'No final summary recorded.' }}</p>
+            </section>
           </li>
         </ul>
       </template>

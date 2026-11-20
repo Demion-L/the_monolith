@@ -12,6 +12,9 @@
   --warn: #d29922;
   --err: #f85149;
   --demo: #f0b429;
+  --ev-start: #5ee6ff;
+  --ev-checkpoint: #a78bfa;
+  --ev-cancelled: #d29922;
   color-scheme: dark;
   /* Type scale (UI-003D). Small labels never go below 12px. */
   --fs-body: 16px;
@@ -475,6 +478,59 @@ button:disabled { opacity: 0.5; cursor: default; }
 @media (max-width: 900px) {
   .xg-layout { grid-template-columns: minmax(0, 1fr); }
   .xg-viewport { height: 60vh; }
+}
+
+/* Development History (UX-005). Tokens only; the glass finish lives in the Cosmic Glass skin. */
+.hist-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; margin: 8px 0 20px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.hist-field { display: grid; gap: 6px; min-width: 0; }
+.hist-field-k { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.hist-field select, .hist-field input { box-sizing: border-box; min-height: 40px; padding: 8px 12px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-secondary); }
+.hist-field-status { flex: 0 0 200px; }
+.hist-field-search { flex: 1 1 280px; }
+.hist-shown { margin: 0 0 10px; font-size: var(--fs-meta); }
+.hist-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 24px; }
+.hist-card { padding: 20px 24px; border-radius: 12px; border-left: 4px solid var(--border); }
+.hist-card[data-status="completed"] { border-left-color: var(--ok); }
+.hist-card[data-status="in_progress"] { border-left-color: var(--ev-start); }
+.hist-card[data-status="failed"] { border-left-color: var(--err); }
+.hist-card[data-status="cancelled"] { border-left-color: var(--ev-cancelled); }
+.hist-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.hist-id { font-weight: 700; letter-spacing: 0.04em; color: var(--accent); }
+.hist-title { margin: 8px 0 8px; font-size: var(--fs-project); line-height: var(--lh-heading); }
+.hist-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 6px; font-size: var(--fs-secondary); }
+.hist-meta-k { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.hist-meta-sep { color: var(--muted); }
+.hist-chip { padding: 1px 10px; border: 1px solid var(--border); border-radius: 10px; }
+.hist-chip-plain { color: var(--muted); }
+.hist-nostory { color: var(--muted); font-size: var(--fs-meta); font-style: italic; opacity: 0.8; }
+.hist-section { margin: 20px 0 10px; font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); }
+.hist-timeline { list-style: none; margin: 0; padding: 0 0 0 4px; position: relative; display: grid; gap: 14px; }
+.hist-timeline::before { content: ""; position: absolute; left: 9px; top: 8px; bottom: 8px; width: 1px; background: var(--border); }
+.hist-event { position: relative; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 14px; align-items: start; --ev: var(--muted); }
+.hist-event.ev-started { --ev: var(--ev-start); }
+.hist-event.ev-checkpoint { --ev: var(--ev-checkpoint); }
+.hist-event.ev-completed { --ev: var(--ok); }
+.hist-event.ev-failed { --ev: var(--err); }
+.hist-event.ev-cancelled { --ev: var(--ev-cancelled); }
+.hist-dot { width: 11px; height: 11px; margin-top: 5px; border-radius: 50%; background: var(--ev); box-shadow: 0 0 0 3px var(--surface-2); }
+.hist-badge { color: var(--ev); border-color: var(--ev); font-weight: 700; letter-spacing: 0.1em; }
+.hist-time { color: var(--muted); font-size: var(--fs-meta); margin-left: 6px; }
+.hist-ckpt-id { margin-left: 4px; font-size: var(--fs-meta); }
+.hist-ckpt-sum { margin-top: 6px; font-size: var(--fs-secondary); line-height: var(--lh-body); overflow-wrap: anywhere; }
+.hist-details { margin-top: 6px; font-size: var(--fs-secondary); }
+.hist-details summary { cursor: pointer; color: var(--accent); }
+.hist-note { list-style: none; padding-left: 26px; font-size: var(--fs-meta); }
+.hist-info { margin: 12px 0 0 !important; padding: 6px 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--muted); font-size: var(--fs-secondary); }
+.hist-result { margin-top: 20px; padding: 14px 18px; border: 1px solid var(--border); border-left: 3px solid var(--ok); border-radius: 10px; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.hist-result-empty { border-left-color: var(--border); }
+.hist-result .hist-section { margin-top: 0; }
+.hist-summary { margin: 0 !important; line-height: var(--lh-body); overflow-wrap: anywhere; white-space: pre-line; }
+.hist-clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.hist-toggle { margin-top: 8px; padding: 4px 0; min-height: 32px; background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.hist-toggle:focus-visible, .hist-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) {
+  .hist-card { padding: 16px; }
+  .hist-field-status, .hist-field-search { flex: 1 1 100%; }
 }
 
 /* ---- Mission Command Overview (UI-009): few large blocks, bounded text, theme tokens only ---- */

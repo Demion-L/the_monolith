@@ -36,4 +36,14 @@ export declare function runMissionShow(args: string[], targetDir?: string): Prom
 export declare function runMissionCheckpoint(args: string[], targetDir?: string): Promise<void>;
 export declare function runMissionCheckpoints(args: string[], targetDir?: string): Promise<void>;
 export declare function runMissionFinish(args: string[], targetDir?: string): Promise<void>;
+/**
+ * `monolith mission enroll [--agent <name>] [--session <id>] [--story <ID>] [--json]`
+ * Host-neutral entry to Core enrollment: registers (or reuses) the Mission of THIS worktree for implementation work.
+ * Exit status: 0 CREATED/REUSED/SKIPPED, 3 CONFLICT, 4 UNAVAILABLE.
+ */
+export declare function runMissionEnroll(args: string[], targetDir?: string): Promise<number>;
+/** `monolith mission current [--json]` — active Missions owned by this worktree, and active Missions of other contexts with what is known about them. */
+export declare function runMissionCurrent(args: string[], targetDir?: string): Promise<void>;
+/** `monolith mission handoff <id> --reason "..." [--agent <name>] [--session <id>]` — explicit takeover of an in_progress Mission. */
+export declare function runMissionHandoff(args: string[], targetDir?: string): Promise<void>;
 //# sourceMappingURL=cli.d.ts.map

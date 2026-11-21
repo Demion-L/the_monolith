@@ -13,6 +13,7 @@
  */
 import { mutateState, readState } from './state-keeper.js';
 import { MissionNotFoundError, MissionNotActiveError, CheckpointNotFoundError, ValidationError } from './errors.js';
+import { assertMissionAccess } from './context.js';
 // `context` must not become an unbounded free-form blob (explicit
 // requirement for this story) — every text field carries an explicit upper
 // bound, enforced here at creation time. These are generous for a human/AI
@@ -63,7 +64,9 @@ function nextCheckpointId(checkpoints, missionId) {
  * lose an update — a direct consequence of reusing mutateState, not new
  * concurrency design.
  */
-export async function createCheckpoint(target, missionId, input) {
+export async function createCheckpoint(target, missionId, input, 
+/** Managed workflow: when given, an owned Mission can only be checkpointed from its owner's worktree. */
+actor) {
     const summary = requireBoundedString(input.summary, 'summary', MAX_SUMMARY_LENGTH);
     const remainingStepsRaw = input.remainingSteps ?? [];
     if (!Array.isArray(remainingStepsRaw)) {
@@ -81,6 +84,7 @@ export async function createCheckpoint(target, missionId, input) {
         const mission = draft.tactical.missions[missionId];
         if (!mission)
             throw new MissionNotFoundError(missionId);
+        assertMissionAccess(mission, actor, 'recording a checkpoint');
         if (mission.status !== 'in_progress') {
             throw new MissionNotActiveError(missionId, mission.status);
         }

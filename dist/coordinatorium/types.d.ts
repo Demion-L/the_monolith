@@ -12,7 +12,9 @@
  * migrated or overwritten implicitly. The one explicit way to bring a schema-2
  * file across is `monolith state adopt --upgrade-v2` (see adopt.ts).
  *
- * v3 over v2: `Mission.storyId` (optional).
+ * v3 over v2: `Mission.storyId` (optional). `Mission.owner` (optional, Autonomous Execution Discipline) is a
+ * backward-compatible addition of the same kind: a file without it stays valid and is never re-interpreted,
+ * so the schema version is unchanged. (An OLDER binary that rewrites the file drops `owner`; it cannot corrupt it.)
  */
 export declare const STATE_SCHEMA_VERSION = 3;
 /** The only older schema `monolith state adopt --upgrade-v2` can carry over (an explicit, one-off operation). */
@@ -21,6 +23,35 @@ export declare const UPGRADABLE_SCHEMA_VERSION_V2 = 2;
 export declare const STORY_ID_RE: RegExp;
 export type MissionStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 export type MissionResult = Exclude<MissionStatus, 'in_progress'>;
+/**
+ * Execution-context ownership of a Mission (Autonomous Execution Discipline). It is COORDINATION metadata, not
+ * authentication: a session id or a path proves nothing about who is calling. It only lets managed workflows avoid
+ * one agent finishing another agent's Mission by accident. A Mission without `owner` (every manual/legacy one) is
+ * unowned and keeps its old, unrestricted semantics.
+ */
+export interface MissionOwner {
+    /** Host adapter name, e.g. "claude-code". Informational: ownership is decided by `worktree`. */
+    agent: string;
+    /** Real path of the worktree (execution context identity). A branch is NOT an identity: several agents may share one. */
+    worktree: string;
+    /** Session that last enrolled or resumed the Mission (a restarted session gets a new id). */
+    sessionId?: string;
+    /** Branch at enrollment time. Informational only. */
+    branch?: string;
+    /** How the Mission was enrolled, e.g. "hook:PreToolUse" or "cli". */
+    source: string;
+    enrolledAt: string;
+    /** Earlier owners, oldest first (explicit handoffs only; bounded). */
+    previous?: PreviousOwner[];
+}
+export interface PreviousOwner {
+    agent: string;
+    worktree: string;
+    sessionId?: string;
+    releasedAt: string;
+    reason: string;
+}
+export declare const MAX_PREVIOUS_OWNERS = 10;
 export interface Mission {
     id: string;
     title: string;
@@ -35,6 +66,8 @@ export interface Mission {
      * current Story.
      */
     storyId?: string;
+    /** Set only by enrollment / handoff. Absent on manual and legacy Missions. */
+    owner?: MissionOwner;
 }
 /** Reserved for the Strategic Coordinatorium. No mutations in v0.1. */
 export interface StrategicState {

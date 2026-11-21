@@ -72,6 +72,9 @@ Mission usage:
   monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
   monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
   monolith mission checkpoints <missionId>
+  monolith mission enroll [--agent <name>] [--session <id>] [--story <ID>] [--json]
+  monolith mission current [--json]
+  monolith mission handoff <id> --reason "..." [--agent <name>]
 
 Brief usage:
   monolith state status
@@ -156,7 +159,7 @@ async function main() {
         case 'mission': {
             const sub = args[1];
             const rest = args.slice(2);
-            const { runMissionStart, runMissionList, runMissionShow, runMissionFinish, runMissionCheckpoint, runMissionCheckpoints, } = await import('../coordinatorium/cli.js');
+            const { runMissionStart, runMissionList, runMissionShow, runMissionFinish, runMissionCheckpoint, runMissionCheckpoints, runMissionEnroll, runMissionCurrent, runMissionHandoff, } = await import('../coordinatorium/cli.js');
             switch (sub) {
                 case 'start':
                     await runMissionStart(rest);
@@ -175,6 +178,18 @@ async function main() {
                     break;
                 case 'checkpoints':
                     await runMissionCheckpoints(rest);
+                    break;
+                case 'enroll': {
+                    const code = await runMissionEnroll(rest);
+                    if (code !== 0)
+                        process.exit(code);
+                    break;
+                }
+                case 'current':
+                    await runMissionCurrent(rest);
+                    break;
+                case 'handoff':
+                    await runMissionHandoff(rest);
                     break;
                 default:
                     console.error(`Unknown mission subcommand: ${sub ?? '(none)'}\n`);

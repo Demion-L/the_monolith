@@ -94,6 +94,26 @@ export interface HandoverOwnerDecision {
     message: string;
     basis: string;
 }
+/**
+ * Execution discipline (Autonomous Execution Discipline). Additive. States what is configured and recorded; it never
+ * says that enforcement "works" — only that it is configured and whether the project's hook was found.
+ */
+export interface HandoverExecution {
+    mode: 'off' | 'managed' | 'UNKNOWN';
+    enforcement: 'inactive-off' | 'configured-hook-not-found' | 'configured-hook-found' | 'config-problem' | 'UNKNOWN';
+    summary: string;
+    /** Active missions with their recorded owner relation to the worktree this report was run in. */
+    activeContexts: {
+        missionId: string;
+        relation: 'this-worktree' | 'other-worktree' | 'unowned';
+        agent: string | null;
+        worktree: string | null;
+        /** `confirmed-orphaned` only when the owner's worktree no longer exists; silence is `unknown`, never "dead". */
+        liveness: 'confirmed-orphaned' | 'unknown' | 'not-applicable';
+    }[];
+    /** Managed mode, uncommitted changes, and no active mission owned by this worktree. null when it cannot be established. */
+    untrackedImplementation: boolean | null;
+}
 export interface HandoverReport {
     schema: typeof HANDOVER_SCHEMA;
     status: HandoverStatus;
@@ -174,6 +194,8 @@ export interface HandoverReport {
         /** Stories with at least one completed mission and no VERIFIED evidence. */
         storiesWithoutVerifiedEvidence: string[];
     };
+    /** Additive. Absent from reports of older versions. */
+    execution: HandoverExecution;
     outstanding: {
         issues: HandoverIssue[];
         ownerDecisions: HandoverOwnerDecision[];

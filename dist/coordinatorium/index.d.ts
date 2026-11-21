@@ -1,6 +1,6 @@
-export type { CoordinatoriumState, StrategicState, TacticalState, Mission, MissionStatus, MissionResult, Checkpoint, } from './types.js';
+export type { CoordinatoriumState, StrategicState, TacticalState, Mission, MissionStatus, MissionResult, Checkpoint, MissionOwner, PreviousOwner, } from './types.js';
 export { STATE_SCHEMA_VERSION, STORY_ID_RE, createInitialState } from './types.js';
-export { CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, LockUnsafeError, StateFileError, MissionNotFoundError, InvalidTransitionError, ValidationError, MissionNotActiveError, CheckpointNotFoundError, StateLocationError, StateAdoptionRequiredError, StateAdoptError, } from './errors.js';
+export { CoordinatoriumError, StateCorruptedError, StateSchemaError, LockTimeoutError, LockUnsafeError, StateFileError, MissionNotFoundError, InvalidTransitionError, ValidationError, MissionNotActiveError, CheckpointNotFoundError, MissionOwnershipError, StateLocationError, StateAdoptionRequiredError, StateAdoptError, } from './errors.js';
 export type { CoordinatoriumErrorCode } from './errors.js';
 export { readState, mutateState, validateState, stateFilePath, STATE_FILE_NAME, MAX_STATE_BYTES, projectTarget, trustedDirectoryTarget, } from './state-keeper.js';
 export type { StateWriteTarget, StateReadTarget } from './state-keeper.js';
@@ -12,4 +12,10 @@ export { resolveStateLocation, stateReadTargetOf, stateWriteTargetOf, collectSta
 export type { StateLocation, StateProvenance, StateMode, StateFileInfo, SplitBrainReport, LocalStateCandidate } from './state-location.js';
 export { adoptState, planAdoption } from './adopt.js';
 export type { AdoptPlan, AdoptResult, AdoptOptions } from './adopt.js';
+export { enrollMission, handoffMission, currentMissions, enrollmentIdentity, autoMissionTitle } from './enrollment.js';
+export type { EnrollmentStatus, EnrollmentResult } from './enrollment.js';
+export { deriveExecutionContext, resolveWorktreeRoot, describeOwnership, assertMissionAccess } from './context.js';
+export type { ExecutionContext, OwnershipView, OwnershipRelation, OwnerLiveness } from './context.js';
+export { readExecutionConfig } from './execution-config.js';
+export type { ExecutionConfig, ExecutionMode, FailurePolicy } from './execution-config.js';
 //# sourceMappingURL=index.d.ts.map

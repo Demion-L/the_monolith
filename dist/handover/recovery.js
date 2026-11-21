@@ -125,7 +125,7 @@ export function renderRecoveryPacket(p, maxChars = RECOVERY_MAX_CHARS) {
     else if (gov.value.errors + gov.value.warnings === 0)
         L.push('Governance check: no issues.');
     else {
-        L.push(`Governance check: ${gov.value.errors} error(s), ${gov.value.warnings} warning(s). Run \`monolith governance check\`. Fix formats per .monolith/protocols/governance/document-formats.md.`);
+        L.push(`Governance check: ${gov.value.errors} error(s), ${gov.value.warnings} warning(s). Run \`monolith governance check\`. Format contract: .monolith/protocols/governance/document-formats.md (if absent, run \`monolith update\`).`);
         for (const f of gov.value.top)
             L.push(`- [${f.severity}] ${f.area} ${f.code}${f.path ? ` (${f.path})` : ''}`);
         if (gov.value.more > 0)

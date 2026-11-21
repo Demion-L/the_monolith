@@ -81,6 +81,16 @@ export function renderHandoverReport(r, color = false) {
     for (const a of m.active)
         lines.push(`  active: ${one(a.id)} ${one(a.title)} (${a.checkpointCount} checkpoint(s))`);
     lines.push('');
+    const x = r.execution;
+    lines.push('## Execution discipline');
+    lines.push(`  Mode: ${x.mode}   Enforcement: ${x.enforcement}`);
+    lines.push(`  ${one(x.summary)}`);
+    for (const c of x.activeContexts) {
+        lines.push(`  - ${one(c.missionId)}: ${c.relation === 'unowned' ? 'no owner recorded (manual/legacy mission)' : `${c.relation}, owner ${one(c.agent ?? '?')} @ ${one(c.worktree ?? '?')}; owner liveness ${c.liveness.toUpperCase()}`}`);
+    }
+    if (x.untrackedImplementation === true)
+        lines.push('  UNTRACKED IMPLEMENTATION: uncommitted changes exist and no active mission is owned by this worktree.');
+    lines.push('');
     const a = r.architecture;
     lines.push('## Architecture decisions');
     lines.push(a.available ? `  ${a.total} ADR(s): ${a.accepted} accepted, ${a.proposed} proposed${a.other.map((o) => `, ${o.count} ${one(o.status)}`).join('')}; ${a.unrecognized} unrecognised, ${a.missingMetadata} with missing metadata${a.complete ? '' : ' (list incomplete)'}` : '  UNKNOWN (docs/adr not available)');

@@ -11,6 +11,9 @@ import { buildGovernanceReport } from '../governance/check.js';
 import { loadStoryAuthority, readDashboardModel, resolveStoryStateIn } from '../readmodel/index.js';
 import { assessAll, evidenceStore, listEvidence, EVIDENCE_REL } from './evidence.js';
 import { readGitView } from './git.js';
+import { buildExecutionStatus } from '../hooks/execution-status.js';
+import { resolveWorktreeRoot } from '../coordinatorium/context.js';
+import { existsSync } from 'fs';
 import { HANDOVER_SCHEMA, } from './types.js';
 export const MAX_HANDOVER_STORIES = 200;
 export const MAX_HANDOVER_ISSUES = 50;
@@ -22,6 +25,7 @@ const LIMITATIONS = [
     'A matching revision shows the committed files are unchanged since the check; it does not show the check is adequate.',
     'A finished mission does not finalize its story. Finalization is a separate, owner-approved step (`monolith finalize`).',
     'No issue listed does not mean the project is correct.',
+    'Managed Execution covers only the file tools and Bash calls the host routes through its hook; a write made another way, or with the hook absent, is not enrolled. Mission ownership is coordination, not authentication.',
 ];
 const clean = (s, max = 300) => {
     const one = sanitizeSingleLine(s);
@@ -171,6 +175,40 @@ export function buildHandoverReport(projectRoot, deps = {}) {
         issues.push({ code: 'GIT_UNAVAILABLE', kind: 'attention', message: 'No usable git repository: evidence freshness is UNKNOWN.', basis: 'git' });
     else if (view.dirty === true)
         issues.push({ code: 'WORKING_TREE_DIRTY', kind: 'attention', message: 'The working tree has uncommitted changes; checks recorded earlier may not describe it.', basis: 'git status' });
+    // ---- Execution discipline ----
+    const exec = buildExecutionStatus(projectRoot);
+    const here = resolveWorktreeRoot(projectRoot);
+    const activeContexts = (hist?.missions ?? [])
+        .filter((m) => m.status === 'in_progress')
+        .slice(0, MAX_HANDOVER_REFS)
+        .map((m) => {
+        const o = m.owner ?? null;
+        if (o === null)
+            return { missionId: m.id, relation: 'unowned', agent: null, worktree: null, liveness: 'not-applicable' };
+        if (o.worktree === here)
+            return { missionId: m.id, relation: 'this-worktree', agent: o.agent, worktree: o.worktree, liveness: 'not-applicable' };
+        return { missionId: m.id, relation: 'other-worktree', agent: o.agent, worktree: o.worktree, liveness: existsSync(o.worktree) ? 'unknown' : 'confirmed-orphaned' };
+    });
+    const managed = exec.config.mode === 'managed' && exec.config.status === 'ok';
+    const ownsActive = activeContexts.some((c) => c.relation === 'this-worktree');
+    const untracked = !managed ? null : view.dirty === null ? null : view.dirty && !ownsActive;
+    const execution = {
+        mode: exec.config.status === 'ok' ? exec.config.mode : 'UNKNOWN',
+        enforcement: exec.enforcement,
+        summary: exec.summary,
+        activeContexts,
+        untrackedImplementation: untracked,
+    };
+    if (exec.enforcement === 'configured-hook-not-found' || exec.enforcement === 'config-problem') {
+        issues.push({ code: 'EXECUTION_ENFORCEMENT_UNCONFIRMED', kind: 'attention', message: clean(exec.summary), basis: 'monolith hook status' });
+    }
+    if (untracked === true) {
+        issues.push({ code: 'UNTRACKED_IMPLEMENTATION', kind: 'attention', message: 'Managed mode is configured, the working tree has uncommitted changes, but no active mission is owned by this worktree: the changes were not made under a tracked mission (or were made through a path the hook does not control).', basis: 'monolith mission current' });
+    }
+    for (const c of activeContexts) {
+        if (c.liveness === 'confirmed-orphaned')
+            issues.push({ code: 'MISSION_OWNER_ORPHANED', kind: 'attention', message: `${c.missionId} is still in progress but its owner's worktree no longer exists; continue it only through an explicit handoff.`, basis: 'monolith mission handoff' });
+    }
     // ---- Stories ----
     const ctx = loadStoryAuthority(projectRoot, root);
     const storyIds = new Set();
@@ -315,6 +353,7 @@ export function buildHandoverReport(projectRoot, deps = {}) {
             recordsTruncated: listing.truncated,
             storiesWithoutVerifiedEvidence: unverifiedStories.sort(compareStrings),
         },
+        execution,
         outstanding: {
             issues: shownIssues,
             ownerDecisions: decisions.sort((a, b) => compareStrings(a.code, b.code) || compareStrings(a.subject, b.subject)).slice(0, MAX_HANDOVER_ISSUES),
@@ -343,6 +382,7 @@ function emptyReport() {
         missions: { total: 0, inProgress: 0, completed: 0, failed: 0, cancelled: 0, checkpoints: 0, orphanCheckpoints: 0, withoutStoryLink: 0, activeWithoutCheckpoint: [], failedMissions: [], active: [], truncated: false },
         architecture: { available: false, total: 0, accepted: 0, proposed: 0, other: [], unrecognized: 0, missingMetadata: 0, complete: false },
         verification: { git: { available: false, head: null, dirty: null }, counts: { verified: 0, reported: 0, stale: 0, unknown: 0, failed: 0 }, items: [], unreadableRecords: 0, recordsTruncated: false, storiesWithoutVerifiedEvidence: [] },
+        execution: { mode: 'UNKNOWN', enforcement: 'UNKNOWN', summary: 'not established', activeContexts: [], untrackedImplementation: null },
         outstanding: { issues: [], ownerDecisions: [] },
         sources: [],
         limitations: LIMITATIONS,

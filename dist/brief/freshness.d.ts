@@ -129,7 +129,12 @@ export { maskNonContent };
 export declare function parseActiveStoryClaim(excerpt: string | null): StoryClaim;
 /** `Active Story: <text>` line of roadmap-index.md (outside code fences and comments). */
 export declare function parseRoadmapActiveStory(content: string): string | null;
-/** Table rows `| id | title | STATUS | date |` of roadmap-index.md (outside code fences and comments). */
+/**
+ * A markdown table whose header's first cell is "Phase"/"Phases" lists PHASES, not stories. Its rows (and those of
+ * a "Completion Summary" phase table) must never be read as story rows: `0A | … | PLANNED` is a phase, not a story.
+ */
+export declare function isPhaseTableHeader(headerLine: string): boolean;
+/** Table rows `| id | title | STATUS | date |` of roadmap-index.md (outside code fences and comments). Phase tables are skipped. */
 export declare function parseRoadmapStatuses(content: string): Map<string, string>;
 /** `### [STORY ]<id> — title` followed by `**Status:** X` in story-index.md (outside code fences and comments). */
 export declare function parseStoryIndexStatuses(content: string): Map<string, string>;

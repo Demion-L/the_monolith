@@ -128,6 +128,22 @@ function storyLabel(s: HandoverReport['progress']['stories'][number]): string {
         <button type="button" class="link" @click="emit('navigate', 'decisions')">Architecture Decisions</button>
       </p>
 
+      <template v-if="r.execution">
+        <h3>Execution discipline</h3>
+        <p data-testid="handover-execution">
+          <StatusPill :tone="r.execution.enforcement === 'configured-hook-found' ? 'info' : r.execution.enforcement === 'inactive-off' ? 'neutral' : 'warn'" :label="`${r.execution.mode.toUpperCase()} · ${r.execution.enforcement}`" />
+          {{ r.execution.summary }}
+        </p>
+        <ul v-if="r.execution.activeContexts.length > 0" class="list" data-testid="handover-contexts">
+          <li v-for="c in r.execution.activeContexts" :key="c.missionId">
+            <code>{{ c.missionId }}</code>
+            <template v-if="c.relation === 'unowned'"> — no owner recorded (manual/legacy mission)</template>
+            <template v-else> — {{ c.relation }}, owner {{ c.agent }}; owner liveness {{ c.liveness.toUpperCase() }}</template>
+          </li>
+        </ul>
+        <p v-if="r.execution.untrackedImplementation === true" class="muted" data-testid="handover-untracked">UNTRACKED IMPLEMENTATION: uncommitted changes exist and no active mission is owned by this worktree.</p>
+      </template>
+
       <h3>Verification evidence</h3>
       <p class="muted" data-testid="handover-git">
         Git:

@@ -89,7 +89,7 @@ async function readStateForBrief(targetDir, root, diagnostics) {
         diagnostics.push({
             code: 'STATE_NOT_INITIALIZED',
             severity: 'info',
-            message: `${provenance.source} does not exist — no missions have ever been recorded.`,
+            message: `${provenance.source} does not exist. Operational state file is absent; historical mission records are unavailable from this source.`,
             readCode: 'FILE_MISSING',
         });
         return { summary: { status: 'absent', provenance }, state: createInitialState() };

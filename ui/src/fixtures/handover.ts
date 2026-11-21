@@ -28,6 +28,13 @@ export const demoHandover: HandoverReport = {
       { id: 'EVD-0005', storyId: 'S-4', command: 'pnpm test', result: 'fail', provenance: 'OBSERVED', level: 'FAILED', freshness: 'REVISION_MATCH', freshnessReason: 'HEAD_MATCH_CLEAN', recordedAt: '2026-02-03T11:00:00.000Z', gitHead: '0123456789abcdef0123456789abcdef01234567', dirty: false, source: '.monolith/memory/long-term/verification/EVD-0005.json' },
     ],
   },
+  execution: {
+    mode: 'off',
+    enforcement: 'inactive-off',
+    summary: 'Managed Execution: off (no enrolment is required; missions are registered manually).',
+    activeContexts: [],
+    untrackedImplementation: null,
+  },
   outstanding: {
     issues: [
       { code: 'ACTIVE_AND_FINALIZED', kind: 'conflict', message: '[activeStory] The story is both active and finalized (demo).', basis: '.monolith/memory/working/active.md' },

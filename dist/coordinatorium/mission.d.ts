@@ -6,7 +6,9 @@
  * state-keeper.ts owns persistence and never knows what a mission is.
  */
 import { type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
+import { type ExecutionContext } from './context.js';
 import { type Mission, type MissionResult } from './types.js';
+export declare function nextMissionId(missions: Record<string, Mission>): string;
 export interface StartMissionInput {
     title: string;
     system: string;
@@ -30,5 +32,7 @@ export interface FinishMissionInput {
  * starting status (already completed/failed/cancelled) is rejected — once
  * terminal, a mission's lifecycle is closed.
  */
-export declare function finishMission(target: StateWriteTarget, id: string, input: FinishMissionInput): Promise<Mission>;
+export declare function finishMission(target: StateWriteTarget, id: string, input: FinishMissionInput, 
+/** Managed workflow: when given, an owned Mission can only be finished from its owner's worktree. */
+actor?: Pick<ExecutionContext, 'worktree'>): Promise<Mission>;
 //# sourceMappingURL=mission.d.ts.map

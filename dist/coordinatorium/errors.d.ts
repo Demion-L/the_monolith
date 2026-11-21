@@ -7,7 +7,7 @@
  * string-matching messages.
  */
 import type { ProjectFileErrorCode } from '../root/index.js';
-export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'LOCK_UNSAFE' | 'STATE_FILE_UNSAFE' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'CHECKPOINT_NOT_FOUND' | 'STATE_LOCATION_INVALID' | 'STATE_ADOPTION_REQUIRED' | 'STATE_ADOPT_REFUSED';
+export type CoordinatoriumErrorCode = 'STATE_CORRUPTED' | 'STATE_SCHEMA_INVALID' | 'LOCK_TIMEOUT' | 'LOCK_CREATION_FAILED' | 'LOCK_UNSAFE' | 'STATE_FILE_UNSAFE' | 'MISSION_NOT_FOUND' | 'INVALID_TRANSITION' | 'VALIDATION_ERROR' | 'MISSION_NOT_ACTIVE' | 'MISSION_OWNERSHIP' | 'CHECKPOINT_NOT_FOUND' | 'STATE_LOCATION_INVALID' | 'STATE_ADOPTION_REQUIRED' | 'STATE_ADOPT_REFUSED';
 export declare class CoordinatoriumError extends Error {
     readonly code: CoordinatoriumErrorCode;
     constructor(code: CoordinatoriumErrorCode, message: string);
@@ -124,5 +124,12 @@ export declare class StateAdoptionRequiredError extends CoordinatoriumError {
 /** `monolith state adopt` refused the source or the destination. Nothing was written (or, after a backup, the destination was left as it was). */
 export declare class StateAdoptError extends CoordinatoriumError {
     constructor(message: string);
+}
+/**
+ * A managed (owned) Mission was addressed from another execution context. Nothing was changed. The explicit way
+ * to take it over is `monolith mission handoff <id> --reason "..."`.
+ */
+export declare class MissionOwnershipError extends CoordinatoriumError {
+    constructor(missionId: string, ownerWorktree: string, operation: string);
 }
 //# sourceMappingURL=errors.d.ts.map

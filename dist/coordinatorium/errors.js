@@ -168,3 +168,14 @@ export class StateAdoptError extends CoordinatoriumError {
         this.name = 'StateAdoptError';
     }
 }
+/**
+ * A managed (owned) Mission was addressed from another execution context. Nothing was changed. The explicit way
+ * to take it over is `monolith mission handoff <id> --reason "..."`.
+ */
+export class MissionOwnershipError extends CoordinatoriumError {
+    constructor(missionId, ownerWorktree, operation) {
+        super('MISSION_OWNERSHIP', `Mission "${missionId}" is owned by another execution context (worktree ${ownerWorktree}); ${operation} was refused and nothing was changed. ` +
+            `If that work was handed over or abandoned, take it over explicitly: monolith mission handoff ${missionId} --reason "..."`);
+        this.name = 'MissionOwnershipError';
+    }
+}

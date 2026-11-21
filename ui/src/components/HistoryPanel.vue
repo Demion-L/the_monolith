@@ -114,6 +114,14 @@ const shown = computed(() => {
               <span class="hist-meta-k">System</span>
               <span class="hist-chip hist-chip-plain">{{ m.system }}</span>
             </p>
+            <p v-if="m.owner" class="hist-meta" data-testid="history-owner" :title="`Recorded owner (coordination metadata, not authentication). Worktree: ${m.owner.worktree}`">
+              <span class="hist-meta-k">Owner</span>
+              <span class="hist-chip hist-chip-plain">{{ m.owner.agent }}</span>
+              <span class="hist-meta-sep" aria-hidden="true">·</span>
+              <span class="hist-meta-k">Worktree</span>
+              <code class="hist-chip">{{ m.owner.worktree.split('/').filter(Boolean).pop() }}</code>
+              <template v-if="m.owner.branch"><span class="hist-meta-sep" aria-hidden="true">·</span><span class="hist-meta-k">Branch</span><code class="hist-chip">{{ m.owner.branch }}</code></template>
+            </p>
 
             <h4 class="hist-section">Timeline</h4>
             <ol class="hist-timeline" data-testid="history-timeline">

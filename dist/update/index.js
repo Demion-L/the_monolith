@@ -103,6 +103,25 @@ function blockItem(projectRoot, root, spec) {
         }
     }
 }
+const DOCUMENT_FORMATS_TEMPLATE = 'monolith/protocols/governance/document-formats.md';
+/**
+ * The normative format contract of the governance documents (roadmap phases, story index, ...). It was added to MONOLITH
+ * after early instances were created, so `monolith update` delivers it when absent. An existing file is never
+ * overwritten: without a stored template version, a different file may be the user's.
+ */
+function documentFormatsItem(projectRoot, r, vars) {
+    const rel = `${r}/protocols/governance/document-formats.md`;
+    const template = readTemplate(DOCUMENT_FORMATS_TEMPLATE, vars);
+    const effect = 'governance checks and the Execution Graph can point to the contract that defines the Roadmap and Story Index formats';
+    const read = readInstanceFile(projectRoot, rel, true);
+    if (read.kind === 'unsafe')
+        return { path: rel, action: 'CONFLICT', reason: `cannot be read safely (${read.detail}); not inspected or changed` };
+    if (read.kind === 'missing')
+        return { path: rel, action: 'ADD', reason: 'governance format contract missing in this instance; new file from the current template', content: template, effect };
+    if (read.content === template)
+        return { path: rel, action: 'UNCHANGED', reason: 'identical to the current template' };
+    return { path: rel, action: 'SKIP', reason: 'exists and differs from the current template (customized or older); not overwritten' };
+}
 const FINALIZE_SKILL_TEMPLATE = 'monolith/skills/finalize-story/SKILL.md';
 /**
  * The `finalize-story` skill against the current template (DOGFOOD-002). A known older template
@@ -182,6 +201,7 @@ export function planUpdate(target) {
         items.push({ path: skillRel, action: 'SKIP', reason: 'exists and differs from the current template (customized or older); not overwritten' });
     }
     items.push(finalizeSkillItem(pr, r, vars));
+    items.push(documentFormatsItem(pr, r, vars));
     items.push(blockItem(pr, r, {
         id: 'agent',
         rel: `${r}/AGENT.md`,
@@ -255,6 +275,8 @@ function chainChecks(projectRoot, r, items, skillText) {
     add('skill → CLI', skillPresent && skillText !== null && /monolith idea add/.test(prose(skillText)), 'the skill calls `monolith idea add`', 'the skill does not call `monolith idea add` (a customized skill may have dropped it)');
     const finItem = state(`${r}/skills/finalize-story/SKILL.md`);
     add('finalize skill → CLI', finItem?.action === 'UNCHANGED', 'the finalize-story skill is identical to the current template', 'the finalize-story skill is missing, outdated, unreadable, or not verified to match the current template (a customized one is never assumed compatible)');
+    const fmt = state(`${r}/protocols/governance/document-formats.md`);
+    add('governance format contract', fmt?.action === 'UNCHANGED' || fmt?.action === 'SKIP', 'document-formats.md is present', 'document-formats.md is missing or unreadable (run `monolith update --apply`)');
     let storage = '';
     try {
         listIdeas(ideaStore(projectRoot));
@@ -274,7 +296,7 @@ export function integrationComplete(plan) {
 }
 /** Apply order: MONOLITH-owned files first, the pointer in the root instruction files last. */
 function rank(item, r) {
-    if (item.path.startsWith(`${r}/skills/idea-capture/`) || item.path.startsWith(`${r}/skills/finalize-story/`))
+    if (item.path.startsWith(`${r}/skills/idea-capture/`) || item.path.startsWith(`${r}/skills/finalize-story/`) || item.path.startsWith(`${r}/protocols/`))
         return 0;
     if (item.path === `${r}/AGENT.md`)
         return 1;

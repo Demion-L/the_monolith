@@ -7,10 +7,11 @@
  */
 import { mutateState, readState } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
+import { assertMissionAccess } from './context.js';
 import { STORY_ID_RE } from './types.js';
 const MISSION_ID_RE = /^MIS-(\d+)$/;
 const MISSION_RESULTS = ['completed', 'failed', 'cancelled'];
-function nextMissionId(missions) {
+export function nextMissionId(missions) {
     let max = 0;
     for (const id of Object.keys(missions)) {
         const match = MISSION_ID_RE.exec(id);
@@ -76,7 +77,9 @@ export async function getMission(target, id) {
  * starting status (already completed/failed/cancelled) is rejected — once
  * terminal, a mission's lifecycle is closed.
  */
-export async function finishMission(target, id, input) {
+export async function finishMission(target, id, input, 
+/** Managed workflow: when given, an owned Mission can only be finished from its owner's worktree. */
+actor) {
     if (!MISSION_RESULTS.includes(input.result)) {
         throw new ValidationError(`"result" must be one of ${MISSION_RESULTS.join(', ')}, got "${String(input.result)}"`);
     }
@@ -84,6 +87,7 @@ export async function finishMission(target, id, input) {
         const mission = draft.tactical.missions[id];
         if (!mission)
             throw new MissionNotFoundError(id);
+        assertMissionAccess(mission, actor, 'finishing it');
         if (mission.status !== 'in_progress') {
             throw new InvalidTransitionError(`Mission "${id}" is already "${mission.status}" and cannot transition to "${input.result}"`);
         }

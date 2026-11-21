@@ -8,12 +8,13 @@
 
 import { mutateState, readState, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, InvalidTransitionError, ValidationError } from './errors.js';
+import { assertMissionAccess, type ExecutionContext } from './context.js';
 import { STORY_ID_RE, type CoordinatoriumState, type Mission, type MissionResult } from './types.js';
 
 const MISSION_ID_RE = /^MIS-(\d+)$/;
 const MISSION_RESULTS: readonly MissionResult[] = ['completed', 'failed', 'cancelled'];
 
-function nextMissionId(missions: Record<string, Mission>): string {
+export function nextMissionId(missions: Record<string, Mission>): string {
   let max = 0;
   for (const id of Object.keys(missions)) {
     const match = MISSION_ID_RE.exec(id);
@@ -99,6 +100,8 @@ export async function finishMission(
   target: StateWriteTarget,
   id: string,
   input: FinishMissionInput,
+  /** Managed workflow: when given, an owned Mission can only be finished from its owner's worktree. */
+  actor?: Pick<ExecutionContext, 'worktree'>,
 ): Promise<Mission> {
   if (!MISSION_RESULTS.includes(input.result)) {
     throw new ValidationError(
@@ -109,6 +112,7 @@ export async function finishMission(
   const { result } = await mutateState(target, (draft: CoordinatoriumState) => {
     const mission = draft.tactical.missions[id];
     if (!mission) throw new MissionNotFoundError(id);
+    assertMissionAccess(mission, actor, 'finishing it');
     if (mission.status !== 'in_progress') {
       throw new InvalidTransitionError(
         `Mission "${id}" is already "${mission.status}" and cannot transition to "${input.result}"`,

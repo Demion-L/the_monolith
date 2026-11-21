@@ -550,7 +550,7 @@ describe('CLI integration', () => {
 // state-keeper.test.ts's mission concurrency test.
 // ---------------------------------------------------------------------------
 
-const COORDINATORIUM_MODULES = ['types', 'errors', 'lock', 'state-keeper', 'mission', 'checkpoint'];
+const COORDINATORIUM_MODULES = ['types', 'errors', 'lock', 'state-keeper', 'context', 'mission', 'checkpoint'];
 
 function transpileCoordinatoriumTo(destDir: string): void {
   mkdirSync(destDir, { recursive: true });

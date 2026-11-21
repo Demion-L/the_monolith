@@ -6,6 +6,8 @@ export type {
   MissionStatus,
   MissionResult,
   Checkpoint,
+  MissionOwner,
+  PreviousOwner,
 } from './types.js';
 export { STATE_SCHEMA_VERSION, STORY_ID_RE, createInitialState } from './types.js';
 
@@ -21,6 +23,7 @@ export {
   ValidationError,
   MissionNotActiveError,
   CheckpointNotFoundError,
+  MissionOwnershipError,
   StateLocationError,
   StateAdoptionRequiredError,
   StateAdoptError,
@@ -54,3 +57,10 @@ export {
 export type { StateLocation, StateProvenance, StateMode, StateFileInfo, SplitBrainReport, LocalStateCandidate } from './state-location.js';
 export { adoptState, planAdoption } from './adopt.js';
 export type { AdoptPlan, AdoptResult, AdoptOptions } from './adopt.js';
+
+export { enrollMission, handoffMission, currentMissions, enrollmentIdentity, autoMissionTitle } from './enrollment.js';
+export type { EnrollmentStatus, EnrollmentResult } from './enrollment.js';
+export { deriveExecutionContext, resolveWorktreeRoot, describeOwnership, assertMissionAccess } from './context.js';
+export type { ExecutionContext, OwnershipView, OwnershipRelation, OwnerLiveness } from './context.js';
+export { readExecutionConfig } from './execution-config.js';
+export type { ExecutionConfig, ExecutionMode, FailurePolicy } from './execution-config.js';

@@ -20,6 +20,7 @@ export type CoordinatoriumErrorCode =
   | 'INVALID_TRANSITION'
   | 'VALIDATION_ERROR'
   | 'MISSION_NOT_ACTIVE'
+  | 'MISSION_OWNERSHIP'
   | 'CHECKPOINT_NOT_FOUND'
   | 'STATE_LOCATION_INVALID'
   | 'STATE_ADOPTION_REQUIRED'
@@ -236,5 +237,20 @@ export class StateAdoptError extends CoordinatoriumError {
   constructor(message: string) {
     super('STATE_ADOPT_REFUSED', message);
     this.name = 'StateAdoptError';
+  }
+}
+
+/**
+ * A managed (owned) Mission was addressed from another execution context. Nothing was changed. The explicit way
+ * to take it over is `monolith mission handoff <id> --reason "..."`.
+ */
+export class MissionOwnershipError extends CoordinatoriumError {
+  constructor(missionId: string, ownerWorktree: string, operation: string) {
+    super(
+      'MISSION_OWNERSHIP',
+      `Mission "${missionId}" is owned by another execution context (worktree ${ownerWorktree}); ${operation} was refused and nothing was changed. ` +
+        `If that work was handed over or abandoned, take it over explicitly: monolith mission handoff ${missionId} --reason "..."`,
+    );
+    this.name = 'MissionOwnershipError';
   }
 }

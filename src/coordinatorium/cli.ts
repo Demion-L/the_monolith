@@ -19,6 +19,8 @@ import {
   describeFile,
 } from './state-location.js';
 import { startMission, listMissions, getMission, finishMission } from './mission.js';
+import { enrollMission, handoffMission, currentMissions } from './enrollment.js';
+import { deriveExecutionContext, describeOwnership } from './context.js';
 import { createCheckpoint, listCheckpoints } from './checkpoint.js';
 import type { Mission, MissionResult, Checkpoint } from './types.js';
 
@@ -126,6 +128,11 @@ function parseRepeatedFlag(args: string[], name: string): string[] {
   return values;
 }
 
+/** Caller identity for managed-workflow ownership checks: the worktree the command runs in. */
+function cliActor(targetDir: string, extra: { sessionId?: string } = {}) {
+  return deriveExecutionContext(targetDir, { agent: process.env.MONOLITH_AGENT?.trim() || 'cli', source: 'cli', ...extra });
+}
+
 function formatMission(m: Mission): string {
   const lines = [
     `  id:         ${m.id}`,
@@ -136,6 +143,9 @@ function formatMission(m: Mission): string {
     `  updatedAt:  ${m.updatedAt}`,
     `  summary:    ${m.summary ?? '(none)'}`,
     ...(m.storyId !== undefined ? [`  storyId:    ${m.storyId}`] : []),
+    ...(m.owner !== undefined
+      ? [`  owner:      ${m.owner.agent} @ ${m.owner.worktree}${m.owner.branch ? ` (${m.owner.branch})` : ''}${m.owner.sessionId ? `, session ${m.owner.sessionId}` : ''}, enrolled via ${m.owner.source}`]
+      : []),
   ];
   return lines.join('\n');
 }
@@ -231,7 +241,7 @@ export async function runMissionCheckpoint(args: string[], targetDir = process.c
       summary,
       remainingSteps,
       context: context ?? null,
-    }),
+    }, cliActor(targetDir)),
   );
   console.log(`Created checkpoint ${checkpoint.id} for mission ${checkpoint.missionId}`);
   console.log(formatCheckpoint(checkpoint));
@@ -265,8 +275,65 @@ export async function runMissionFinish(args: string[], targetDir = process.cwd()
     finishMission(writeTargetFor(targetDir), id, {
       result: result as MissionResult,
       summary: summary ?? undefined,
-    }),
+    }, cliActor(targetDir)),
   );
   console.log(`Mission ${mission.id} finished as ${mission.status}`);
+  console.log(formatMission(mission));
+}
+
+/**
+ * `monolith mission enroll [--agent <name>] [--session <id>] [--story <ID>] [--json]`
+ * Host-neutral entry to Core enrollment: registers (or reuses) the Mission of THIS worktree for implementation work.
+ * Exit status: 0 CREATED/REUSED/SKIPPED, 3 CONFLICT, 4 UNAVAILABLE.
+ */
+export async function runMissionEnroll(args: string[], targetDir = process.cwd()): Promise<number> {
+  const agent = parseFlag(args, '--agent') ?? (process.env.MONOLITH_AGENT?.trim() || 'cli');
+  const ctx = deriveExecutionContext(targetDir, {
+    agent,
+    source: 'cli',
+    sessionId: parseFlag(args, '--session'),
+    storyId: parseFlag(args, '--story'),
+  });
+  let result;
+  try {
+    result = await withWriteGuidance(() => enrollMission(writeTargetFor(targetDir), ctx));
+  } catch (err) {
+    result = { status: 'UNAVAILABLE' as const, missionId: null, reason: err instanceof Error ? err.message : String(err) };
+  }
+  if (args.includes('--json')) console.log(JSON.stringify(result));
+  else console.log(`${result.status}${result.missionId ? ` ${result.missionId}` : ''}: ${result.reason}${result.candidates ? ` (candidates: ${result.candidates.join(', ')})` : ''}`);
+  return result.status === 'CONFLICT' ? 3 : result.status === 'UNAVAILABLE' ? 4 : 0;
+}
+
+/** `monolith mission current [--json]` — active Missions owned by this worktree, and active Missions of other contexts with what is known about them. */
+export async function runMissionCurrent(args: string[], targetDir = process.cwd()): Promise<void> {
+  const ctx = cliActor(targetDir);
+  const target = readTargetFor(targetDir);
+  const mine = await currentMissions(target, ctx);
+  const others = (await listMissions(target)).filter((m) => m.status === 'in_progress' && m.owner !== undefined && m.owner.worktree !== ctx.worktree);
+  if (args.includes('--json')) {
+    console.log(JSON.stringify({ worktree: ctx.worktree, mine: mine.map((m) => m.id), others: others.map((m) => ({ id: m.id, ...describeOwnership(m, ctx) })) }));
+    return;
+  }
+  console.log(`Worktree: ${ctx.worktree}`);
+  console.log(mine.length === 0 ? 'No active mission is owned by this worktree.' : `Active mission(s) of this worktree: ${mine.map((m) => `${m.id} (${m.title})`).join('; ')}`);
+  for (const m of others) {
+    const v = describeOwnership(m, ctx);
+    console.log(`Other context: ${m.id} — ${v.detail}${v.liveness === 'confirmed-orphaned' ? ' [confirmed orphaned: hand it off to continue]' : ''}`);
+  }
+}
+
+/** `monolith mission handoff <id> --reason "..." [--agent <name>] [--session <id>]` — explicit takeover of an in_progress Mission. */
+export async function runMissionHandoff(args: string[], targetDir = process.cwd()): Promise<void> {
+  const id = args[0];
+  const reason = parseFlag(args, '--reason');
+  if (!id || id.startsWith('--') || !reason) throw new Error('Usage: monolith mission handoff <id> --reason "..." [--agent <name>] [--session <id>]');
+  const ctx = deriveExecutionContext(targetDir, {
+    agent: parseFlag(args, '--agent') ?? (process.env.MONOLITH_AGENT?.trim() || 'cli'),
+    source: 'cli:handoff',
+    sessionId: parseFlag(args, '--session'),
+  });
+  const mission = await withWriteGuidance(() => handoffMission(writeTargetFor(targetDir), id, ctx, reason));
+  console.log(`Mission ${mission.id} is now owned by this worktree (${ctx.worktree}).`);
   console.log(formatMission(mission));
 }

@@ -15,6 +15,7 @@
 import { mutateState, readState, type StateReadTarget, type StateWriteTarget } from './state-keeper.js';
 import { MissionNotFoundError, MissionNotActiveError, CheckpointNotFoundError, ValidationError } from './errors.js';
 import type { CoordinatoriumState, Checkpoint } from './types.js';
+import { assertMissionAccess, type ExecutionContext } from './context.js';
 
 // `context` must not become an unbounded free-form blob (explicit
 // requirement for this story) — every text field carries an explicit upper
@@ -79,6 +80,8 @@ export async function createCheckpoint(
   target: StateWriteTarget,
   missionId: string,
   input: CreateCheckpointInput,
+  /** Managed workflow: when given, an owned Mission can only be checkpointed from its owner's worktree. */
+  actor?: Pick<ExecutionContext, 'worktree'>,
 ): Promise<Checkpoint> {
   const summary = requireBoundedString(input.summary, 'summary', MAX_SUMMARY_LENGTH);
 
@@ -101,6 +104,7 @@ export async function createCheckpoint(
   const { result } = await mutateState(target, (draft: CoordinatoriumState) => {
     const mission = draft.tactical.missions[missionId];
     if (!mission) throw new MissionNotFoundError(missionId);
+    assertMissionAccess(mission, actor, 'recording a checkpoint');
     if (mission.status !== 'in_progress') {
       throw new MissionNotActiveError(missionId, mission.status);
     }

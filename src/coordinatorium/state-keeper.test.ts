@@ -262,7 +262,7 @@ describe('mutateState', () => {
 // SAME state directory at the same time. No in-process faking of locking.
 // ---------------------------------------------------------------------------
 
-const COORDINATORIUM_MODULES = ['types', 'errors', 'lock', 'state-keeper', 'mission'];
+const COORDINATORIUM_MODULES = ['types', 'errors', 'lock', 'state-keeper', 'context', 'mission'];
 
 function transpileCoordinatoriumTo(destDir: string): void {
   mkdirSync(destDir, { recursive: true });

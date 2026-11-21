@@ -36,6 +36,9 @@ import {
   type Mission,
   type MissionStatus,
   type Checkpoint,
+  type MissionOwner,
+  type PreviousOwner,
+  MAX_PREVIOUS_OWNERS,
 } from './types.js';
 
 export const STATE_FILE_NAME = 'state.json';
@@ -170,7 +173,7 @@ function validateMission(id: string, raw: unknown): Mission {
   if (!isPlainObject(raw)) {
     throw new StateSchemaError(`Mission "${id}" is not an object`);
   }
-  const { title, system, status, startedAt, updatedAt, summary, storyId } = raw;
+  const { title, system, status, startedAt, updatedAt, summary, storyId, owner } = raw;
   if (raw.id !== id) {
     throw new StateSchemaError(`Mission "${id}" has mismatched id field "${String(raw.id)}"`);
   }
@@ -197,7 +200,46 @@ function validateMission(id: string, raw: unknown): Mission {
   }
   const mission: Mission = { id, title, system, status: status as MissionStatus, startedAt, updatedAt, summary };
   if (storyId !== undefined) mission.storyId = storyId;
+  if (owner !== undefined) mission.owner = validateOwner(id, owner);
   return mission;
+}
+
+function optStr(id: string, what: string, v: unknown, max = 512): string | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string' || v.length === 0 || v.length > max) throw new StateSchemaError(`Mission "${id}" has an invalid owner.${what}`);
+  return v;
+}
+
+function validateOwner(id: string, raw: unknown): MissionOwner {
+  if (!isPlainObject(raw)) throw new StateSchemaError(`Mission "${id}" has an invalid owner`);
+  const agent = optStr(id, 'agent', raw.agent, 64);
+  const worktree = optStr(id, 'worktree', raw.worktree, 4096);
+  const source = optStr(id, 'source', raw.source, 64);
+  const enrolledAt = optStr(id, 'enrolledAt', raw.enrolledAt, 64);
+  if (agent === undefined || worktree === undefined || source === undefined || enrolledAt === undefined) {
+    throw new StateSchemaError(`Mission "${id}" has an incomplete owner`);
+  }
+  const owner: MissionOwner = { agent, worktree, source, enrolledAt };
+  const sessionId = optStr(id, 'sessionId', raw.sessionId, 256);
+  if (sessionId !== undefined) owner.sessionId = sessionId;
+  const branch = optStr(id, 'branch', raw.branch, 256);
+  if (branch !== undefined) owner.branch = branch;
+  if (raw.previous !== undefined) {
+    if (!Array.isArray(raw.previous) || raw.previous.length > MAX_PREVIOUS_OWNERS) throw new StateSchemaError(`Mission "${id}" has an invalid owner.previous`);
+    owner.previous = raw.previous.map((p): PreviousOwner => {
+      if (!isPlainObject(p)) throw new StateSchemaError(`Mission "${id}" has an invalid owner.previous entry`);
+      const a = optStr(id, 'previous.agent', p.agent, 64);
+      const w = optStr(id, 'previous.worktree', p.worktree, 4096);
+      const r = optStr(id, 'previous.releasedAt', p.releasedAt, 64);
+      const why = optStr(id, 'previous.reason', p.reason, 1000);
+      if (a === undefined || w === undefined || r === undefined || why === undefined) throw new StateSchemaError(`Mission "${id}" has an incomplete owner.previous entry`);
+      const prev: PreviousOwner = { agent: a, worktree: w, releasedAt: r, reason: why };
+      const sid = optStr(id, 'previous.sessionId', p.sessionId, 256);
+      if (sid !== undefined) prev.sessionId = sid;
+      return prev;
+    });
+  }
+  return owner;
 }
 
 function validateCheckpoint(id: string, raw: unknown): Checkpoint {

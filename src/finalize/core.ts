@@ -235,12 +235,54 @@ export function renderCapsule(p: FinalizationProposal): string {
  *  - anything inside a fenced code block (``` or ~~~), an indented code block /
  *    4-space-or-tab-indented line, an HTML comment, or YAML frontmatter
  *    (`---` ... `---` at the very top; an unterminated one protects the whole
- *    file) — those lines are compared verbatim;
+ *    file) — those lines are compared verbatim, except that a flat `key: scalar`
+ *    frontmatter is compared by decoded value, so only the quoting style of a
+ *    scalar (`"x"` vs `'x'`) is format-only (FIN-003, `semanticFrontmatter`);
  *  - a Markdown hard line break (two or more trailing spaces before a line that
  *    continues the paragraph): kept as a break (any run of 2+ spaces is the
  *    same break); a backslash break is not whitespace and is always compared;
  *  - blank lines anywhere else (paragraph breaks).
  */
+/**
+ * FIN-003: semantic form of a capsule's frontmatter lines (the text between the two `---`).
+ * A formatter may change only the QUOTING of a scalar (`"x"` -> `'x'`); that is the single
+ * representation difference treated as equivalent. Returns null — meaning "compare the
+ * lines verbatim" — for anything not proven to be a flat `key: scalar` mapping: duplicate
+ * keys, comments, trailing whitespace, flow/block collections or scalars, tabs, a quoted
+ * scalar that does not decode on one line. Plain scalars are compared as written, so no
+ * YAML type is ever coerced (`"1"` is a string, `1` is a number: different).
+ */
+function semanticFrontmatter(lines: string[]): string[] | null {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of lines) {
+    const m = /^([A-Za-z_][A-Za-z0-9_-]*): (\S.*)$/.exec(l);
+    if (m === null || /\s$/.test(l)) return null;
+    const [, key, raw] = m;
+    if (seen.has(key)) return null;
+    seen.add(key);
+    let canon: string;
+    if (raw.startsWith('"')) {
+      if (!/^"(?:[^"\\]|\\.)*"$/.test(raw)) return null;
+      let v: unknown;
+      try {
+        v = JSON.parse(raw);
+      } catch {
+        return null;
+      }
+      if (typeof v !== 'string') return null;
+      canon = `q${JSON.stringify(v)}`;
+    } else if (raw.startsWith("'")) {
+      if (!/^'(?:[^']|'')*'$/.test(raw)) return null;
+      canon = `q${JSON.stringify(raw.slice(1, -1).replace(/''/g, "'"))}`;
+    } else if (/^[\[{&*!|>%@`#]/.test(raw) || /\s#/.test(raw) || /: |\t/.test(raw)) {
+      return null;
+    } else canon = `p${raw}`;
+    out.push(`${key}: ${canon}`);
+  }
+  return out;
+}
+
 export function capsuleCanonical(s: string): string {
   const lines = norm(s).split('\n');
   const verbatim: boolean[] = lines.map(() => false);
@@ -254,6 +296,10 @@ export function capsuleCanonical(s: string): string {
     const close = lines.findIndex((l, k) => k > 0 && (l === '---' || l === '...'));
     const end = close === -1 ? lines.length - 1 : close; // unterminated: cannot tell where it ends
     for (let k = 0; k <= end; k++) verbatim[k] = true;
+    if (close !== -1 && lines[close] === '---') {
+      const sem = semanticFrontmatter(lines.slice(1, close));
+      if (sem !== null) sem.forEach((c, k) => (lines[k + 1] = c));
+    }
     i = end + 1;
   }
   let fence: { ch: string; len: number } | null = null;

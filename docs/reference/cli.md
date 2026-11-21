@@ -353,6 +353,18 @@ appended text) stays a `conflict`. This is deliberately not a general whitespace
 comparison, and capsules written by earlier versions are recognised but never rewritten.
 No formatter is run or required by MONOLITH.
 
+**Capsule frontmatter (FIN-003).** The capsule's YAML frontmatter is a flat `key: value` list.
+A formatter (e.g. Prettier with `singleQuote`) may rewrite `title: "X"` as `title: 'X'`; that is
+the same string, so the capsule is still "already present". Frontmatter is compared by decoded
+value, and the **only** representation difference ignored is the quoting style of a quoted
+scalar (`"x"` vs `'x'`, with escapes decoded). Everything else is still a `conflict`: a changed
+value (title, Story id, status, date), a missing, added, unknown or reordered field, a duplicate
+key, a type change (`"1"` vs `1`, a quoted vs a plain scalar), a changed body, and any
+frontmatter that is not a plain flat mapping (comments, trailing whitespace, block or flow
+values, unterminated or malformed quoting), which is compared verbatim. This changes only how
+an *existing* capsule is recognised: the approval digest, the plan/apply preconditions and the
+create-only rule are unchanged, and MONOLITH never rewrites the capsule.
+
 **State consistency (alpha.4).** `finalize` writes only the capsule, `execution-history.md`,
 `story-index.md`, `active.md`, HANDOFF and the documents you list in `docUpdates`. It does not
 own `roadmap-index.md`, so a roadmap row that still says `IN PROGRESS` for the story you just

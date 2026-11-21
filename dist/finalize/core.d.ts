@@ -93,24 +93,6 @@ export interface FinalizeConfig {
 }
 export declare function readFinalizeConfig(config: ConfigRead): FinalizeConfig;
 export declare function renderCapsule(p: FinalizationProposal): string;
-/**
- * Format-equivalence of a capsule (FIN-001, made context-aware by A4-FIN-01).
- * The capsule is created once and never overwritten, so "already present" used
- * to mean byte-identical; a formatter pass (Prettier adds a blank line after
- * every heading) then turned an unchanged capsule into a CONFLICT. Equivalence
- * is deliberately narrow and NOT a general whitespace-insensitive comparison.
- * Ignored: line endings (CRLF/LF), trailing whitespace on a line that is plain
- * prose, a single blank line directly after an ATX heading, and trailing blank
- * lines at end of file. NOT ignored, because whitespace carries meaning there:
- *  - anything inside a fenced code block (``` or ~~~), an indented code block /
- *    4-space-or-tab-indented line, an HTML comment, or YAML frontmatter
- *    (`---` ... `---` at the very top; an unterminated one protects the whole
- *    file) — those lines are compared verbatim;
- *  - a Markdown hard line break (two or more trailing spaces before a line that
- *    continues the paragraph): kept as a break (any run of 2+ spaces is the
- *    same break); a backslash break is not whitespace and is always compared;
- *  - blank lines anywhere else (paragraph breaks).
- */
 export declare function capsuleCanonical(s: string): string;
 /** Evidence older than this many days before the finalization date is not accepted. */
 export declare const EVIDENCE_MAX_AGE_DAYS = 7;

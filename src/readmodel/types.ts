@@ -475,6 +475,20 @@ export interface HistoryMissionView {
   /** Oldest first (id ordinal order, as `brief` treats ids as authoritative), bounded. */
   checkpoints: HistoryCheckpointView[];
   checkpointsTruncated: boolean;
+  /**
+   * Additive (Autonomous Execution Discipline). The recorded execution-context owner; null for manual/legacy
+   * missions. Coordination metadata, not authentication.
+   */
+  owner?: HistoryMissionOwnerView | null;
+}
+
+export interface HistoryMissionOwnerView {
+  agent: string;
+  worktree: string;
+  sessionId: string | null;
+  branch: string | null;
+  source: string;
+  enrolledAt: string;
 }
 
 export type HistoryEventKind = 'mission_started' | 'checkpoint' | 'mission_finished';

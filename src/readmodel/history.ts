@@ -54,6 +54,7 @@ export function buildDevelopmentHistory(state: CoordinatoriumState | null): Deve
       checkpointCount: own.length,
       checkpoints: own.slice(0, MAX_HISTORY_CHECKPOINTS_PER_MISSION).map(checkpointView),
       checkpointsTruncated: own.length > MAX_HISTORY_CHECKPOINTS_PER_MISSION,
+      owner: m.owner === undefined ? null : { agent: m.owner.agent, worktree: m.owner.worktree, sessionId: m.owner.sessionId ?? null, branch: m.owner.branch ?? null, source: m.owner.source, enrolledAt: m.owner.enrolledAt },
     };
   });
 

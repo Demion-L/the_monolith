@@ -160,6 +160,24 @@ function blockItem(projectRoot: string, root: string, spec: BlockSpec): UpdateIt
   }
 }
 
+const DOCUMENT_FORMATS_TEMPLATE = 'monolith/protocols/governance/document-formats.md';
+
+/**
+ * The normative format contract of the governance documents (roadmap phases, story index, ...). It was added to MONOLITH
+ * after early instances were created, so `monolith update` delivers it when absent. An existing file is never
+ * overwritten: without a stored template version, a different file may be the user's.
+ */
+function documentFormatsItem(projectRoot: string, r: string, vars: Record<string, string>): UpdateItem {
+  const rel = `${r}/protocols/governance/document-formats.md`;
+  const template = readTemplate(DOCUMENT_FORMATS_TEMPLATE, vars);
+  const effect = 'governance checks and the Execution Graph can point to the contract that defines the Roadmap and Story Index formats';
+  const read = readInstanceFile(projectRoot, rel, true);
+  if (read.kind === 'unsafe') return { path: rel, action: 'CONFLICT', reason: `cannot be read safely (${read.detail}); not inspected or changed` };
+  if (read.kind === 'missing') return { path: rel, action: 'ADD', reason: 'governance format contract missing in this instance; new file from the current template', content: template, effect };
+  if (read.content === template) return { path: rel, action: 'UNCHANGED', reason: 'identical to the current template' };
+  return { path: rel, action: 'SKIP', reason: 'exists and differs from the current template (customized or older); not overwritten' };
+}
+
 const FINALIZE_SKILL_TEMPLATE = 'monolith/skills/finalize-story/SKILL.md';
 
 /**
@@ -238,6 +256,7 @@ export function planUpdate(target: string): UpdatePlan {
   }
 
   items.push(finalizeSkillItem(pr, r, vars));
+  items.push(documentFormatsItem(pr, r, vars));
 
   items.push(
     blockItem(pr, r, {
@@ -327,6 +346,8 @@ function chainChecks(projectRoot: string, r: string, items: UpdateItem[], skillT
     'the finalize-story skill is identical to the current template',
     'the finalize-story skill is missing, outdated, unreadable, or not verified to match the current template (a customized one is never assumed compatible)',
   );
+  const fmt = state(`${r}/protocols/governance/document-formats.md`);
+  add('governance format contract', fmt?.action === 'UNCHANGED' || fmt?.action === 'SKIP', 'document-formats.md is present', 'document-formats.md is missing or unreadable (run `monolith update --apply`)');
   let storage = '';
   try {
     listIdeas(ideaStore(projectRoot));
@@ -355,7 +376,7 @@ export interface ApplyResult {
 
 /** Apply order: MONOLITH-owned files first, the pointer in the root instruction files last. */
 function rank(item: UpdateItem, r: string): number {
-  if (item.path.startsWith(`${r}/skills/idea-capture/`) || item.path.startsWith(`${r}/skills/finalize-story/`)) return 0;
+  if (item.path.startsWith(`${r}/skills/idea-capture/`) || item.path.startsWith(`${r}/skills/finalize-story/`) || item.path.startsWith(`${r}/protocols/`)) return 0;
   if (item.path === `${r}/AGENT.md`) return 1;
   if (item.path.startsWith(`${r}/`)) return 2;
   return 3;

@@ -1068,3 +1068,38 @@ describe('legacy skill registry stays in sync with the templates', () => {
     for (const n of ['finalize-story.alpha1.md', 'finalize-story.alpha2.md']) expect(FINALIZE_STORY_LEGACY[shaOf(fixture(n))]).toBeDefined();
   });
 });
+
+describe('monolith update — governance contracts reach old instances (Autonomous Execution Discipline)', () => {
+  it('delivers a missing document-formats.md and the Mission/Reporting Discipline text, then is current', async () => {
+    const d = await oldInstance();
+    const fmt = join(d, '.monolith', 'protocols', 'governance', 'document-formats.md');
+    rmSync(fmt);
+    const plan = planUpdate(d);
+    expect(plan.items.find((i) => i.path.endsWith('document-formats.md'))?.action).toBe('ADD');
+    expect(integrationComplete(plan)).toBe(false);
+    applyPlan(d, plan);
+    expect(existsSync(fmt)).toBe(true);
+    const agent = readFileSync(join(d, '.monolith', 'AGENT.md'), 'utf8');
+    expect(agent).toContain('No autonomous implementation without a traceable Mission');
+    expect(agent).toContain('monolith mission enroll');
+    expect(agent).toContain('monolith handover check');
+    expect(integrationComplete(planUpdate(d))).toBe(true);
+  });
+
+  it('never overwrites a customized document-formats.md', async () => {
+    const d = await newInstance();
+    const fmt = join(d, '.monolith', 'protocols', 'governance', 'document-formats.md');
+    writeFileSync(fmt, '# my own formats\n');
+    const item = planUpdate(d).items.find((i) => i.path.endsWith('document-formats.md'));
+    expect(item?.action).toBe('SKIP');
+    applyPlan(d, planUpdate(d));
+    expect(readFileSync(fmt, 'utf8')).toBe('# my own formats\n');
+  });
+
+  it('refreshes a pristine older AGENT.md block but keeps user edits as a CONFLICT', async () => {
+    const d = await newInstance();
+    edit(d, '.monolith/AGENT.md', (t) => t.replace('This block is managed', 'My edit: this block is managed'));
+    const item = planUpdate(d).items.find((i) => i.path === '.monolith/AGENT.md');
+    expect(item?.action).toBe('CONFLICT');
+  });
+});

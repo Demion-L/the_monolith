@@ -39,6 +39,15 @@ Routing map: `{{MONOLITH_ROOT}}/context/maps/routing-map.md`
 
 ---
 
+## Autonomous Development: Mission Enrollment
+
+No autonomous implementation without a traceable Mission (reading and discussion need none). `monolith mission current` shows
+this worktree's Mission; `monolith mission enroll` registers or reuses it. With Managed Execution enabled the hook enrols the first
+write and blocks a controlled write that cannot be enrolled. Never checkpoint or finish another context's Mission; take over only
+via `monolith mission handoff <id> --reason "..."`. Details: `{{MONOLITH_ROOT}}/AGENT.md`.
+
+---
+
 ## Autonomous Development: Reporting Discipline
 
 When you finish a stretch of autonomous work, your final report is a claim, not evidence. Before writing it:

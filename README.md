@@ -182,6 +182,7 @@ listing — not an official partnership, endorsement or certification.
 ## Documentation
 
 - [CLI reference](./docs/reference/cli.md) — every command, `init`, `validate`, `brief`, `idea`, `mission`, `durable`, `ui`
+- [Managed Execution](./docs/reference/managed-execution.md) — Mission enrollment, ownership, hook enforcement and its limits
 - [Mission Control](./docs/reference/mission-control.md) — sections, LIVE/DEMO, skins, limitations
 - [Security & Limitations](./docs/reference/security-and-limitations.md) — threat model, platform and filesystem caveats
 - [Programmatic API](./docs/reference/write-scope-api.md) · [Development](./docs/reference/development.md)

@@ -180,6 +180,13 @@ See the [DURABLE-SEC-001 remediation report](../architecture/DURABLE-SEC-001-REM
 **experimental**: the schema and library exports may change, and missions are a
 recorded discipline that nothing enforces at runtime.
 
+## Managed Execution and Mission ownership
+
+Mission ownership and the PreToolUse enforcement are **coordination aids for cooperating agents, not security
+controls**: a session id or worktree path is not authentication, the hook sees only the tool calls the host routes through
+it, and an agent or user with write access can change the configuration. Programs started by an enrolled `Bash` call can
+write files without any further check. See [Managed Execution](./managed-execution.md) for the exact guarantees.
+
 ## Related decisions
 
 [ADR-009](../adr/ADR-009-monolith-root-containment.md) ·

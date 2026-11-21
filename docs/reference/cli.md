@@ -125,6 +125,9 @@ monolith mission show <id>
 monolith mission finish <id> --result completed|failed|cancelled [--summary "..."]
 monolith mission checkpoint <missionId> --summary "..." [--remaining "..." ...] [--context "..."]
 monolith mission checkpoints <missionId>
+monolith mission enroll [--agent <name>] [--session <id>] [--story <ID>] [--json]   # register or reuse this worktree's Mission (idempotent)
+monolith mission current [--json]                      # this worktree's Mission; other contexts' active Missions
+monolith mission handoff <id> --reason "..."            # explicit takeover of another context's Mission
 ```
 
 Records missions and checkpoints in the operational state: by default one `state.json` shared by all Git worktrees in the Git common directory (`<git-common-dir>/monolith/state.json`); `.monolith/state.json` only outside Git or in isolated mode. `monolith brief` reports the location. Not runtime-enforced:
@@ -619,7 +622,13 @@ monolith hook session-start   # SessionStart: prints additionalContext JSON
 monolith hook stop            # Stop: diagnostic systemMessage only, never blocks
 monolith hook pre-compact     # PreCompact: plain-text instructions for the compaction summary; never blocks
 monolith hook print-config    # prints an opt-in settings snippet; writes nothing
+monolith hook print-config --managed   # + fail-closed PreToolUse hook for Managed Execution
+monolith hook pre-tool-use    # PreToolUse (Managed Execution only; no-op in unmanaged projects)
+monolith hook status          # honest report: execution mode + whether the hook is installed (exit 2 if unconfirmed)
 ```
+
+Managed Execution (`"execution": {"mode": "managed"}`), Mission enrollment, ownership, handoff and their limits are
+described in [Managed Execution](./managed-execution.md). In an unmanaged project nothing in this section writes anything.
 
 Hooks are **opt-in**; MONOLITH never edits Claude Code settings. Copy the snippet from
 `monolith hook print-config` into the project's `.claude/settings.json` (or your own settings)
@@ -644,7 +653,7 @@ Existing installations of the two-hook snippet keep working unchanged; `PreCompa
   `continue: false` or exit code 2, and does nothing when `stop_hook_active` is true (no loop).
 - Fail-safe: a missing CLI (the snippet guards with `command -v … || true`), a fault or a
   hook started by a hook (`MONOLITH_HOOK_ACTIVE=1`) ends silently or with a short message;
-  nothing is written and the session is never stopped. Blocking hooks are not provided.
+  nothing is written and the session is never stopped. The only blocking hook is `pre-tool-use` in a project that opted into Managed Execution.
 
 ## `monolith ui`
 

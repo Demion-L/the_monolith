@@ -212,10 +212,25 @@ export function parseRoadmapActiveStory(content: string): string | null {
   return m ? m[1] : null;
 }
 
-/** Table rows `| id | title | STATUS | date |` of roadmap-index.md (outside code fences and comments). */
+/**
+ * A markdown table whose header's first cell is "Phase"/"Phases" lists PHASES, not stories. Its rows (and those of
+ * a "Completion Summary" phase table) must never be read as story rows: `0A | … | PLANNED` is a phase, not a story.
+ */
+export function isPhaseTableHeader(headerLine: string): boolean {
+  const cells = headerLine.split('|').map((c) => c.trim());
+  return cells.length >= 3 && cells[0] === '' && /^phases?$/i.test(cells[1]);
+}
+
+/** Table rows `| id | title | STATUS | date |` of roadmap-index.md (outside code fences and comments). Phase tables are skipped. */
 export function parseRoadmapStatuses(content: string): Map<string, string> {
   const out = new Map<string, string>();
+  let inPhaseTable = false;
+  let prevWasRow = false;
   for (const line of maskNonContent(content).split('\n')) {
+    const isRow = line.trimStart().startsWith('|');
+    if (isRow && !prevWasRow) inPhaseTable = isPhaseTableHeader(line.trim());
+    prevWasRow = isRow;
+    if (inPhaseTable) continue;
     const cells = line.split('|').map((c) => c.trim());
     // leading and trailing '|' produce empty first/last cells
     if (cells.length < 5 || cells[0] !== '' || cells[cells.length - 1] !== '') continue;

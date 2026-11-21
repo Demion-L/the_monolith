@@ -125,7 +125,7 @@ export const ROADMAP_DIAGNOSTIC_LABELS: Record<RoadmapDiagnosticCode, string> = 
   DOCUMENT_EMPTY: 'The roadmap document is empty.',
   PHASES_SECTION_MISSING: 'No "Phases" section was found.',
   PHASES_SECTION_DUPLICATED: 'More than one "Phases" section; only the first was read.',
-  NO_PHASES_FOUND: 'The "Phases" section contains no recognisable phase.',
+  NO_PHASES_FOUND: 'The "Phases" section contains no phase in the expected form ("### Phase <id> — <title>" + "**Status:**"); a table there is not read as phases. Contract: document-formats.md (run `monolith update` if it is missing).',
   PHASE_HEADING_MALFORMED: 'A phase heading could not be read and was skipped.',
   PHASES_TRUNCATED: 'Too many phases; the list was truncated.',
   PHASE_STATUS_MISSING: 'The phase states no status.',

@@ -60,7 +60,7 @@ const MESSAGES: Record<string, string> = {
   DOCUMENT_EMPTY: 'The document is empty.',
   PHASES_SECTION_MISSING: 'No "## Phases" section was found.',
   PHASES_SECTION_DUPLICATED: 'More than one "## Phases" section exists.',
-  NO_PHASES_FOUND: 'The Phases section lists no phase.',
+  NO_PHASES_FOUND: 'The "## Phases" section contains no phase in the expected form: a "### Phase <id> — <title>" heading followed by a "**Status:** <value>" line. A table (or other text) there is not read as phases. Format contract: .monolith/protocols/governance/document-formats.md; if that file is absent, run `monolith update` to deliver it.',
   PHASE_HEADING_MALFORMED: 'A phase heading is not in the form "### Phase <id> — <title>".',
   PHASES_TRUNCATED: 'Too many phases; the list was cut.',
   PHASE_STATUS_MISSING: 'A phase has no "**Status:**" line.',

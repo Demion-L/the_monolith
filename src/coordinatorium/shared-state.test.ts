@@ -176,7 +176,7 @@ describe('A. two worktrees, one operational state', () => {
       expect(out).toContain('worktrees:            3');
       expect(out).toContain('mode:                 shared');
       expect(out).toContain('revision=1');
-      expect(out).toContain('0.2.0-beta.3');
+      expect(out).toContain('0.2.0-beta.4');
     }
     const identity = outs.map((o) => /repository identity:\s+(\S+)/.exec(o)?.[1]);
     expect(new Set(identity).size).toBe(1);
@@ -439,7 +439,7 @@ describe('F. one resolver everywhere; schema v3 with storyId', () => {
     expect(dA.currentMissions).toEqual(dB.currentMissions);
     expect(dA.currentMissions.data!.active.map((m) => [m.id, m.storyId])).toEqual([['MIS-0001', 'BETA-020'], ['MIS-0002', undefined]]);
     expect(dA.projectOverview.data).toMatchObject({ stateRevision: 2, stateSchemaVersionOnDisk: 3, activeMissionCount: 2 });
-    expect(dA.diagnostics.state).toMatchObject({ mode: 'shared', revision: 2, schemaVersion: 3, worktreeCount: 3, monolithVersion: '0.2.0-beta.3' });
+    expect(dA.diagnostics.state).toMatchObject({ mode: 'shared', revision: 2, schemaVersion: 3, worktreeCount: 3, monolithVersion: '0.2.0-beta.4' });
     expect(dA.diagnostics.state!.splitBrain.detected).toBe(false);
   });
 

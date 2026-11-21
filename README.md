@@ -99,7 +99,7 @@ supported host routes through its hook.
 ## Core Capabilities
 
 Capabilities are listed by what they are for. Where a capability only exists on
-`main` (not in the published beta), it is marked *(Beta 3)*; see
+`main` (not in the published beta), it is marked *(Beta 3/4)*; see
 [Status & Limitations](#status--limitations).
 
 ### Development Governance
@@ -148,14 +148,16 @@ Requires Node.js >= 20. The published pre-release is `0.2.0-beta.2`, under the
 npm install -g @latysh-development/monolith@beta
 ```
 
-`0.2.0-beta.3` is prepared but **not yet published**; features marked *(Beta 3)*
-in this README (Mission Auto-Enrollment, Managed Execution, ownership and
-handoff) are on `main` and reach npm only when Beta 3 is released. To try them
-earlier, build from source or install a locally built tarball — see the
-[installation and release guide](./docs/release/alpha-installation.md). The
-previous alpha (`0.1.0-alpha.4`) remains available as `@alpha`. Release notes:
+`0.2.0-beta.4` is prepared but **not yet published**. The Git tag `v0.2.0-beta.3`
+exists, but `0.2.0-beta.3` was never published to npm; Beta 4 supersedes it and contains
+everything in its notes. Features marked *(Beta 3/4)* in this README (Mission
+Auto-Enrollment, Managed Execution, ownership and handoff) are on `main` and reach npm
+only when Beta 4 is released. To try them earlier, build from source or install a locally
+built tarball — see the [installation and release guide](./docs/release/alpha-installation.md).
+The previous alpha (`0.1.0-alpha.4`) remains available as `@alpha`. Release notes:
 [`0.2.0-beta.2`](./docs/release/0.2.0-beta.2.md) (published),
-[`0.2.0-beta.3`](./docs/release/0.2.0-beta.3.md) (prepared).
+[`0.2.0-beta.3`](./docs/release/0.2.0-beta.3.md) (tagged, not published),
+[`0.2.0-beta.4`](./docs/release/0.2.0-beta.4.md) (prepared).
 
 Then, in a project directory:
 
@@ -224,7 +226,7 @@ Details and the full list of verdicts: [`monolith update` in the CLI reference](
 
 ## Managed Execution
 
-*(Beta 3 — on `main`, not in the published `0.2.0-beta.2`.)* Managed Execution is
+*(Beta 3/4 — on `main`, not in the published `0.2.0-beta.2`.)* Managed Execution is
 **opt-in**. Installing the npm package does not enable it, and MONOLITH never
 edits your Claude Code settings. Without the steps below, nothing is enforced.
 
@@ -319,14 +321,14 @@ listing — not an official partnership, endorsement or certification.
 ## Status & Limitations
 
 **Pre-release.** The published version is `0.2.0-beta.2` (`beta` dist-tag; the
-previous alpha is `0.1.0-alpha.4`). `0.2.0-beta.3` is prepared and not yet
-published. This is not a stable production release; the API and CLI are
+previous alpha is `0.1.0-alpha.4`). `0.2.0-beta.4` is prepared and not yet
+published (`0.2.0-beta.3` is tagged in Git but was never published). This is not a stable production release; the API and CLI are
 experimental and may change without notice.
 
 | Component | Status |
 |---|---|
 | Governance, `brief`, `validate`, Mission Control, Idea Capture, Evidence, Handover, Claude Code context hooks | in the published Beta 2 |
-| Mission Auto-Enrollment, Managed Execution, ownership and handoff | on `main`, prepared for Beta 3, **opt-in** |
+| Mission Auto-Enrollment, Managed Execution, ownership and handoff | on `main`, prepared for Beta 4, **opt-in** |
 | Durable State and the Coordinatorium (`monolith durable`, `monolith mission`) | experimental |
 | Supported agent adapter | Claude Code only; the core is host-agnostic. There is no Codex adapter |
 

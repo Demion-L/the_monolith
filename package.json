@@ -1,7 +1,7 @@
 {
   "name": "@latysh-development/monolith",
   "version": "0.2.0-beta.2",
-  "description": "MONOLITH: Cognitive Infrastructure for AI. An open-source toolkit for observable project state, structured knowledge, and explicit execution governance.",
+  "description": "MONOLITH: Autonomous Development Governance Framework. Governance, execution tracking, and verifiable evidence for AI-assisted and autonomous software development.",
   "author": "Dmytro Latysh",
   "license": "MIT",
   "homepage": "https://github.com/Demion-L/the_monolith#readme",
@@ -49,10 +49,12 @@
   },
   "keywords": [
     "monolith",
-    "knowledge-toolkit",
-    "ai-assistant",
-    "enforcement",
-    "protocol"
+    "governance",
+    "ai-agents",
+    "ai-coding",
+    "claude-code",
+    "autonomous-development",
+    "developer-tools"
   ],
   "devDependencies": {
     "@types/node": "^20.0.0",

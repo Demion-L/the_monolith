@@ -25,8 +25,11 @@ Read this file first on every session start. Do not start any task before comple
 
 ## Mission
 
-**MONOLITH: Cognitive Infrastructure for AI.**  
-An open-source toolkit for observable project state, structured knowledge, and explicit execution governance.
+**MONOLITH: Autonomous Development Governance Framework.**  
+*Delegate Execution. Retain Understanding.*  
+An open-source framework for governing AI-assisted and autonomous software development: observable project state,
+structured knowledge, execution tracking, and verification evidence. MONOLITH is a governance layer next to AI coding
+agents; it is not itself a coding agent.
 
 MONOLITH helps a human and an AI assistant preserve a shared understanding of a
 project — its knowledge, architectural decisions, and progress — across
@@ -529,7 +532,7 @@ The following are explicitly deferred. Do not implement without a finalized stor
 
 | Term | Definition |
 | ---- | ---------- |
-| **MONOLITH** | Cognitive Infrastructure for AI: an open-source toolkit for observable project state, structured knowledge, and explicit execution governance. |
+| **MONOLITH** | Autonomous Development Governance Framework: an open-source framework for observable project state, structured knowledge, execution tracking and verification evidence in AI-assisted development. |
 | **Scriptorium** | Deterministic structural extraction from a markdown artifact: `ScriptoriumInput` → `ScriptoriumResult` (`ConceptCandidate`, `RelationshipCandidate`, `Evidence`, `SourceReference`). |
 | **Explicit Relationship Graph (ERG)** | The typed graph (`GraphNode`, `GraphEdge`) built from compiled documents; nodes are canonical `KnowledgeObject`s (`namespace:localId`); edges resolve only from explicit frontmatter fields to exactly one object — no fuzzy matching, no aliases (ADR-020). |
 | **Coordinatorium** | Tactical mission lifecycle: `Mission`, `CoordinatoriumState`, backed by `.monolith/state.json` (ADR-008). |

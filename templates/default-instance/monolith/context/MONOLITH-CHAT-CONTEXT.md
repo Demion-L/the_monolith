@@ -10,9 +10,10 @@
 
 ## 1. What Is MONOLITH?
 
-MONOLITH is **Cognitive Infrastructure for AI**: a local, file-based toolkit that
-gives AI-assisted development an observable project state, structured knowledge
-and explicit execution rules. Everything lives in the repository as Markdown and
+MONOLITH is an **Autonomous Development Governance Framework**: a local, file-based
+toolkit that gives AI-assisted development an observable project state, structured
+knowledge, mission and evidence tracking, and explicit execution rules. It is not a
+coding agent; it governs the work of the agents you use. Everything lives in the repository as Markdown and
 JSON (by default under `{{MONOLITH_ROOT}}/`) and is read and written by the
 `monolith` CLI. It uses no LLM and makes no external network calls.
 

@@ -167,6 +167,15 @@ describe('classification (conservative, no shell parser)', () => {
   it('monolith CLI is governed, only as a single command', () => {
     expect(cmd('monolith mission start --title t --system s')).toBe('governed');
     expect(cmd('monolith mission list && rm -rf x')).toBe('implementation');
+    for (const ok of ['monolith mission enroll --json', 'monolith mission handoff MIS-0001 --reason x', 'monolith evidence report --claim x', 'monolith idea add --title t --description d', 'monolith finalize plan --proposal p', 'monolith handover check --json', 'monolith governance check', 'monolith brief', 'monolith hook status', 'monolith ui', 'monolith --version']) {
+      expect(cmd(ok), ok).toBe('governed');
+    }
+  });
+
+  it('monolith subcommands that write project files or run arbitrary commands are NOT a bypass of enrolment', () => {
+    for (const bad of ['monolith evidence run -- rm -rf src', 'monolith evidence run --story X -- touch f', 'monolith update', 'monolith update --apply', 'monolith init --yes', 'monolith state adopt s --apply', 'monolith durable retention --retain-days 1 --apply', 'monolith idea', 'monolith evidence', 'monolith frobnicate']) {
+      expect(cmd(bad), bad).toBe('implementation');
+    }
   });
   it('file tools: inside the worktree = implementation; outside = external; symlink escape resolved', () => {
     expect(classifyToolUse('Edit', { file_path: 'src/a.ts' }, main, main).action).toBe('implementation');
@@ -178,5 +187,55 @@ describe('classification (conservative, no shell parser)', () => {
   it('unknown tools are "uncontrolled" (not claimed as covered)', () => {
     expect(classifyToolUse('mcp__x__write', {}, main, main).action).toBe('uncontrolled');
     chmodSync(main, 0o755);
+  });
+});
+
+describe('PreToolUse — same-worktree story continuity (Beta 3 release readiness)', () => {
+  const setStory = (dir: string, id: string | null): void => {
+    mkdirSync(join(dir, '.monolith', 'memory', 'working'), { recursive: true });
+    writeFileSync(join(dir, '.monolith', 'memory', 'working', 'active.md'), `# Active\n\n## Current Story\n\n${id === null ? 'No active story.' : `**Story:** ${id} — title`}\n\n---\n\n## Last Finalization\n\nnone\n`);
+  };
+  const deniedText = (r: unknown): string => (r as { hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string } }).hookSpecificOutput.permissionDecisionReason;
+
+  it('A: resuming the same story after a session loss reuses the mission (no duplicate)', async () => {
+    setStory(main, 'S-1');
+    await handlePreToolUse(write(main, 'a.ts', 'crashed'));
+    const r = (await handlePreToolUse(write(main, 'b.ts', 'resumed'))) as { hookSpecificOutput: { additionalContext: string } };
+    expect(r.hookSpecificOutput.additionalContext).toContain('resumed mission');
+    const m = await missions(main);
+    expect(m).toHaveLength(1);
+    expect(m[0].storyId).toBe('S-1');
+  });
+
+  it('B: a new story after the previous mission was finished gets a new mission', async () => {
+    setStory(main, 'S-1');
+    await handlePreToolUse(write(main, 'a.ts'));
+    const { finishMission } = await import('../coordinatorium/mission.js');
+    const { stateWriteTargetOf } = await import('../coordinatorium/state-location.js');
+    await finishMission(stateWriteTargetOf(resolveStateLocation(main)), 'MIS-0001', { result: 'completed' });
+    setStory(main, 'S-2');
+    await handlePreToolUse(write(main, 'b.ts'));
+    const m = await missions(main);
+    expect(m.map((x) => [x.id, x.status, x.storyId])).toEqual([['MIS-0001', 'completed', 'S-1'], ['MIS-0002', 'in_progress', 'S-2']]);
+  });
+
+  it('C: a story switch while the previous mission is still active is denied, never silently attributed', async () => {
+    setStory(main, 'S-1');
+    await handlePreToolUse(write(main, 'a.ts'));
+    setStory(main, 'S-2');
+    const r = await handlePreToolUse(write(main, 'b.ts'));
+    expect(deniedText(r)).toContain('not linked to S-2');
+    const m = await missions(main);
+    expect(m).toHaveLength(1);
+    expect(m[0].status).toBe('in_progress'); // not auto-finished
+    expect(m[0].storyId).toBe('S-1'); // not re-linked
+  });
+
+  it('an unreadable or ambiguous active story gives no story signal (previous behaviour, nothing guessed)', async () => {
+    setStory(main, 'S-1');
+    await handlePreToolUse(write(main, 'a.ts'));
+    writeFileSync(join(main, '.monolith', 'memory', 'working', 'active.md'), '## Current Story\n\n**Story:** S-2 — a\n**Story:** S-3 — b\n\n---\n');
+    expect(await handlePreToolUse(write(main, 'b.ts'))).toBeNull();
+    expect(await missions(main)).toHaveLength(1);
   });
 });

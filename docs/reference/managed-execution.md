@@ -37,9 +37,11 @@ changed; use Git and `monolith evidence` for that.
 | `UNAVAILABLE` | enrollment could not be performed (state unreadable, lock, write failure); nothing is assumed |
 
 - **Execution context** = `{ agent, worktree (real path), sessionId?, branch?, storyId?, source }`. The worktree is the
-  identity; a branch is informational (several agents may share one). A Story is linked only when given explicitly.
+  identity; a branch is informational (several agents may share one). A Story is linked only when it is known unambiguously: given explicitly (`--story`), or — for the Claude Code hook — named by the single `**Story:** <id>` line of `## Current Story` in `active.md` (the same line Finalize uses; if it is absent, ambiguous or malformed the hook passes no Story and nothing is guessed).
 - **Idempotency.** Lookup and creation happen inside one `mutateState` critical section (the existing cross-process lock):
   N concurrent callers with the same identity produce exactly one Mission; different contexts never collide on an ID.
+- **Story switch in one worktree.** When a Story is known and this context's active Mission is linked to a different Story (or to none), enrollment returns `CONFLICT` and the managed write is denied: work for Story B is never silently attributed to Story A's Mission. Nothing is finished, re-linked or handed off automatically; resolve it with `monolith mission finish` (then the next write starts a new Mission) or `monolith mission handoff`. A Mission is reused only when its Story matches, or when no Story is known at all.
+- **Agent is part of the identity.** The identity is `(agent, worktree)`. The hook uses agent `claude-code`; `monolith mission enroll` defaults to `cli`, so a manual `enroll` without `--agent claude-code` registers a separate Mission for the same worktree instead of joining the hook's.
 - **No captured Missions.** Only a Mission owned by the same `(agent, worktree)` is reused. A manual Mission, or one owned by
   another worktree, is never joined — even when active on the same branch.
 - **No invented history.** The auto-created Mission has a factual title (`Managed implementation (claude-code, worktree X,

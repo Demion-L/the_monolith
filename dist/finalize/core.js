@@ -434,6 +434,21 @@ export function activeStoryIdentity(currentStoryBody) {
         return { ok: false, reason: `the "**Story:**" line ("${found[0].slice(0, 60)}") does not start with a valid story id. ${FIX_HINT}` };
     return { ok: true, id };
 }
+/**
+ * Identity of the active story from the whole text of active.md (read-only helper for host adapters that must know
+ * which story is active without owning the grammar). Same contract as `activeStoryIdentity`: no section, an ambiguous
+ * section, or a missing / malformed / contradictory field line yields `ok: false`; nothing is guessed.
+ */
+export function activeStoryIdentityOfActiveMd(activeMdContent) {
+    const lines = activeMdContent.split('\n');
+    const structural = maskNonContent(activeMdContent).split('\n');
+    const cur = findSection(lines, structural, CURRENT_RE);
+    if (cur === 'absent')
+        return { ok: false, reason: 'active.md has no "## Current Story" section' };
+    if (cur === 'ambiguous')
+        return { ok: false, reason: 'active.md has more than one "## Current Story" section' };
+    return activeStoryIdentity(sectionBody(lines, cur));
+}
 /** Values of the structural `**Story:**` field lines (outside code fences and HTML comments). */
 function structuralStoryFields(currentStoryBody) {
     const found = [];

@@ -32,6 +32,8 @@ import { readGitView } from '../handover/git.js';
 import { enrollMission, currentMissions } from '../coordinatorium/enrollment.js';
 import { deriveExecutionContext, describeOwnership, resolveWorktreeRoot } from '../coordinatorium/context.js';
 import { resolveStateLocation, stateReadTargetOf, stateWriteTargetOf } from '../coordinatorium/state-location.js';
+import { activeStoryIdentityOfActiveMd } from '../finalize/core.js';
+import { readProjectFile, resolveMonolithRoot } from '../root/index.js';
 import { readExecutionConfig } from '../coordinatorium/execution-config.js';
 import { listMissions } from '../coordinatorium/mission.js';
 import { classifyToolUse } from './classify.js';
@@ -74,8 +76,25 @@ export function handleSessionStart(projectRoot, extraLines = []) {
 function hostDir(input, cwd) {
     return typeof input.cwd === 'string' && input.cwd !== '' ? input.cwd : cwd;
 }
-function contextFor(input, cwd, intent) {
-    return deriveExecutionContext(hostDir(input, cwd), { agent: HOST_AGENT, source: 'hook:PreToolUse', sessionId: input.session_id, intent });
+/**
+ * The active story, ONLY when active.md names it unambiguously (the same single `**Story:**` line Finalize uses).
+ * Anything else (no file, no section, several or malformed lines, unreadable) yields undefined: no story signal, and
+ * nothing is guessed. Used so that a Story switch in the same worktree is a CONFLICT instead of a silent reuse.
+ */
+export function activeStoryIdForHook(root) {
+    try {
+        const r = readProjectFile(root, `${resolveMonolithRoot(root).monolithRoot}/memory/working/active.md`);
+        if (!r.ok)
+            return undefined;
+        const id = activeStoryIdentityOfActiveMd(r.content);
+        return id.ok ? id.id : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+function contextFor(input, cwd, intent, storyId) {
+    return deriveExecutionContext(hostDir(input, cwd), { agent: HOST_AGENT, source: 'hook:PreToolUse', sessionId: input.session_id, intent, ...(storyId !== undefined ? { storyId } : {}) });
 }
 /** Facts for SessionStart / Stop: execution mode, this context's missions, other contexts' active missions. Never writes. */
 export async function buildExecutionLines(input, cwd) {
@@ -134,7 +153,7 @@ export async function handlePreToolUse(input, cwd = process.cwd()) {
     const stop = 'Tell the owner; do not work around this check.';
     let result;
     try {
-        const ctx = contextFor(input, cwd, 'implement');
+        const ctx = contextFor(input, cwd, 'implement', activeStoryIdForHook(root));
         result = await enrollMission(stateWriteTargetOf(resolveStateLocation(root)), ctx);
     }
     catch (err) {

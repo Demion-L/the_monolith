@@ -19,7 +19,7 @@ export interface ExecutionContext {
   sessionId?: string;
   /** Informational; never an identity. */
   branch?: string;
-  /** Only an explicit story link is used; it is never inferred. */
+  /** Only a story known unambiguously is used (explicit, or the single `**Story:**` line of active.md via the hook); never guessed. */
   storyId?: string;
   /** Who is asking, e.g. "hook:PreToolUse" or "cli". */
   source: string;

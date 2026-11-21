@@ -53,6 +53,36 @@ function isReadOnlySimple(tokens: string[]): boolean {
   return READ_ONLY_PROGRAMS.has(prog);
 }
 
+/**
+ * MONOLITH subcommands that are "governed": read-only, or writing only through their own contract (operational
+ * state with ownership checks, idea records, owner-approved finalization, evidence statements). It is a POSITIVE
+ * list on purpose: `evidence run` executes an arbitrary command, and `init`, `update`, `state adopt` rewrite
+ * project files, so none of them may bypass enrolment by starting with `monolith`. Anything unknown is not governed.
+ */
+const GOVERNED_MONOLITH: Record<string, ReadonlySet<string> | true> = {
+  mission: true, // operational state only; ownership-checked
+  idea: new Set(['add', 'list', 'show']),
+  finalize: new Set(['plan', 'apply']), // approval digest gates the writes
+  evidence: new Set(['report']), // records a statement; `run` executes a command and is NOT governed
+  brief: true,
+  validate: true,
+  governance: true,
+  handover: true,
+  hook: new Set(['status', 'print-config']),
+  durable: new Set(['list', 'show', 'assess', 'packet', 'verify']),
+  state: new Set(['status']),
+  ui: true, // Mission Control is read-only
+};
+
+function isGovernedMonolith(args: string[]): boolean {
+  const [sub, op] = args;
+  if (sub === undefined || sub === '--version' || sub === '-v' || sub === '--help' || sub === '-h' || sub === 'help') return true;
+  const rule = GOVERNED_MONOLITH[sub];
+  if (rule === undefined) return false;
+  if (rule === true) return true;
+  return op !== undefined && rule.has(op);
+}
+
 export function classifyBashCommand(command: string): Classification {
   const c = command.trim();
   if (c === '') return { action: 'read', reason: 'empty command' };
@@ -60,7 +90,11 @@ export function classifyBashCommand(command: string): Classification {
   const segments = c.split('|').map((s) => s.trim());
   if (segments.some((s) => s === '')) return { action: 'implementation', reason: 'unparsable pipeline (conservative)' };
   const programs = segments.map((s) => s.split(/\s+/));
-  if (programs.length === 1 && programs[0][0] === 'monolith') return { action: 'governed', reason: 'MONOLITH CLI: governed by its own contracts' };
+  if (programs.length === 1 && programs[0][0] === 'monolith') {
+    return isGovernedMonolith(programs[0].slice(1))
+      ? { action: 'governed', reason: 'MONOLITH CLI: governed by its own contracts' }
+      : { action: 'implementation', reason: 'MONOLITH subcommand that can modify project files or run arbitrary commands (e.g. init, update, evidence run, state adopt): not governed' };
+  }
   if (programs.every(isReadOnlySimple)) return { action: 'read', reason: 'allowlisted read-only command' };
   return { action: 'implementation', reason: `command not on the read-only allowlist (${programs[0][0]?.slice(0, 40) ?? '?'})` };
 }

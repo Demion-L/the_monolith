@@ -131,6 +131,12 @@ export type ActiveIdentity = {
  * structural field is contradictory → no identity (PSC-004A).
  */
 export declare function activeStoryIdentity(currentStoryBody: string): ActiveIdentity;
+/**
+ * Identity of the active story from the whole text of active.md (read-only helper for host adapters that must know
+ * which story is active without owning the grammar). Same contract as `activeStoryIdentity`: no section, an ambiguous
+ * section, or a missing / malformed / contradictory field line yields `ok: false`; nothing is guessed.
+ */
+export declare function activeStoryIdentityOfActiveMd(activeMdContent: string): ActiveIdentity;
 export declare function planFinalization(targetDir: string, proposal: FinalizationProposal): FinalizationPlan;
 export declare function applyFinalization(targetDir: string, proposal: FinalizationProposal, approvedDigest: string, opts?: FinalizeOptions): Promise<ApplyResult>;
 //# sourceMappingURL=core.d.ts.map

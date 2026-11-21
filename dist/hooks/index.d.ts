@@ -43,6 +43,12 @@ export declare function buildSessionContext(projectRoot: string): {
     report: GovernanceReport;
 };
 export declare function handleSessionStart(projectRoot: string, extraLines?: string[]): object;
+/**
+ * The active story, ONLY when active.md names it unambiguously (the same single `**Story:**` line Finalize uses).
+ * Anything else (no file, no section, several or malformed lines, unreadable) yields undefined: no story signal, and
+ * nothing is guessed. Used so that a Story switch in the same worktree is a CONFLICT instead of a silent reuse.
+ */
+export declare function activeStoryIdForHook(root: string): string | undefined;
 /** Facts for SessionStart / Stop: execution mode, this context's missions, other contexts' active missions. Never writes. */
 export declare function buildExecutionLines(input: HookInput, cwd: string): Promise<string[]>;
 /**
